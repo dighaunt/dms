@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { differenceInCalendarDays } from "date-fns";
-import { motion } from "motion/react";
-import { FileTextIcon, FolderOpenIcon, SearchIcon } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { FileTextIcon, FolderOpenIcon, LoaderCircleIcon, SearchIcon } from "lucide-react";
 
 import type { ExpedienteListado } from "@/lib/db/consultas";
 import {
@@ -75,10 +75,14 @@ function TarjetaExpediente({ expediente: e }: { expediente: ExpedienteListado })
       : null;
 
   return (
-    <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 350, damping: 25 }}>
+    <motion.div
+      whileHover={{ y: -4 }}
+      whileTap={{ scale: 0.985 }}
+      transition={{ type: "spring", stiffness: 350, damping: 25 }}
+    >
       <Link
         href={`/expedientes/${e.id}`}
-        className="group block h-full rounded-xl border bg-background p-5 shadow-xs transition-shadow hover:shadow-md"
+        className="group relative block h-full overflow-hidden rounded-xl border bg-background p-5 shadow-xs transition-shadow hover:shadow-md"
       >
         {/* Pila de documentos estilo Wise: se abanica al pasar el cursor */}
         <div className="mb-4 flex items-start justify-between">
@@ -128,7 +132,39 @@ function TarjetaExpediente({ expediente: e }: { expediente: ExpedienteListado })
             </span>
           )}
         </div>
+
+        <IndicadorAperturaExpediente />
       </Link>
     </motion.div>
+  );
+}
+
+function IndicadorAperturaExpediente() {
+  const { pending } = useLinkStatus();
+
+  return (
+    <AnimatePresence>
+      {pending && (
+        <motion.span
+          role="status"
+          aria-live="polite"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16 }}
+          className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl bg-background/85 text-sm font-medium text-primary backdrop-blur-[2px]"
+        >
+          <motion.span
+            aria-hidden="true"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 0.8, ease: "linear", repeat: Infinity }}
+            className="inline-flex"
+          >
+            <LoaderCircleIcon className="size-4" />
+          </motion.span>
+          Abriendo expediente
+        </motion.span>
+      )}
+    </AnimatePresence>
   );
 }
