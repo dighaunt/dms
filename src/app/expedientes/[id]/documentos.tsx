@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -16,11 +16,18 @@ import {
   FolderOpenIcon,
   HandshakeIcon,
   LandmarkIcon,
+  LockKeyholeIcon,
   ShoppingCartIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { postJson, sha256Hex } from "@/lib/cliente-api";
+import {
+  animoDeCandado,
+  idDeObjetivo,
+  objetivoDeCandado,
+  type ObjetivoCandado,
+} from "@/lib/candados-ui";
+import { postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
 import type { DocumentoDetalle } from "@/lib/db/consultas";
 import { ETIQUETA_ESTADO_F06, ETIQUETA_ESTADO_UNIDAD } from "@/lib/estados";
 import { juegoEsperado, NOMBRE_TIPO, type RequisitoDocumento } from "@/lib/juego-documental";
@@ -124,6 +131,47 @@ export function LineaTiempoExpediente({
   const [folioNuevo, setFolioNuevo] = useState<FolioEmitido | null>(null);
   const [emitiendo, setEmitiendo] = useState<string | null>(null);
   const [avanzando, setAvanzando] = useState<string | null>(null);
+  const [candado, setCandado] = useState<{ objetivo: ObjetivoCandado; mensaje: string } | null>(null);
+  const candadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Candado del manual (409): abre la etapa que lo destraba, hace scroll,
+  // ilumina el paso faltante en rojo y explica ahí mismo qué hacer.
+  function activarCandado(mensaje: string, tipoIntentado?: string) {
+    const objetivo =
+      objetivoDeCandado(mensaje) ??
+      (tipoIntentado ? ({ tipo: "requisito", codigo: tipoIntentado } as const) : null);
+    if (!objetivo) {
+      toast.error(mensaje);
+      return;
+    }
+    const etapaObjetivo =
+      objetivo.tipo === "selector-f06"
+        ? "EXPEDIENTE"
+        : etapas.find((e) => e.requisitos.some((r) => r.tipo === objetivo.codigo))?.codigo;
+    if (etapaObjetivo) {
+      setAbiertas((prev) => new Set(prev).add(etapaObjetivo));
+    }
+    setCandado({ objetivo, mensaje });
+    if (candadoTimer.current) clearTimeout(candadoTimer.current);
+    candadoTimer.current = setTimeout(() => setCandado(null), 15000);
+    setTimeout(() => {
+      document
+        .getElementById(idDeObjetivo(objetivo))
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 350); // tras la animación de apertura del folder
+  }
+
+  // El diálogo «Emitir otro folio» (cabecera) avisa por evento para que el
+  // candado se explique aquí, sobre la línea de tiempo.
+  useEffect(() => {
+    function onCandado(e: Event) {
+      const det = (e as CustomEvent<{ mensaje: string; tipo?: string }>).detail;
+      activarCandado(det.mensaje, det.tipo);
+    }
+    window.addEventListener("candado-manual", onCandado);
+    return () => window.removeEventListener("candado-manual", onCandado);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [origen]);
 
   const porTipo = new Map<string, DocumentoDetalle[]>();
   for (const d of documentos) {
@@ -158,13 +206,18 @@ export function LineaTiempoExpediente({
 
   async function emitir(tipo: string) {
     setEmitiendo(tipo);
+    setCandado(null);
     try {
-      const res = await postJson<FolioEmitido>(
+      const res = await postJsonDetallado<FolioEmitido>(
         `/api/expedientes/${expedienteId}/documentos`,
         { tipo },
       );
-      if (!res) return;
-      setFolioNuevo(res);
+      if (!res.ok) {
+        if (res.status === 409) activarCandado(res.error, tipo);
+        else toast.error(res.error);
+        return;
+      }
+      setFolioNuevo(res.data);
       router.refresh();
     } finally {
       setEmitiendo(null);
@@ -173,12 +226,16 @@ export function LineaTiempoExpediente({
 
   async function avanzar(hacia: string) {
     setAvanzando(hacia);
+    setCandado(null);
     try {
-      const ok = await postJson(`/api/unidades/${vin}/estado`, { hacia });
-      if (ok) {
-        toast.success(`Unidad ahora en ${ETIQUETA_ESTADO_UNIDAD[hacia] ?? hacia}`);
-        router.refresh();
+      const res = await postJsonDetallado(`/api/unidades/${vin}/estado`, { hacia });
+      if (!res.ok) {
+        if (res.status === 409) activarCandado(res.error);
+        else toast.error(res.error);
+        return;
       }
+      toast.success(`Unidad ahora en ${ETIQUETA_ESTADO_UNIDAD[hacia] ?? hacia}`);
+      router.refresh();
     } finally {
       setAvanzando(null);
     }
@@ -282,6 +339,13 @@ export function LineaTiempoExpediente({
                             onSubir={setSubirDoc}
                             onCancelar={setCancelarDoc}
                             onPago={setPagoDoc}
+                            candado={
+                              candado?.objetivo.tipo === "requisito" &&
+                              candado.objetivo.codigo === req.tipo
+                                ? candado
+                                : null
+                            }
+                            onCerrarCandado={() => setCandado(null)}
                           />
                         ))}
                       </ul>
@@ -293,6 +357,10 @@ export function LineaTiempoExpediente({
                             <SelectorF06
                               expedienteId={expedienteId}
                               estadoActual={estadoF06}
+                              candado={
+                                candado?.objetivo.tipo === "selector-f06" ? candado : null
+                              }
+                              onCerrarCandado={() => setCandado(null)}
                             />
                           )}
                           {transiciones.length > 0 && (
@@ -385,18 +453,68 @@ export function LineaTiempoExpediente({
   );
 }
 
+type CandadoActivo = { objetivo: ObjetivoCandado; mensaje: string };
+
+// Aviso del candado: explica qué falta junto al paso iluminado y anima a
+// completarlo. Se cierra solo a los 15 s o con «Entendido».
+function CalloutCandado({
+  candado,
+  onCerrar,
+}: {
+  candado: CandadoActivo;
+  onCerrar: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", duration: 0.4, bounce: 0.35 }}
+      className="mt-2 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5"
+      role="alert"
+    >
+      <LockKeyholeIcon className="mt-0.5 size-4 shrink-0 text-red-600" />
+      <div className="min-w-0 flex-1 text-xs leading-relaxed">
+        <p className="font-semibold text-red-800">Candado del manual</p>
+        <p className="mt-0.5 text-red-700">{candado.mensaje}.</p>
+        <p className="mt-1 font-medium text-red-800">{animoDeCandado(candado.objetivo)}</p>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 shrink-0 px-2 text-[11px] text-red-700 hover:bg-red-100 hover:text-red-800"
+        onClick={onCerrar}
+      >
+        Entendido
+      </Button>
+    </motion.div>
+  );
+}
+
 const ESTADOS_F06 = ["INCOMPLETO", "COMPLETO", "LISTO_PARA_VENTA"] as const;
 
 function SelectorF06({
   expedienteId,
   estadoActual,
+  candado,
+  onCerrarCandado,
 }: {
   expedienteId: number;
   estadoActual: string;
+  candado: CandadoActivo | null;
+  onCerrarCandado: () => void;
 }) {
   const router = useRouter();
   const [estado, setEstado] = useState<string | undefined>();
+  const [selectAbierto, setSelectAbierto] = useState(false);
   const [enviando, setEnviando] = useState(false);
+
+  // Con candado activo, el dropdown se abre solo: el siguiente paso a la mano
+  // (estado derivado durante el render, sin efecto).
+  const [candadoVisto, setCandadoVisto] = useState<CandadoActivo | null>(null);
+  if (candado !== candadoVisto) {
+    setCandadoVisto(candado);
+    if (candado) setSelectAbierto(true);
+  }
 
   async function registrar() {
     if (!estado) return;
@@ -406,6 +524,7 @@ function SelectorF06({
       if (!res) return;
       toast.success(`F-06 ahora en ${ETIQUETA_ESTADO_F06[estado] ?? estado}`);
       setEstado(undefined);
+      onCerrarCandado();
       router.refresh();
     } finally {
       setEnviando(false);
@@ -413,33 +532,46 @@ function SelectorF06({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-muted-foreground">
-        Casilla F-06 (la única que autoriza C-01/C-02):
-      </span>
-      <Select value={estado} onValueChange={setEstado}>
-        <SelectTrigger size="sm" className="w-48 bg-background">
-          <SelectValue
-            placeholder={`Actual: ${ETIQUETA_ESTADO_F06[estadoActual] ?? estadoActual}`}
-          />
-        </SelectTrigger>
-        <SelectContent>
-          {ESTADOS_F06.map((e) => (
-            <SelectItem key={e} value={e} disabled={e === estadoActual}>
-              {ETIQUETA_ESTADO_F06[e]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-8 px-3 text-xs"
-        onClick={registrar}
-        disabled={!estado || enviando}
+    <div id="selector-f06">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 rounded-md transition-all",
+          candado && "animate-pulse bg-red-50/70 p-2 ring-2 ring-red-500/70",
+        )}
       >
-        {enviando ? "Registrando…" : "Registrar"}
-      </Button>
+        <span className={cn("text-xs", candado ? "font-medium text-red-800" : "text-muted-foreground")}>
+          Casilla F-06 (la única que autoriza C-01/C-02):
+        </span>
+        <Select
+          value={estado}
+          onValueChange={setEstado}
+          open={selectAbierto}
+          onOpenChange={setSelectAbierto}
+        >
+          <SelectTrigger size="sm" className="w-48 bg-background">
+            <SelectValue
+              placeholder={`Actual: ${ETIQUETA_ESTADO_F06[estadoActual] ?? estadoActual}`}
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {ESTADOS_F06.map((e) => (
+              <SelectItem key={e} value={e} disabled={e === estadoActual}>
+                {ETIQUETA_ESTADO_F06[e]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 px-3 text-xs"
+          onClick={registrar}
+          disabled={!estado || enviando}
+        >
+          {enviando ? "Registrando…" : "Registrar"}
+        </Button>
+      </div>
+      {candado && <CalloutCandado candado={candado} onCerrar={onCerrarCandado} />}
     </div>
   );
 }
@@ -452,6 +584,8 @@ function FilaRequisito({
   onSubir,
   onCancelar,
   onPago,
+  candado,
+  onCerrarCandado,
 }: {
   requisito: RequisitoDocumento;
   docs: DocumentoDetalle[];
@@ -460,13 +594,20 @@ function FilaRequisito({
   onSubir: (d: DocumentoDetalle) => void;
   onCancelar: (d: DocumentoDetalle) => void;
   onPago: (d: DocumentoDetalle) => void;
+  candado: CandadoActivo | null;
+  onCerrarCandado: () => void;
 }) {
   const estado = estadoDe(docs);
   const { icono: Icono, clase } = ICONO_ESTADO[estado];
 
   return (
-    <li className="px-4 py-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <li id={`requisito-${requisito.tipo}`} className="px-4 py-3">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md transition-all",
+          candado && "animate-pulse bg-red-50/70 p-2 ring-2 ring-red-500/70",
+        )}
+      >
         <Icono className={cn("size-4 shrink-0", clase)} />
         <div className="min-w-0 flex-1">
           <p className="text-sm">
@@ -490,6 +631,8 @@ function FilaRequisito({
           </Button>
         )}
       </div>
+
+      {candado && <CalloutCandado candado={candado} onCerrar={onCerrarCandado} />}
 
       {docs.length > 0 && (
         <ul className="mt-2 space-y-1 border-l pl-6">

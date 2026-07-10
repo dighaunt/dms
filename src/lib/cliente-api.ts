@@ -25,6 +25,34 @@ export async function postJson<Respuesta = unknown>(
   return cuerpo as Respuesta;
 }
 
+export type RespuestaDetallada<Respuesta> =
+  | { ok: true; data: Respuesta }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Como postJson pero sin toast automático: el caller decide qué hacer con el
+ * error (p. ej. los 409 de candados se explican en el propio elemento).
+ */
+export async function postJsonDetallado<Respuesta = unknown>(
+  url: string,
+  body: unknown,
+): Promise<RespuestaDetallada<Respuesta>> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const cuerpo = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      error: cuerpo.error ?? `Error ${res.status}`,
+    };
+  }
+  return { ok: true, data: cuerpo as Respuesta };
+}
+
 export async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", buffer);
   return Array.from(new Uint8Array(digest))

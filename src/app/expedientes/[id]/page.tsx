@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { BadgeCheckIcon } from "lucide-react";
 
+import { query } from "@/lib/db";
 import { obtenerExpediente } from "@/lib/db/consultas";
 import {
   ETIQUETA_ESTADO_F06,
@@ -18,6 +19,7 @@ import { AnexosExpediente } from "./anexos";
 import { LineaTiempoExpediente } from "./documentos";
 import { EmitirFolio } from "./emitir-folio";
 import { HistorialTimeline } from "./historial-timeline";
+import { UnidadDatos } from "./unidad-datos";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,19 @@ export default async function ExpedienteDetallePage({
 
   const exp = await obtenerExpediente(id);
   if (!exp) notFound();
+
+  // Datos complementarios de la unidad (editables; alimentan el prellenado).
+  const unidad = await query<{
+    num_motor: string | null;
+    kilometraje_ingreso: number | null;
+  }>(
+    `SELECT num_motor, kilometraje_ingreso FROM traza.unidad WHERE vin = $1`,
+    [exp.vin],
+  );
+  const { num_motor, kilometraje_ingreso } = unidad.rows[0] ?? {
+    num_motor: null,
+    kilometraje_ingreso: null,
+  };
 
   const iniciales = exp.marca.slice(0, 2).toUpperCase();
 
@@ -65,11 +80,16 @@ export default async function ExpedienteDetallePage({
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {exp.marca} {exp.modelo} · {exp.anio_modelo}
-              {exp.color ? ` · ${exp.color}` : ""} · abierto el{" "}
+              {exp.color ? ` · ${exp.color}` : ""}
+              {num_motor ? ` · motor ${num_motor}` : ""}
+              {kilometraje_ingreso != null
+                ? ` · ${kilometraje_ingreso.toLocaleString("es-MX")} km al ingreso`
+                : ""}{" "}
+              · abierto el{" "}
               {format(new Date(exp.abierto_en), "d 'de' MMMM yyyy", { locale: es })} por{" "}
               <span className="font-medium text-foreground">{exp.abierto_por_nombre}</span>
             </p>
-            <div className="mt-2.5 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <EstadoBadge
                 etiqueta={ETIQUETA_ESTADO_UNIDAD[exp.estado_unidad] ?? exp.estado_unidad}
                 punto={PUNTO_ESTADO_UNIDAD[exp.estado_unidad] ?? "bg-zinc-400"}
@@ -77,6 +97,12 @@ export default async function ExpedienteDetallePage({
               <EstadoBadge
                 etiqueta={`F-06: ${ETIQUETA_ESTADO_F06[exp.estado_f06] ?? exp.estado_f06}`}
                 punto={PUNTO_ESTADO_F06[exp.estado_f06] ?? "bg-zinc-400"}
+              />
+              <UnidadDatos
+                vin={exp.vin}
+                color={exp.color}
+                numMotor={num_motor}
+                kilometraje={kilometraje_ingreso}
               />
             </div>
           </div>

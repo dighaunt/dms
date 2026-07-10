@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { postJson } from "@/lib/cliente-api";
+import { postJsonDetallado } from "@/lib/cliente-api";
 import { NOMBRE_TIPO } from "@/lib/juego-documental";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,14 +51,29 @@ export function EmitirFolio({
     if (!tipo) return;
     setEnviando(true);
     try {
-      const res = await postJson<FolioEmitido>(
+      const res = await postJsonDetallado<FolioEmitido>(
         `/api/expedientes/${expedienteId}/documentos`,
         { tipo },
       );
-      if (!res) return;
+      if (!res.ok) {
+        if (res.status === 409) {
+          // Candado del manual: la línea de tiempo abre la etapa, ilumina el
+          // paso faltante y lo explica ahí (ver activarCandado en documentos).
+          setAbierto(false);
+          setTipo(undefined);
+          window.dispatchEvent(
+            new CustomEvent("candado-manual", {
+              detail: { mensaje: res.error, tipo },
+            }),
+          );
+        } else {
+          toast.error(res.error);
+        }
+        return;
+      }
       setAbierto(false);
       setTipo(undefined);
-      setFolioNuevo(res);
+      setFolioNuevo(res.data);
       router.refresh();
     } finally {
       setEnviando(false);
