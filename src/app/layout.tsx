@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CLIQUEALO · Trazabilidad documental",
+  title: "Signawork · Trazabilidad documental",
   description:
     "Trazabilidad documental de lote de autos usados conforme al manual M-01 Rev 3.0",
 };
