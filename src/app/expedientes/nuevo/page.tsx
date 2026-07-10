@@ -8,6 +8,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 
 import { BlurFade } from "@/components/ui/blur-fade";
+import { BotonCopiar } from "@/components/boton-copiar";
+import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -113,22 +115,29 @@ export default function NuevoExpedientePage() {
             / Nuevo
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            Expediente {resultado.expediente.numeroExpediente} abierto
+            Expediente{" "}
+            <span className="font-mono">{resultado.expediente.numeroExpediente}</span>{" "}
+            abierto
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            VIN <span className="font-mono">{resultado.expediente.vin}</span> · juego
-            día 0 emitido:
+            VIN <span className="font-mono">{resultado.expediente.vin}</span> ·
+            juego día 0 generado. Anota cada folio{" "}
+            <strong className="text-foreground">tal cual</strong> en el
+            encabezado de su formato físico:
           </p>
         </div>
 
         <div className="overflow-hidden rounded-lg border bg-background">
           {resultado.folios.map((f, i) => (
             <BlurFade key={f.documentoId} delay={0.1 + i * 0.08}>
-              <div className="flex items-center justify-between border-b px-4 py-3 last:border-b-0">
-                <div>
-                  <p className="font-mono text-sm font-medium">{f.folio}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {f.tipo} · Rev {f.revision}
+              <div className="flex items-center gap-3 border-b px-4 py-3 last:border-b-0">
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1 font-mono text-sm font-medium">
+                    {f.folio}
+                    <BotonCopiar texto={f.folio} />
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {NOMBRE_TIPO[f.tipo] ?? f.tipo} · Rev {f.revision}
                   </p>
                 </div>
                 <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium">

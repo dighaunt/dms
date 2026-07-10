@@ -4,11 +4,24 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import {
+  CircleDashedIcon,
+  ClipboardCheckIcon,
+  FileCheck2Icon,
+  FileTextIcon,
+  FileX2Icon,
+  FolderOpenIcon,
+  HandshakeIcon,
+  LandmarkIcon,
+  ShoppingCartIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { postJson, sha256Hex } from "@/lib/cliente-api";
 import type { DocumentoDetalle } from "@/lib/db/consultas";
+import { juegoEsperado, NOMBRE_TIPO, type RequisitoDocumento } from "@/lib/juego-documental";
 import { cn } from "@/lib/utils";
+import { BotonCopiar } from "@/components/boton-copiar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,142 +34,133 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DialogFolioGenerado, type FolioEmitido } from "./folio-generado";
 
 const TIPOS_ACEPTADOS = "application/pdf,image/jpeg,image/png,image/webp";
 
-function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
-  const estado = doc.cancelado ? "CANCELADO" : doc.escaneado ? "ESCANEADO" : "EMITIDO";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        estado === "CANCELADO" && "border-red-200 bg-red-50 text-red-700",
-        estado === "ESCANEADO" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-        estado === "EMITIDO" && "bg-background text-foreground",
-      )}
-    >
-      {estado}
-      {estado === "ESCANEADO" && doc.version_maxima != null && doc.version_maxima > 1 && (
-        <span className="text-[10px] text-emerald-600">v{doc.version_maxima}</span>
-      )}
-    </span>
-  );
+const ICONO_ETAPA: Record<string, React.ComponentType<{ className?: string }>> = {
+  ADQUISICION: ShoppingCartIcon,
+  INSPECCION: ClipboardCheckIcon,
+  EXPEDIENTE: FolderOpenIcon,
+  TRAMITES: LandmarkIcon,
+  VENTA: HandshakeIcon,
+};
+
+type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "CANCELADO";
+
+function estadoDe(docs: DocumentoDetalle[]): EstadoRequisito {
+  const vigentes = docs.filter((d) => !d.cancelado);
+  if (vigentes.some((d) => d.escaneado)) return "ESCANEADO";
+  if (vigentes.length > 0) return "EMITIDO";
+  if (docs.length > 0) return "CANCELADO";
+  return "PENDIENTE";
 }
 
-export function TablaDocumentos({ documentos }: { documentos: DocumentoDetalle[] }) {
+const ICONO_ESTADO: Record<EstadoRequisito, { icono: React.ComponentType<{ className?: string }>; clase: string }> = {
+  PENDIENTE: { icono: CircleDashedIcon, clase: "text-muted-foreground/60" },
+  EMITIDO: { icono: FileTextIcon, clase: "text-foreground" },
+  ESCANEADO: { icono: FileCheck2Icon, clase: "text-emerald-600" },
+  CANCELADO: { icono: FileX2Icon, clase: "text-red-500" },
+};
+
+// Juego documental esperado como checklist por etapa (patrón Remote/Pipedrive):
+// cada requisito muestra su estado, qué destraba, y la acción directa.
+export function JuegoDocumental({
+  expedienteId,
+  numeroExpediente,
+  vin,
+  origen,
+  documentos,
+}: {
+  expedienteId: number;
+  numeroExpediente: string;
+  vin: string;
+  origen: "PROPIA" | "CONSIGNADA";
+  documentos: DocumentoDetalle[];
+}) {
   const router = useRouter();
   const [subirDoc, setSubirDoc] = useState<DocumentoDetalle | null>(null);
   const [cancelarDoc, setCancelarDoc] = useState<DocumentoDetalle | null>(null);
   const [pagoDoc, setPagoDoc] = useState<DocumentoDetalle | null>(null);
+  const [folioNuevo, setFolioNuevo] = useState<FolioEmitido | null>(null);
+  const [emitiendo, setEmitiendo] = useState<string | null>(null);
+
+  const porTipo = new Map<string, DocumentoDetalle[]>();
+  for (const d of documentos) {
+    porTipo.set(d.tipo_codigo, [...(porTipo.get(d.tipo_codigo) ?? []), d]);
+  }
+  const etapas = juegoEsperado(origen);
+
+  async function emitir(tipo: string) {
+    setEmitiendo(tipo);
+    try {
+      const res = await postJson<FolioEmitido>(
+        `/api/expedientes/${expedienteId}/documentos`,
+        { tipo },
+      );
+      if (!res) return;
+      setFolioNuevo(res);
+      router.refresh();
+    } finally {
+      setEmitiendo(null);
+    }
+  }
 
   return (
-    <section className="space-y-3">
-      <div className="overflow-hidden rounded-lg border bg-background">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>Folio</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Rev</TableHead>
-              <TableHead>Emitido</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {documentos.map((doc) => (
-              <TableRow key={doc.id} className={cn(doc.cancelado && "opacity-70")}>
-                <TableCell className="font-mono text-xs font-medium">
-                  {doc.folio}
-                  {doc.sustituido_por_folio && (
-                    <p className="mt-0.5 text-[10px] font-normal text-muted-foreground">
-                      sustituido por {doc.sustituido_por_folio}
-                    </p>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <span className="text-sm">{doc.nombre_tipo}</span>
-                  <span className="ml-1.5 text-xs text-muted-foreground">
-                    {doc.tipo_codigo}
-                  </span>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{doc.revision}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {doc.emitido_por_nombre}
-                  <br />
-                  {format(new Date(doc.emitido_en), "d MMM yyyy, HH:mm", { locale: es })}
-                </TableCell>
-                <TableCell>
-                  <BadgeDocumento doc={doc} />
-                  {doc.tipo_codigo === "C-02" && doc.pago_verificado && (
-                    <span className="ml-1.5 text-[10px] font-medium text-emerald-700">
-                      pago ✓
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    {!doc.cancelado && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => setSubirDoc(doc)}
-                      >
-                        Subir escaneo
-                      </Button>
-                    )}
-                    {doc.version_maxima != null && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() =>
-                          window.open(
-                            `/api/documentos/${doc.id}/escaneos/${doc.version_maxima}`,
-                            "_blank",
-                          )
-                        }
-                      >
-                        Ver
-                      </Button>
-                    )}
-                    {doc.tipo_codigo === "C-02" && !doc.pago_verificado && !doc.cancelado && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => setPagoDoc(doc)}
-                      >
-                        Verificar pago
-                      </Button>
-                    )}
-                    {!doc.cancelado && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                        onClick={() => setCancelarDoc(doc)}
-                      >
-                        Cancelar
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+    <div className="space-y-4">
+      {etapas.map((etapa) => {
+        const IconoEtapa = ICONO_ETAPA[etapa.codigo] ?? FolderOpenIcon;
+        const medibles = etapa.requisitos.filter((r) => r.exigencia !== "segun_aplique");
+        const completos = medibles.filter((r) => {
+          const e = estadoDe(porTipo.get(r.tipo) ?? []);
+          return e === "EMITIDO" || e === "ESCANEADO";
+        }).length;
 
+        return (
+          <section key={etapa.codigo} className="overflow-hidden rounded-lg border bg-background shadow-xs">
+            <header className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                <IconoEtapa className="size-4 text-primary" />
+              </div>
+              <h3 className="flex-1 text-sm font-medium">{etapa.etiqueta}</h3>
+              {medibles.length > 0 && (
+                <span
+                  className={cn(
+                    "text-xs tabular-nums",
+                    completos === medibles.length
+                      ? "font-medium text-emerald-600"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {completos} de {medibles.length}
+                </span>
+              )}
+            </header>
+
+            <ul className="divide-y">
+              {etapa.requisitos.map((req) => (
+                <FilaRequisito
+                  key={req.tipo}
+                  requisito={req}
+                  docs={porTipo.get(req.tipo) ?? []}
+                  emitiendo={emitiendo === req.tipo}
+                  onEmitir={() => emitir(req.tipo)}
+                  onSubir={setSubirDoc}
+                  onCancelar={setCancelarDoc}
+                  onPago={setPagoDoc}
+                />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+
+      <DialogFolioGenerado
+        folio={folioNuevo}
+        numeroExpediente={numeroExpediente}
+        vin={vin}
+        onCerrar={() => setFolioNuevo(null)}
+      />
       {subirDoc && (
         <DialogSubirEscaneo
           doc={subirDoc}
@@ -171,8 +175,9 @@ export function TablaDocumentos({ documentos }: { documentos: DocumentoDetalle[]
         <DialogCancelar
           doc={cancelarDoc}
           onClose={() => setCancelarDoc(null)}
-          onDone={() => {
+          onDone={(sustituto) => {
             setCancelarDoc(null);
+            if (sustituto) setFolioNuevo(sustituto);
             router.refresh();
           }}
         />
@@ -187,7 +192,154 @@ export function TablaDocumentos({ documentos }: { documentos: DocumentoDetalle[]
           }}
         />
       )}
-    </section>
+    </div>
+  );
+}
+
+function FilaRequisito({
+  requisito,
+  docs,
+  emitiendo,
+  onEmitir,
+  onSubir,
+  onCancelar,
+  onPago,
+}: {
+  requisito: RequisitoDocumento;
+  docs: DocumentoDetalle[];
+  emitiendo: boolean;
+  onEmitir: () => void;
+  onSubir: (d: DocumentoDetalle) => void;
+  onCancelar: (d: DocumentoDetalle) => void;
+  onPago: (d: DocumentoDetalle) => void;
+}) {
+  const estado = estadoDe(docs);
+  const { icono: Icono, clase } = ICONO_ESTADO[estado];
+
+  return (
+    <li className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Icono className={cn("size-4 shrink-0", clase)} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm">
+            <span className="font-mono text-xs font-semibold">{requisito.tipo}</span>
+            <span className="ml-2">{NOMBRE_TIPO[requisito.tipo]}</span>
+            {requisito.exigencia === "segun_aplique" && (
+              <span className="ml-2 text-[11px] text-muted-foreground">según aplique</span>
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground">{requisito.proposito}</p>
+        </div>
+        {(estado === "PENDIENTE" || estado === "CANCELADO") && (
+          <Button
+            size="sm"
+            variant={requisito.exigencia === "segun_aplique" ? "outline" : "default"}
+            className="h-7 px-3 text-xs"
+            disabled={emitiendo}
+            onClick={onEmitir}
+          >
+            {emitiendo ? "Emitiendo…" : `Emitir ${requisito.tipo}`}
+          </Button>
+        )}
+      </div>
+
+      {docs.length > 0 && (
+        <ul className="mt-2 space-y-1 border-l pl-6">
+          {docs.map((doc) => (
+            <li
+              key={doc.id}
+              className={cn(
+                "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md px-2 py-1.5 hover:bg-muted/50",
+                doc.cancelado && "opacity-60",
+              )}
+            >
+              <span className="font-mono text-xs font-medium">{doc.folio}</span>
+              <BotonCopiar texto={doc.folio} />
+              <BadgeDocumento doc={doc} />
+              <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                {doc.emitido_por_nombre} ·{" "}
+                {format(new Date(doc.emitido_en), "d MMM yyyy", { locale: es })}
+              </span>
+              {doc.sustituido_por_folio && (
+                <span className="text-[11px] text-muted-foreground">
+                  → {doc.sustituido_por_folio}
+                </span>
+              )}
+              <span className="flex-1" />
+              <span className="flex gap-0.5">
+                {!doc.cancelado && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px]"
+                    onClick={() => onSubir(doc)}
+                  >
+                    Subir escaneo
+                  </Button>
+                )}
+                {doc.version_maxima != null && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px]"
+                    onClick={() =>
+                      window.open(
+                        `/api/documentos/${doc.id}/escaneos/${doc.version_maxima}`,
+                        "_blank",
+                      )
+                    }
+                  >
+                    Ver
+                  </Button>
+                )}
+                {doc.tipo_codigo === "C-02" && !doc.pago_verificado && !doc.cancelado && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px]"
+                    onClick={() => onPago(doc)}
+                  >
+                    Verificar pago
+                  </Button>
+                )}
+                {!doc.cancelado && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] text-destructive hover:text-destructive"
+                    onClick={() => onCancelar(doc)}
+                  >
+                    Cancelar
+                  </Button>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
+  const estado = doc.cancelado ? "CANCELADO" : doc.escaneado ? "ESCANEADO" : "EMITIDO";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-px text-[10px] font-medium",
+        estado === "CANCELADO" && "border-red-200 bg-red-50 text-red-700",
+        estado === "ESCANEADO" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+        estado === "EMITIDO" && "bg-background text-foreground",
+      )}
+    >
+      {estado}
+      {estado === "ESCANEADO" && doc.version_maxima != null && doc.version_maxima > 1 && (
+        <span className="text-emerald-600">v{doc.version_maxima}</span>
+      )}
+      {doc.tipo_codigo === "C-02" && doc.pago_verificado && !doc.cancelado && (
+        <span className="text-emerald-600">· pago ✓</span>
+      )}
+    </span>
   );
 }
 
@@ -318,7 +470,7 @@ function DialogCancelar({
 }: {
   doc: DocumentoDetalle;
   onClose: () => void;
-  onDone: () => void;
+  onDone: (sustituto: FolioEmitido | null) => void;
 }) {
   const [motivo, setMotivo] = useState("");
   const [sustituir, setSustituir] = useState(false);
@@ -327,7 +479,7 @@ function DialogCancelar({
   async function cancelar() {
     setEnviando(true);
     try {
-      const res = await postJson<{ sustituto: { folio: string } | null }>(
+      const res = await postJson<{ sustituto: FolioEmitido | null }>(
         `/api/documentos/${doc.id}/cancelar`,
         {
           motivo,
@@ -340,7 +492,7 @@ function DialogCancelar({
           ? `${doc.folio} cancelado; sustituido por ${res.sustituto.folio}`
           : `${doc.folio} cancelado`,
       );
-      onDone();
+      onDone(res.sustituto);
     } finally {
       setEnviando(false);
     }

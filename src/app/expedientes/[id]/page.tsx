@@ -12,8 +12,9 @@ import {
   PUNTO_ESTADO_UNIDAD,
 } from "@/lib/estados";
 import { BlurFade } from "@/components/ui/blur-fade";
+import { BotonCopiar } from "@/components/boton-copiar";
 import { EstadoBadge } from "@/components/estado-badge";
-import { TablaDocumentos } from "./documentos";
+import { JuegoDocumental } from "./documentos";
 import { EmitirFolio } from "./emitir-folio";
 import { SeccionF06 } from "./f06";
 import { StepperCicloVida } from "./stepper";
@@ -54,8 +55,9 @@ export default async function ExpedienteDetallePage({
               <h1 className="text-2xl font-semibold tracking-tight">
                 Expediente {exp.numero_expediente}
               </h1>
-              <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
+              <span className="inline-flex items-center gap-1 rounded bg-muted py-0.5 pl-2 pr-0.5 font-mono text-xs">
                 {exp.vin}
+                <BotonCopiar texto={exp.vin} />
               </span>
               <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
                 <BadgeCheckIcon className="size-3.5" />
@@ -86,11 +88,24 @@ export default async function ExpedienteDetallePage({
         <TabsDetalle
           documentos={
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-medium">Documentos del expediente</h2>
-                <EmitirFolio expedienteId={exp.id} origen={exp.origen} />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-medium">
+                  Juego documental del expediente
+                </h2>
+                <EmitirFolio
+                  expedienteId={exp.id}
+                  numeroExpediente={exp.numero_expediente}
+                  vin={exp.vin}
+                  origen={exp.origen}
+                />
               </div>
-              <TablaDocumentos documentos={exp.documentos} />
+              <JuegoDocumental
+                expedienteId={exp.id}
+                numeroExpediente={exp.numero_expediente}
+                vin={exp.vin}
+                origen={exp.origen}
+                documentos={exp.documentos}
+              />
             </div>
           }
           ciclo={
