@@ -18,10 +18,8 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [modo, setModo] = useState<"entrar" | "registro">("entrar");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [nombre, setNombre] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -30,10 +28,7 @@ export default function LoginPage() {
     setError(null);
     setCargando(true);
     try {
-      const result =
-        modo === "entrar"
-          ? await authClient.signIn.email({ email, password })
-          : await authClient.signUp.email({ email, password, name: nombre });
+      const result = await authClient.signIn.email({ email, password });
       if (result.error) {
         setError(result.error.message ?? "No se pudo iniciar sesión.");
         return;
@@ -53,25 +48,12 @@ export default function LoginPage() {
             CLIQUEALO · Trazabilidad documental
           </CardTitle>
           <CardDescription>
-            {modo === "entrar"
-              ? "Inicia sesión para acceder a los expedientes."
-              : "Crea tu cuenta (nivel N1 por defecto)."}
+            Acceso solo para personal autorizado. Las cuentas las asigna el
+            administrador.
           </CardDescription>
         </CardHeader>
         <form onSubmit={onSubmit}>
           <CardContent className="grid gap-4">
-            {modo === "registro" && (
-              <div className="grid gap-2">
-                <Label htmlFor="nombre">Nombre</Label>
-                <Input
-                  id="nombre"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  required
-                  autoComplete="name"
-                />
-              </div>
-            )}
             <div className="grid gap-2">
               <Label htmlFor="email">Correo</Label>
               <Input
@@ -91,10 +73,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={8}
-                autoComplete={
-                  modo === "entrar" ? "current-password" : "new-password"
-                }
+                autoComplete="current-password"
               />
             </div>
             {error && (
@@ -103,26 +82,10 @@ export default function LoginPage() {
               </p>
             )}
           </CardContent>
-          <CardFooter className="mt-6 flex flex-col gap-3">
+          <CardFooter className="mt-6">
             <Button type="submit" className="w-full" disabled={cargando}>
-              {cargando
-                ? "Un momento…"
-                : modo === "entrar"
-                  ? "Entrar"
-                  : "Crear cuenta"}
+              {cargando ? "Un momento…" : "Entrar"}
             </Button>
-            <button
-              type="button"
-              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-              onClick={() => {
-                setError(null);
-                setModo(modo === "entrar" ? "registro" : "entrar");
-              }}
-            >
-              {modo === "entrar"
-                ? "¿Sin cuenta? Regístrate"
-                : "¿Ya tienes cuenta? Inicia sesión"}
-            </button>
           </CardFooter>
         </form>
       </Card>
