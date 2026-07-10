@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { DownloadIcon } from "lucide-react";
 import {
   Background,
   Controls,
@@ -67,7 +68,7 @@ const ARISTAS: Edge[] = DEPENDENCIAS.map((d, i) => ({
   labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
   labelBgStyle: { fill: "var(--background)", fillOpacity: 0.9 },
   style: { stroke: "color-mix(in oklab, var(--primary) 55%, transparent)", strokeWidth: 1.5 },
-  animated: d.etiqueta.includes("regla de oro"),
+  animated: d.etiqueta.includes("candado de venta"),
 }));
 
 export function MapaDocumental() {
@@ -122,6 +123,15 @@ export function MapaDocumental() {
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           {ficha.descripcion}
         </p>
+
+        <a
+          href={`/formatos/${ficha.codigo}.pdf`}
+          download={`${ficha.codigo} ${ficha.nombre}.pdf`}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium shadow-xs hover:bg-accent"
+        >
+          <DownloadIcon className="size-3.5" />
+          Descargar {ficha.categoria === "CONTRATO" ? "contrato" : "formato"} (PDF)
+        </a>
 
         {madres.length > 0 && (
           <div className="mt-4">

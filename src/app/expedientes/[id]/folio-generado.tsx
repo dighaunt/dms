@@ -1,6 +1,6 @@
 "use client";
 
-import { InfoIcon } from "lucide-react";
+import { DownloadIcon, InfoIcon } from "lucide-react";
 
 import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { BotonCopiar } from "@/components/boton-copiar";
@@ -63,14 +63,20 @@ export function DialogFolioGenerado({
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs leading-relaxed text-foreground">
           <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-primary" />
           <p>
-            Anota este folio <strong>tal cual</strong> en el encabezado del
-            formato físico antes de llenarlo. El consecutivo lo asigna el
+            Descarga el PDF ya prellenado con este folio, el expediente y el
+            VIN — solo se imprime y se completa. El consecutivo lo asigna el
             sistema; nunca se escribe uno a mano.
           </p>
         </div>
 
         <DialogFooter>
-          <Button onClick={onCerrar}>Listo, folio anotado</Button>
+          <Button variant="outline" asChild>
+            <a href={`/api/documentos/${folio.documentoId}/formato`} download>
+              <DownloadIcon className="size-4" />
+              Descargar PDF prellenado
+            </a>
+          </Button>
+          <Button onClick={onCerrar}>Listo</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

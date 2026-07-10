@@ -14,7 +14,7 @@ import { query } from "@/lib/db";
 
 const bodySchema = z.object({ tipo: z.enum(TIPOS_DOCUMENTO) });
 
-// Emite un folio para el expediente. Los candados (regla de oro, contrato
+// Emite un folio para el expediente. Los candados (candado de venta, contrato
 // fuente, F-11) viven en traza.emitir_folio y se devuelven como 409.
 export async function POST(
   request: Request,

@@ -520,6 +520,18 @@ function FilaRequisito({
                     variant="ghost"
                     size="sm"
                     className="h-6 px-2 text-[11px]"
+                    asChild
+                  >
+                    <a href={`/api/documentos/${doc.id}/formato`} download>
+                      PDF prellenado
+                    </a>
+                  </Button>
+                )}
+                {!doc.cancelado && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px]"
                     onClick={() => onSubir(doc)}
                   >
                     Subir escaneo

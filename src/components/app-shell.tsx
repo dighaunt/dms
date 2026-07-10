@@ -1,5 +1,6 @@
 import { getUsuarioSesion } from "@/lib/auth/usuario";
 import { CerrarSesion } from "@/components/cerrar-sesion";
+import { MiCuenta } from "@/components/mi-cuenta";
 import { SidebarMovil } from "@/components/sidebar-movil";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { Separator } from "@/components/ui/separator";
@@ -9,13 +10,6 @@ function ContenidoSidebar({
 }: {
   usuario: Awaited<ReturnType<typeof getUsuarioSesion>>;
 }) {
-  const iniciales = (usuario?.nombre ?? "?")
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
   return (
     <div className="flex h-full flex-col bg-sidebar">
       <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
@@ -34,20 +28,13 @@ function ContenidoSidebar({
       <Separator />
       <div className="space-y-2 p-3">
         {usuario && (
-          <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
-              {iniciales}
-            </div>
-            <div className="min-w-0 leading-tight">
-              <p className="truncate text-xs font-medium">{usuario.nombre}</p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {usuario.email}
-                <span className="ml-1 rounded bg-muted px-1 font-mono text-[10px]">
-                  {usuario.nivel}
-                </span>
-              </p>
-            </div>
-          </div>
+          <MiCuenta
+            usuario={{
+              nombre: usuario.nombre,
+              email: usuario.email,
+              nivel: usuario.nivel,
+            }}
+          />
         )}
         <CerrarSesion />
       </div>

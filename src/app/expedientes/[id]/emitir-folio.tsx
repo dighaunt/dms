@@ -101,7 +101,8 @@ export function EmitirFolio({
           <p className="text-xs text-muted-foreground">
             Unidad {origen === "PROPIA" ? "propia" : "consignada"}: su contrato
             fuente es {fuentePermitida}; {fuenteBloqueada} está deshabilitado.
-            C-01/C-02 además exigen F-06 en «Listo para venta» (regla de oro).
+            El apartado (C-01) y la compraventa (C-02) solo se emiten con la
+            carátula del expediente (F-06) marcada «Listo para venta».
           </p>
 
           <DialogFooter>
