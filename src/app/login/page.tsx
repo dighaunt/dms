@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { authClient } from "@/lib/auth/client";
+import { iniciarSesion } from "@/lib/auth/client";
+import { BlurFade } from "@/components/ui/blur-fade";
+import { DotPattern } from "@/components/ui/dot-pattern";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,9 +31,9 @@ export default function LoginPage() {
     setError(null);
     setCargando(true);
     try {
-      const result = await authClient.signIn.email({ email, password });
-      if (result.error) {
-        setError(result.error.message ?? "No se pudo iniciar sesión.");
+      const result = await iniciarSesion(email, password);
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
       router.push("/expedientes");
@@ -41,8 +44,15 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4">
-      <Card className="w-full max-w-sm">
+    <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-muted/40 px-4">
+      <DotPattern
+        className={cn(
+          "text-neutral-300/70",
+          "[mask-image:radial-gradient(480px_circle_at_center,white,transparent)]",
+        )}
+      />
+      <BlurFade delay={0.1} className="relative w-full max-w-sm">
+        <Card className="w-full shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">
             CLIQUEALO · Trazabilidad documental
@@ -88,7 +98,8 @@ export default function LoginPage() {
             </Button>
           </CardFooter>
         </form>
-      </Card>
+        </Card>
+      </BlurFade>
     </main>
   );
 }

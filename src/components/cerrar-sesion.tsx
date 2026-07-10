@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { LogOutIcon } from "lucide-react";
 
-import { authClient } from "@/lib/auth/client";
+import { cerrarSesion } from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
 
 export function CerrarSesion() {
@@ -11,12 +12,14 @@ export function CerrarSesion() {
     <Button
       variant="ghost"
       size="sm"
+      className="w-full justify-start gap-2 text-muted-foreground"
       onClick={async () => {
-        await authClient.signOut();
+        await cerrarSesion();
         router.push("/login");
         router.refresh();
       }}
     >
+      <LogOutIcon className="size-4" />
       Cerrar sesión
     </Button>
   );
