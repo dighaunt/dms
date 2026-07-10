@@ -13,7 +13,7 @@ export default async function ExpedientesPage() {
   return (
     <div className="space-y-6">
       <BlurFade delay={0.05}>
-        <div className="flex items-end justify-between">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Expedientes</h1>
             <p className="mt-1 text-sm text-muted-foreground">

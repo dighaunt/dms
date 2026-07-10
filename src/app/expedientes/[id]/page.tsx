@@ -65,7 +65,8 @@ export default async function ExpedienteDetallePage({
             <p className="mt-1 text-sm text-muted-foreground">
               {exp.marca} {exp.modelo} · {exp.anio_modelo}
               {exp.color ? ` · ${exp.color}` : ""} · abierto el{" "}
-              {format(new Date(exp.abierto_en), "d 'de' MMMM yyyy", { locale: es })}
+              {format(new Date(exp.abierto_en), "d 'de' MMMM yyyy", { locale: es })} por{" "}
+              <span className="font-medium text-foreground">{exp.abierto_por_nombre}</span>
             </p>
             <div className="mt-2.5 flex flex-wrap gap-2">
               <EstadoBadge

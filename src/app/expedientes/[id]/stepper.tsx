@@ -54,7 +54,7 @@ export function StepperCicloVida({
     <section className="rounded-lg border bg-background p-5">
       <h2 className="text-sm font-medium">Ciclo de vida de la unidad</h2>
 
-      <ol className="mt-4 flex items-start">
+      <div className="overflow-x-auto"><ol className="mt-4 flex min-w-[640px] items-start">
         {CAMINO_FELIZ.map((estado, i) => {
           const hecho = indiceActual > i;
           const actual = indiceActual === i;
@@ -99,7 +99,7 @@ export function StepperCicloVida({
             </li>
           );
         })}
-      </ol>
+      </ol></div>
 
       {(transicionesFelices.length > 0 || transicionesOtras.length > 0) && (
         <div className="mt-5 flex flex-wrap items-center gap-2 border-t pt-4">

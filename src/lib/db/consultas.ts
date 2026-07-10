@@ -79,6 +79,7 @@ type ExpedienteCabecera = {
   anio_modelo: number;
   color: string | null;
   abierto_en: string;
+  abierto_por_nombre: string;
   estado_unidad: string;
   estado_unidad_desde: string;
   estado_f06: string;
@@ -90,7 +91,7 @@ export type ExpedienteDetalle = ExpedienteCabecera & {
 };
 
 const CAMPOS_CABECERA =
-  "id,numero_expediente,vin,origen,marca,modelo,anio_modelo,color,abierto_en,estado_unidad,estado_unidad_desde,estado_f06";
+  "id,numero_expediente,vin,origen,marca,modelo,anio_modelo,color,abierto_en,abierto_por_nombre,estado_unidad,estado_unidad_desde,estado_f06";
 const CAMPOS_DOCUMENTO =
   "id,folio,tipo_codigo,nombre_tipo,revision,cancelado,escaneado,version_maxima,pago_verificado,sustituido_por_folio,emitido_por_nombre,emitido_en";
 
@@ -100,8 +101,9 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
     async () => {
       const { rows } = await query<ExpedienteCabecera>(
         `SELECT id, numero_expediente, vin, origen, marca, modelo, anio_modelo,
-                color, abierto_en::text AS abierto_en, estado_unidad,
-                estado_unidad_desde::text AS estado_unidad_desde, estado_f06
+                color, abierto_en::text AS abierto_en, abierto_por_nombre,
+                estado_unidad, estado_unidad_desde::text AS estado_unidad_desde,
+                estado_f06
            FROM public.expedientes
           WHERE id = $1`,
         [id],

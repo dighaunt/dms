@@ -58,17 +58,23 @@ export function TablaUsuarios({
   const router = useRouter();
   const [ocupado, setOcupado] = useState<number | null>(null);
 
-  async function actualizar(id: number, cambios: { nivel?: string; activo?: boolean }) {
+  async function actualizar(
+    id: number,
+    cambios: { nivel?: string; activo?: boolean; nombre?: string },
+  ) {
     setOcupado(id);
     try {
       const res = await postJson<UsuarioFila>(`/api/usuarios/${id}`, cambios);
-      if (!res) return;
+      if (!res) return false;
       toast.success(
-        cambios.nivel
-          ? `${res.email} ahora es ${res.nivel}`
-          : `${res.email} ${res.activo ? "activado" : "desactivado"}`,
+        cambios.nombre
+          ? `Nombre completo de ${res.email} actualizado`
+          : cambios.nivel
+            ? `${res.email} ahora es ${res.nivel}`
+            : `${res.email} ${res.activo ? "activado" : "desactivado"}`,
       );
       router.refresh();
+      return true;
     } finally {
       setOcupado(null);
     }
@@ -153,20 +159,27 @@ export function TablaUsuarios({
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    {!soyYo && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className={cn(
-                          "h-7 px-2 text-xs",
-                          u.activo && "text-destructive hover:text-destructive",
-                        )}
+                    <div className="flex justify-end gap-1">
+                      <DialogEditarNombre
+                        usuario={u}
                         disabled={ocupado === u.id}
-                        onClick={() => actualizar(u.id, { activo: !u.activo })}
-                      >
-                        {u.activo ? "Desactivar" : "Activar"}
-                      </Button>
-                    )}
+                        onGuardar={(nombre) => actualizar(u.id, { nombre })}
+                      />
+                      {!soyYo && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "h-7 px-2 text-xs",
+                            u.activo && "text-destructive hover:text-destructive",
+                          )}
+                          disabled={ocupado === u.id}
+                          onClick={() => actualizar(u.id, { activo: !u.activo })}
+                        >
+                          {u.activo ? "Desactivar" : "Activar"}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -175,6 +188,72 @@ export function TablaUsuarios({
         </Table>
       </div>
     </div>
+  );
+}
+
+function DialogEditarNombre({
+  usuario,
+  disabled,
+  onGuardar,
+}: {
+  usuario: UsuarioFila;
+  disabled: boolean;
+  onGuardar: (nombre: string) => Promise<boolean>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState(usuario.nombre);
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar() {
+    setGuardando(true);
+    try {
+      if (await onGuardar(nombre.trim())) setAbierto(false);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={abierto}
+      onOpenChange={(open) => {
+        setAbierto(open);
+        if (open) setNombre(usuario.nombre);
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" disabled={disabled}>
+          Editar nombre
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Nombre completo · {usuario.email}</DialogTitle>
+          <DialogDescription>
+            Por norma, todos los actos del sistema (apertura de expedientes,
+            emisión de folios, escaneos) quedan a nombre completo de quien los
+            inició.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label htmlFor="editar-nombre">Nombre completo</Label>
+          <Input
+            id="editar-nombre"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="María Pérez Gómez"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setAbierto(false)} disabled={guardando}>
+            Cancelar
+          </Button>
+          <Button onClick={guardar} disabled={nombre.trim().length === 0 || guardando}>
+            {guardando ? "Guardando…" : "Guardar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -229,13 +308,17 @@ function DialogCrearUsuario({ onDone }: { onDone: () => void }) {
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="nuevo-nombre">Nombre</Label>
+            <Label htmlFor="nuevo-nombre">Nombre completo</Label>
             <Input
               id="nuevo-nombre"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="María Pérez"
+              placeholder="María Pérez Gómez"
             />
+            <p className="text-xs text-muted-foreground">
+              Por norma, los actos del sistema quedan a nombre completo de quien
+              los inició.
+            </p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="nuevo-email">Correo</Label>
