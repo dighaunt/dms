@@ -33,10 +33,12 @@ export type ExpedienteListado = {
   estado_unidad: string | null;
   estado_unidad_desde: string | null;
   estado_f06: string | null;
+  documentos_total: number;
+  documentos_escaneados: number;
 };
 
 const CAMPOS_LISTADO =
-  "id,numero_expediente,vin,marca,modelo,anio_modelo,origen,estado_unidad,estado_unidad_desde,estado_f06";
+  "id,numero_expediente,vin,marca,modelo,anio_modelo,origen,estado_unidad,estado_unidad_desde,estado_f06,documentos_total,documentos_escaneados";
 
 export function listarExpedientes(): Promise<ExpedienteListado[]> {
   return leer<ExpedienteListado>(
@@ -45,7 +47,7 @@ export function listarExpedientes(): Promise<ExpedienteListado[]> {
       const { rows } = await query<ExpedienteListado>(
         `SELECT id, numero_expediente, vin, marca, modelo, anio_modelo, origen,
                 estado_unidad, estado_unidad_desde::text AS estado_unidad_desde,
-                estado_f06
+                estado_f06, documentos_total, documentos_escaneados
            FROM public.expedientes
           ORDER BY anio DESC, consecutivo DESC`,
       );
