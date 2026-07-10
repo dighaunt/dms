@@ -6,6 +6,7 @@ import {
   CircleDashedIcon,
   EyeIcon,
   FileCheck2Icon,
+  ScanLineIcon,
   ShieldIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -134,6 +135,7 @@ export function AnexosExpediente({
                   className="h-7 px-3 text-xs"
                   onClick={() => setSubiendo(ficha)}
                 >
+                  <ScanLineIcon className="size-3.5" />
                   {cargado ? "Reemplazar" : "Subir escaneo"}
                 </Button>
               </li>
@@ -250,6 +252,7 @@ function DialogSubirAnexo({
         >
           {archivo ? (
             <>
+              <FileCheck2Icon className="mb-1 size-7 text-emerald-600" />
               <span className="font-medium text-foreground">{archivo.name}</span>
               <span className="text-xs">
                 {(archivo.size / 1024 / 1024).toFixed(2)} MB
@@ -257,6 +260,7 @@ function DialogSubirAnexo({
             </>
           ) : (
             <>
+              <ScanLineIcon className="mb-1 size-7 text-primary" />
               <span>Arrastra el PDF o imagen aquí</span>
               <span className="text-xs">o haz clic para elegir (PDF/JPG/PNG, máx. 25 MB)</span>
             </>
@@ -275,6 +279,7 @@ function DialogSubirAnexo({
             Cancelar
           </Button>
           <Button onClick={subir} disabled={!archivo || subiendo}>
+            {!subiendo && <ScanLineIcon className="size-4" />}
             {subiendo ? "Subiendo…" : "Subir y resguardar"}
           </Button>
         </DialogFooter>

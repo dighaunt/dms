@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { NOMBRE_TIPO } from "@/lib/juego-documental";
+import { separarMiles, soloDigitos } from "@/lib/numeros";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BotonCopiar } from "@/components/boton-copiar";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,11 @@ const esquema = z.object({
   kilometraje: z
     .string()
     .trim()
-    .regex(/^\d*$/, "Solo números, sin comas")
+    .regex(/^\d*$/, "Solo números")
+    .refine(
+      (valor) => valor === "" || Number(valor) <= 9_999_999,
+      "Máximo 9,999,999 km",
+    )
     .optional(),
   origen: z.enum(["PROPIA", "CONSIGNADA"], { error: "Elige el origen" }),
 });
@@ -361,10 +366,20 @@ export default function NuevoExpedientePage() {
                             <FormItem>
                               <FormLabel>Kilometraje al ingreso (opcional)</FormLabel>
                               <FormControl>
-                                <Input {...field} inputMode="numeric" placeholder="85000" />
+                                <Input
+                                  ref={field.ref}
+                                  name={field.name}
+                                  value={separarMiles(field.value)}
+                                  onBlur={field.onBlur}
+                                  onChange={(e) => field.onChange(soloDigitos(e.target.value))}
+                                  inputMode="numeric"
+                                  placeholder="85,000"
+                                />
                               </FormControl>
                               <FormDescription>
-                                Estos datos prellenan los formatos y contratos del expediente.
+                                {field.value
+                                  ? `Se guardará como ${separarMiles(field.value)} km y prellenará los documentos.`
+                                  : "Se mostrará con separadores y prellenará los documentos."}
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
@@ -456,7 +471,7 @@ export default function NuevoExpedientePage() {
                           ["Unidad", `${valores.marcaNombre} ${valores.modeloNombre} · ${valores.anioModelo}`],
                           ["Color", valores.color || "—"],
                           ["N° de motor", valores.numMotor || "—"],
-                          ["Kilometraje", valores.kilometraje ? `${Number(valores.kilometraje).toLocaleString("es-MX")} km` : "—"],
+                          ["Kilometraje", valores.kilometraje ? `${separarMiles(valores.kilometraje)} km` : "—"],
                           ["Origen", valores.origen === "PROPIA" ? "Propia (C-03)" : "Consignada (C-04)"],
                         ].map(([k, v]) => (
                           <div key={k as string} className="flex justify-between gap-4 px-4 py-2.5 text-sm">

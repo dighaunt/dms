@@ -6,6 +6,7 @@ import { BadgeCheckIcon } from "lucide-react";
 
 import { query } from "@/lib/db";
 import { obtenerExpediente } from "@/lib/db/consultas";
+import { separarMiles } from "@/lib/numeros";
 import {
   ETIQUETA_ESTADO_F06,
   ETIQUETA_ESTADO_UNIDAD,
@@ -83,7 +84,7 @@ export default async function ExpedienteDetallePage({
               {exp.color ? ` · ${exp.color}` : ""}
               {num_motor ? ` · motor ${num_motor}` : ""}
               {kilometraje_ingreso != null
-                ? ` · ${kilometraje_ingreso.toLocaleString("es-MX")} km al ingreso`
+                ? ` · ${separarMiles(kilometraje_ingreso)} km al ingreso`
                 : ""}{" "}
               · abierto el{" "}
               {format(new Date(exp.abierto_en), "d 'de' MMMM yyyy", { locale: es })} por{" "}

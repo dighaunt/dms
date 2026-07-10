@@ -5,6 +5,8 @@ import path from "node:path";
 
 import { PDFDocument } from "pdf-lib";
 
+import { separarMiles } from "@/lib/numeros";
+
 // Motor de formularios: prellena el PDF maestro (public/formatos/<código>.pdf)
 // con todo lo que el sistema ya sabe. Los maestros son PDFs rellenables
 // (AcroForm); cada tipo mapea nombre de campo → dato del sistema. Los campos
@@ -90,7 +92,10 @@ export async function formatoPrellenado(tipo: string, datos: DatosExpediente): P
     anio: String(datos.anioModelo),
     color: datos.color,
     numMotor: datos.numMotor,
-    kilometraje: datos.kilometrajeIngreso == null ? null : datos.kilometrajeIngreso.toLocaleString("es-MX"),
+    kilometraje:
+      datos.kilometrajeIngreso == null
+        ? null
+        : separarMiles(datos.kilometrajeIngreso),
     fecha: fechaCorta(datos.emitidoEn),
     fechaApertura: fechaCorta(datos.abiertoEn),
     emisor: datos.emisorNombre,

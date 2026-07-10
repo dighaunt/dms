@@ -6,6 +6,7 @@ import { PencilLineIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { patchJson } from "@/lib/cliente-api";
+import { separarMiles, soloDigitos } from "@/lib/numeros";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,8 +44,8 @@ export function UnidadDatos({
   const incompleto = !color || !numMotor || kilometraje == null;
 
   async function guardar() {
-    if (kmV !== "" && !/^\d+$/.test(kmV)) {
-      toast.error("El kilometraje va en números, sin comas");
+    if (kmV !== "" && Number(kmV) > 9_999_999) {
+      toast.error(`El kilometraje máximo es ${separarMiles(9_999_999)} km`);
       return;
     }
     setGuardando(true);
@@ -103,10 +104,16 @@ export function UnidadDatos({
             <Input
               id="unidad-km"
               inputMode="numeric"
-              value={kmV}
-              onChange={(e) => setKmV(e.target.value)}
-              placeholder="85000"
+              value={separarMiles(kmV)}
+              onChange={(e) => setKmV(soloDigitos(e.target.value))}
+              placeholder="85,000"
+              aria-describedby="unidad-km-ayuda"
             />
+            <p id="unidad-km-ayuda" className="text-xs text-muted-foreground">
+              {kmV
+                ? `Se guardará como ${separarMiles(kmV)} km.`
+                : "Escribe sólo números; los separadores aparecen automáticamente."}
+            </p>
           </div>
         </div>
         <DialogFooter>
