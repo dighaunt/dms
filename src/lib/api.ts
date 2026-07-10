@@ -77,6 +77,24 @@ export async function requerirUsuario(): Promise<
   return { usuario, error: null };
 }
 
+/** Exige sesión de administrador global (nivel N3). */
+export async function requerirN3(): Promise<
+  { usuario: UsuarioSesion; error: null } | { usuario: null; error: NextResponse }
+> {
+  const { usuario, error } = await requerirUsuario();
+  if (error) return { usuario: null, error };
+  if (usuario.nivel !== "N3") {
+    return {
+      usuario: null,
+      error: NextResponse.json(
+        { error: "Solo un administrador global (N3) puede administrar usuarios" },
+        { status: 403 },
+      ),
+    };
+  }
+  return { usuario, error: null };
+}
+
 export function formatearFolio(tipo: string, anio: number, consecutivo: number): string {
   return `${tipo}-${anio}-${String(consecutivo).padStart(4, "0")}`;
 }

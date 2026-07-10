@@ -2,24 +2,34 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CirclePlusIcon, FolderOpenIcon } from "lucide-react";
+import { CirclePlusIcon, FolderOpenIcon, UsersIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-const ITEMS = [
-  { href: "/expedientes", etiqueta: "Expedientes", icono: FolderOpenIcon, exacto: false },
+type Item = {
+  href: string;
+  etiqueta: string;
+  icono: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  exacto?: boolean;
+};
+
+const OPERACION: Item[] = [
+  { href: "/expedientes", etiqueta: "Expedientes", icono: FolderOpenIcon },
   { href: "/expedientes/nuevo", etiqueta: "Abrir expediente", icono: CirclePlusIcon, exacto: true },
 ];
 
-export function SidebarNav() {
-  const pathname = usePathname();
+const ADMINISTRACION: Item[] = [
+  { href: "/usuarios", etiqueta: "Usuarios", icono: UsersIcon },
+];
 
+function Seccion({ titulo, items }: { titulo: string; items: Item[] }) {
+  const pathname = usePathname();
   return (
-    <nav className="flex flex-col gap-0.5 px-3">
+    <>
       <p className="px-2 pb-1.5 pt-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-        Operación
+        {titulo}
       </p>
-      {ITEMS.map((item) => {
+      {items.map((item) => {
         const activo = item.exacto
           ? pathname === item.href
           : pathname === item.href ||
@@ -41,6 +51,15 @@ export function SidebarNav() {
           </Link>
         );
       })}
+    </>
+  );
+}
+
+export function SidebarNav({ esAdmin }: { esAdmin: boolean }) {
+  return (
+    <nav className="flex flex-col gap-0.5 px-3">
+      <Seccion titulo="Operación" items={OPERACION} />
+      {esAdmin && <Seccion titulo="Administración" items={ADMINISTRACION} />}
     </nav>
   );
 }

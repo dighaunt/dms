@@ -27,7 +27,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <Separator />
         <div className="flex-1 overflow-y-auto pb-4">
-          <SidebarNav />
+          <SidebarNav esAdmin={usuario?.nivel === "N3"} />
         </div>
         <Separator />
         <div className="space-y-2 p-3">
