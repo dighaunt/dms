@@ -22,3 +22,78 @@ export function separarMiles(
   const digitos = soloDigitos(valor);
   return digitos === "" ? "" : FORMATEADOR_ENTEROS.format(BigInt(digitos));
 }
+
+const UNIDADES = [
+  "CERO", "UNO", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE",
+  "DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISÉIS", "DIECISIETE",
+  "DIECIOCHO", "DIECINUEVE", "VEINTE", "VEINTIUNO", "VEINTIDÓS", "VEINTITRÉS",
+  "VEINTICUATRO", "VEINTICINCO", "VEINTISÉIS", "VEINTISIETE", "VEINTIOCHO", "VEINTINUEVE",
+] as const;
+
+function apocopar(valor: string): string {
+  return valor.replace(/VEINTIUNO$/, "VEINTIÚN").replace(/ Y UNO$/, " Y UN").replace(/UNO$/, "UN");
+}
+
+function centenas(numero: number, apocope = false): string {
+  if (numero < 30) {
+    const valor = UNIDADES[numero];
+    return apocope ? apocopar(valor) : valor;
+  }
+
+  if (numero < 100) {
+    const decenas = ["", "", "", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
+    const resto = numero % 10;
+    const valor = resto === 0 ? decenas[Math.floor(numero / 10)] : `${decenas[Math.floor(numero / 10)]} Y ${UNIDADES[resto]}`;
+    return apocope ? apocopar(valor) : valor;
+  }
+
+  if (numero === 100) return "CIEN";
+  const centenasTexto = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"];
+  const resto = numero % 100;
+  const valor = resto === 0
+    ? centenasTexto[Math.floor(numero / 100)]
+    : `${centenasTexto[Math.floor(numero / 100)]} ${centenas(resto, apocope)}`;
+  return apocope ? apocopar(valor) : valor;
+}
+
+function enteroEnLetras(numero: number): string {
+  if (numero === 0) return "CERO";
+  if (numero < 1_000) return centenas(numero);
+
+  const partes: string[] = [];
+  const millones = Math.floor(numero / 1_000_000);
+  const miles = Math.floor((numero % 1_000_000) / 1_000);
+  const resto = numero % 1_000;
+
+  if (millones > 0) {
+    partes.push(millones === 1 ? "UN MILLÓN" : `${centenas(millones, true)} MILLONES`);
+  }
+  if (miles > 0) {
+    // Mandato documental: escribir UN MIL, no dejar el inicio en "MIL".
+    partes.push(miles === 1 ? "UN MIL" : `${centenas(miles, true)} MIL`);
+  }
+  if (resto > 0) partes.push(centenas(resto));
+  return partes.join(" ");
+}
+
+/** Convierte moneda a letra y conserva centavos para cerrar la alteración. */
+export function monedaEnLetras(valor: string | number): string {
+  const normalizado = typeof valor === "number"
+    ? valor
+    : Number(valor.replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(normalizado) || normalizado < 0 || normalizado > 999_999_999.99) {
+    throw new Error("El monto debe estar entre 0 y 999,999,999.99");
+  }
+  const redondeado = Math.round(normalizado * 100);
+  const entero = Math.floor(redondeado / 100);
+  const centavos = redondeado % 100;
+  return `${apocopar(enteroEnLetras(entero))} ${entero === 1 ? "PESO" : "PESOS"} ${String(centavos).padStart(2, "0")}/100 M.N.`;
+}
+
+/** Cierra el sobrante de una línea libre con guiones ASCII. */
+export function cerrarConGuiones(valor: string, longitud = 60): string {
+  const limpio = valor.trim().replace(/\s+/g, " ").toUpperCase();
+  if (!limpio) return "";
+  const faltantes = Math.max(3, longitud - limpio.length - 1);
+  return `${limpio} ${"-".repeat(faltantes)}`;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { postJsonDetallado } from "@/lib/cliente-api";
@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogFolioGenerado, type FolioEmitido } from "./folio-generado";
+import { WizardDocumento } from "./wizard-documento";
 
 // El contrato fuente que NO corresponde al origen se deshabilita aquí solo
 // como reflejo; el candado real vive en traza.emitir_folio.
@@ -43,6 +44,8 @@ export function EmitirFolio({
   const [tipo, setTipo] = useState<string | undefined>();
   const [enviando, setEnviando] = useState(false);
   const [folioNuevo, setFolioNuevo] = useState<FolioEmitido | null>(null);
+  const [documentoEnCaptura, setDocumentoEnCaptura] = useState<number | null>(null);
+  const cerrarWizard = useCallback(() => setDocumentoEnCaptura(null), []);
 
   const fuenteBloqueada = origen === "PROPIA" ? "C-04" : "C-03";
   const fuentePermitida = origen === "PROPIA" ? "C-03" : "C-04";
@@ -136,7 +139,17 @@ export function EmitirFolio({
         folio={folioNuevo}
         numeroExpediente={numeroExpediente}
         vin={vin}
+        onCapturar={(documentoId) => {
+          setFolioNuevo(null);
+          setDocumentoEnCaptura(documentoId);
+        }}
         onCerrar={() => setFolioNuevo(null)}
+      />
+      <WizardDocumento
+        key={documentoEnCaptura ?? "cerrado"}
+        documentoId={documentoEnCaptura}
+        onClose={cerrarWizard}
+        onComplete={() => router.refresh()}
       />
     </>
   );

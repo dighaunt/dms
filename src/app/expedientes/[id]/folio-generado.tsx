@@ -1,6 +1,6 @@
 "use client";
 
-import { SiAdobeacrobatreader } from "@icons-pack/react-simple-icons";
+import { ListChecksIcon } from "lucide-react";
 
 import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { BotonCopiar } from "@/components/boton-copiar";
@@ -27,11 +27,13 @@ export function DialogFolioGenerado({
   folio,
   numeroExpediente,
   vin,
+  onCapturar,
   onCerrar,
 }: {
   folio: FolioEmitido | null;
   numeroExpediente: string;
   vin: string;
+  onCapturar: (documentoId: number) => void;
   onCerrar: () => void;
 }) {
   if (!folio) return null;
@@ -61,30 +63,25 @@ export function DialogFolioGenerado({
         </div>
 
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs leading-relaxed text-foreground">
-          <SiAdobeacrobatreader
+          <ListChecksIcon
             aria-hidden="true"
-            color="#EC1C24"
             className="mt-0.5 size-4 shrink-0"
           />
           <p>
-            Descarga y abre el PDF con Adobe Acrobat Reader para conservar los
-            campos rellenables. Ya incluye el folio, el expediente y el VIN;
-            el consecutivo nunca se escribe a mano.
+            El folio ya existe. Ahora completa el wizard: conservará el
+            AcroForm, reutilizará los datos conocidos y bloqueará la descarga
+            mientras exista un campo sin resolver.
           </p>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" asChild>
-            <a href={`/api/documentos/${folio.documentoId}/formato`} download>
-              <SiAdobeacrobatreader
-                aria-hidden="true"
-                color="#EC1C24"
-                className="size-4"
-              />
-              Descargar para Acrobat
-            </a>
+          <Button variant="outline" onClick={onCerrar}>
+            Completar después
           </Button>
-          <Button onClick={onCerrar}>Listo</Button>
+          <Button onClick={() => onCapturar(folio.documentoId)}>
+            <ListChecksIcon className="size-4" />
+            Completar ahora
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

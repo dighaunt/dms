@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { AnimatePresence, motion } from "motion/react";
-import { SiAdobeacrobatreader } from "@icons-pack/react-simple-icons";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -18,6 +17,7 @@ import {
   HandshakeIcon,
   InfoIcon,
   LandmarkIcon,
+  ListChecksIcon,
   ScanLineIcon,
   ShoppingCartIcon,
   WalletCardsIcon,
@@ -66,6 +66,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogFolioGenerado, type FolioEmitido } from "./folio-generado";
+import { WizardDocumento } from "./wizard-documento";
 
 const TIPOS_ACEPTADOS = "application/pdf,image/jpeg,image/png,image/webp";
 
@@ -149,10 +150,12 @@ export function LineaTiempoExpediente({
   const [cancelarDoc, setCancelarDoc] = useState<DocumentoDetalle | null>(null);
   const [pagoDoc, setPagoDoc] = useState<DocumentoDetalle | null>(null);
   const [folioNuevo, setFolioNuevo] = useState<FolioEmitido | null>(null);
+  const [documentoEnCaptura, setDocumentoEnCaptura] = useState<number | null>(null);
   const [emitiendo, setEmitiendo] = useState<string | null>(null);
   const [avanzando, setAvanzando] = useState<string | null>(null);
   const [candado, setCandado] = useState<{ objetivo: ObjetivoCandado; mensaje: string } | null>(null);
   const candadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cerrarWizard = useCallback(() => setDocumentoEnCaptura(null), []);
 
   // Candado del manual (409): abre la etapa que lo destraba, hace scroll,
   // ilumina el paso faltante en rojo y explica ahí mismo qué hacer.
@@ -437,6 +440,7 @@ export function LineaTiempoExpediente({
                             onSubir={setSubirDoc}
                             onCancelar={setCancelarDoc}
                             onPago={setPagoDoc}
+                            onCapturar={setDocumentoEnCaptura}
                             candado={
                               candado?.objetivo.tipo === "requisito" &&
                               candado.objetivo.codigo === req.tipo
@@ -524,7 +528,17 @@ export function LineaTiempoExpediente({
         folio={folioNuevo}
         numeroExpediente={numeroExpediente}
         vin={vin}
+        onCapturar={(documentoId) => {
+          setFolioNuevo(null);
+          setDocumentoEnCaptura(documentoId);
+        }}
         onCerrar={() => setFolioNuevo(null)}
+      />
+      <WizardDocumento
+        key={documentoEnCaptura ?? "cerrado"}
+        documentoId={documentoEnCaptura}
+        onClose={cerrarWizard}
+        onComplete={() => router.refresh()}
       />
       {subirDoc && (
         <DialogSubirEscaneo
@@ -625,47 +639,12 @@ function AccionExplicada({
   );
 }
 
-function DescargaPdfExplicada({ documentoId }: { documentoId: number }) {
-  const [abierto, setAbierto] = useState(false);
-
+function AbrirWizardButton({ onOpen }: { onOpen: () => void }) {
   return (
-    <Popover open={abierto} onOpenChange={setAbierto}>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px]">
-          <SiAdobeacrobatreader aria-hidden="true" color="#EC1C24" className="size-3" />
-          PDF prellenado · Acrobat
-          <InfoIcon className="size-3 opacity-55" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-80">
-        <PopoverHeader>
-          <PopoverTitle>PDF prellenado</PopoverTitle>
-          <PopoverDescription className="leading-relaxed">
-            Descarga una copia con los datos conocidos. Ábrela en Adobe Acrobat Reader para
-            conservar los campos rellenables; descargarla no cambia el expediente.
-          </PopoverDescription>
-        </PopoverHeader>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={() => setAbierto(false)}>
-            Volver
-          </Button>
-          <Button size="sm" asChild>
-            <a
-              href={`/api/documentos/${documentoId}/formato`}
-              download
-              onClick={() => setAbierto(false)}
-            >
-              <SiAdobeacrobatreader
-                aria-hidden="true"
-                color="currentColor"
-                className="size-4 shrink-0 text-primary-foreground"
-              />
-              Descargar
-            </a>
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={onOpen}>
+      <ListChecksIcon className="size-3" />
+      Completar PDF
+    </Button>
   );
 }
 
@@ -852,6 +831,7 @@ function FilaRequisito({
   onSubir,
   onCancelar,
   onPago,
+  onCapturar,
   candado,
   onCerrarCandado,
 }: {
@@ -863,6 +843,7 @@ function FilaRequisito({
   onSubir: (d: DocumentoDetalle) => void;
   onCancelar: (d: DocumentoDetalle) => void;
   onPago: (d: DocumentoDetalle) => void;
+  onCapturar: (documentoId: number) => void;
   candado: CandadoActivo | null;
   onCerrarCandado: () => void;
 }) {
@@ -1083,7 +1064,7 @@ function FilaRequisito({
 
                           <div className="mt-2 flex flex-wrap items-center gap-1 border-t pt-2">
                             {!doc.cancelado && (
-                              <DescargaPdfExplicada documentoId={doc.id} />
+                              <AbrirWizardButton onOpen={() => onCapturar(doc.id)} />
                             )}
                             {!doc.cancelado && (
                               <AccionExplicada

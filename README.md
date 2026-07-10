@@ -15,6 +15,8 @@ unidad forzado por la base de datos.
   autenticadas con el JWT de la sesión; las escrituras siempre pasan por las
   funciones transaccionales
 - **Cloudflare R2** — bucket privado, PUT/GET prefirmados (10 min), sha256 en cliente
+- **Motor AcroForm** — wizard tipado para los 15 PDFs oficiales; reutiliza datos,
+  aplica reglas y sólo genera el archivo cuando no quedan campos sin resolver
 
 ## Puesta en marcha
 
@@ -41,3 +43,6 @@ Variables de entorno:
 - Tablas de hechos son **append-only** (triggers): corrección = cancelación +
   sustitución; reescaneo = nueva versión.
 - Validación de todos los bodies con zod (**400** con detalle).
+
+La arquitectura, normalización y reglas del motor PDF están documentadas en
+[`docs/arquitectura-formularios.md`](docs/arquitectura-formularios.md).
