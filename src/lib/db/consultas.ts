@@ -93,11 +93,18 @@ export type EventoHistorial = {
   registrado_por_nombre: string;
 };
 
+export type AnexoResumen = {
+  clave: string;
+  version_maxima: number;
+  subido_por_nombre: string;
+};
+
 export type ExpedienteDetalle = ExpedienteCabecera & {
   transiciones_validas: string[];
   documentos: DocumentoDetalle[];
   historial_unidad: EventoHistorial[];
   historial_f06: EventoHistorial[];
+  anexos: AnexoResumen[];
 };
 
 const CAMPOS_CABECERA =
@@ -124,7 +131,7 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
   const exp = cabeceras[0];
   if (!exp) return null;
 
-  const [transiciones, documentos, historialUnidad, historialF06] = await Promise.all([
+  const [transiciones, documentos, historialUnidad, historialF06, anexos] = await Promise.all([
     leer<{ hacia: string }>(
       `transiciones?select=hacia&vin=eq.${exp.vin}&order=orden.asc`,
       async () => {
@@ -176,6 +183,18 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
         return rows;
       },
     ),
+    leer<AnexoResumen>(
+      `anexos?select=clave,version_maxima,subido_por_nombre&expediente_id=eq.${id}`,
+      async () => {
+        const { rows } = await query<AnexoResumen>(
+          `SELECT clave, version_maxima, subido_por_nombre
+             FROM public.anexos
+            WHERE expediente_id = $1`,
+          [id],
+        );
+        return rows;
+      },
+    ),
   ]);
 
   return {
@@ -184,5 +203,6 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
     documentos,
     historial_unidad: historialUnidad,
     historial_f06: historialF06,
+    anexos,
   };
 }

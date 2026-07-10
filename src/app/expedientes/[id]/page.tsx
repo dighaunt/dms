@@ -14,6 +14,7 @@ import {
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BotonCopiar } from "@/components/boton-copiar";
 import { EstadoBadge } from "@/components/estado-badge";
+import { AnexosExpediente } from "./anexos";
 import { LineaTiempoExpediente } from "./documentos";
 import { EmitirFolio } from "./emitir-folio";
 import { HistorialTimeline } from "./historial-timeline";
@@ -108,7 +109,15 @@ export default async function ExpedienteDetallePage({
         </div>
       </BlurFade>
 
-      <BlurFade delay={0.18}>
+      <BlurFade delay={0.16}>
+        <AnexosExpediente
+          expedienteId={exp.id}
+          origen={exp.origen}
+          anexos={exp.anexos}
+        />
+      </BlurFade>
+
+      <BlurFade delay={0.2}>
         <HistorialTimeline
           historialUnidad={exp.historial_unidad}
           historialF06={exp.historial_f06}
