@@ -43,10 +43,10 @@ async function main() {
       await client.query(sql);
       await client.query("INSERT INTO public._migrations (nombre) VALUES ($1)", [file]);
       count += 1;
-      console.log(`✓ ${file}`);
+      console.log(`[OK] ${file}`);
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
-      console.error(`✗ ${file} falló: ${error.message}`);
+      console.error(`[ERROR] ${file} falló: ${error.message}`);
       process.exitCode = 1;
       break;
     }

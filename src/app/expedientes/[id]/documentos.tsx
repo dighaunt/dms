@@ -16,11 +16,12 @@ import {
   FolderOpenIcon,
   HandshakeIcon,
   LandmarkIcon,
-  LockKeyholeIcon,
   ShoppingCartIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { CircleCheckIcon } from "@/components/animate-ui/icons/circle-check";
+import { LockKeyholeIcon } from "@/components/animate-ui/icons/lock-keyhole";
 import {
   animoDeCandado,
   idDeObjetivo,
@@ -472,11 +473,22 @@ function CalloutCandado({
       className="mt-2 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5"
       role="alert"
     >
-      <LockKeyholeIcon className="mt-0.5 size-4 shrink-0 text-red-600" />
+      <LockKeyholeIcon
+        animateOnView
+        aria-hidden="true"
+        className="mt-0.5 size-4 shrink-0 text-red-600"
+      />
       <div className="min-w-0 flex-1 text-xs leading-relaxed">
         <p className="font-semibold text-red-800">Candado del manual</p>
         <p className="mt-0.5 text-red-700">{candado.mensaje}.</p>
-        <p className="mt-1 font-medium text-red-800">{animoDeCandado(candado.objetivo)}</p>
+        <p className="mt-1 flex items-center gap-1.5 font-medium text-red-800">
+          <CircleCheckIcon
+            animateOnView
+            aria-hidden="true"
+            className="size-3.5 shrink-0"
+          />
+          <span>{animoDeCandado(candado.objetivo)}</span>
+        </p>
       </div>
       <Button
         variant="ghost"
@@ -740,7 +752,14 @@ function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
         <span className="text-emerald-600">v{doc.version_maxima}</span>
       )}
       {doc.tipo_codigo === "C-02" && doc.pago_verificado && !doc.cancelado && (
-        <span className="text-emerald-600">· pago ✓</span>
+        <span className="inline-flex items-center gap-0.5 text-emerald-600">
+          · pago
+          <CircleCheckIcon
+            animateOnView
+            aria-label="verificado"
+            className="size-3"
+          />
+        </span>
       )}
     </span>
   );

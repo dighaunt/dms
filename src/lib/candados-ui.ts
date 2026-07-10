@@ -28,6 +28,6 @@ export function idDeObjetivo(objetivo: ObjetivoCandado): string {
 /** Frase de ánimo según el objetivo: qué desbloquea completarlo. */
 export function animoDeCandado(objetivo: ObjetivoCandado): string {
   return objetivo.tipo === "selector-f06"
-    ? "🎯 Marca la casilla y desbloqueas la venta."
-    : "🎯 Completa este paso y el folio se desbloquea.";
+    ? "Marca la casilla y desbloqueas la venta."
+    : "Completa este paso y el folio se desbloquea.";
 }

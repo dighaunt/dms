@@ -14,10 +14,10 @@ export function InputPassword({
   const [visible, setVisible] = React.useState(false);
 
   return (
-    <div className="relative">
+    <div className="grid">
       <Input
         type={visible ? "text" : "password"}
-        className={cn("pr-10", className)}
+        className={cn("col-start-1 row-start-1 pr-10", className)}
         {...props}
       />
       <button
@@ -25,7 +25,7 @@ export function InputPassword({
         tabIndex={-1}
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
-        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground disabled:pointer-events-none"
+        className="col-start-1 row-start-1 mr-0.5 flex size-9 place-self-center justify-self-end items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
         disabled={props.disabled}
       >
         {visible ? (
