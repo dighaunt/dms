@@ -10,11 +10,14 @@ type ResultadoAuth = { ok: true } | { ok: false; error: string };
 export async function iniciarSesion(
   email: string,
   password: string,
+  // true → cookie persistente (la sesión de better-auth dura 7 días);
+  // false → cookie de sesión: se cierra al cerrar el navegador.
+  recordar = true,
 ): Promise<ResultadoAuth> {
   const res = await fetch("/api/auth/sign-in/email", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, rememberMe: recordar }),
   });
   if (!res.ok) {
     const cuerpo = await res.json().catch(() => ({}));
@@ -28,7 +31,13 @@ export async function iniciarSesion(
 }
 
 export async function cerrarSesion(): Promise<void> {
-  await fetch("/api/auth/sign-out", { method: "POST" });
+  // better-auth responde 415 si el POST no lleva JSON: el body vacío es
+  // obligatorio o las cookies de sesión nunca se borran.
+  await fetch("/api/auth/sign-out", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
 }
 
 export async function cambiarContrasena(
