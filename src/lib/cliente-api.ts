@@ -3,15 +3,16 @@
 import { toast } from "sonner";
 
 /**
- * POST JSON y manejo uniforme de errores: los 409 traen el mensaje literal
- * del candado del manual y se muestran tal cual en un toast destructivo.
+ * Envía JSON y maneja errores de forma uniforme: los 409 traen el mensaje
+ * literal del candado del manual y se muestran tal cual en un toast.
  */
-export async function postJson<Respuesta = unknown>(
+async function enviarJson<Respuesta>(
+  method: "POST" | "PATCH",
   url: string,
   body: unknown,
 ): Promise<Respuesta | null> {
   const res = await fetch(url, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -24,6 +25,12 @@ export async function postJson<Respuesta = unknown>(
   }
   return cuerpo as Respuesta;
 }
+
+export const postJson = <Respuesta = unknown>(url: string, body: unknown) =>
+  enviarJson<Respuesta>("POST", url, body);
+
+export const patchJson = <Respuesta = unknown>(url: string, body: unknown) =>
+  enviarJson<Respuesta>("PATCH", url, body);
 
 export type RespuestaDetallada<Respuesta> =
   | { ok: true; data: Respuesta }

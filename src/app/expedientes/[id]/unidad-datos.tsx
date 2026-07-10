@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PencilLineIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { postJson } from "@/lib/cliente-api";
+import { patchJson } from "@/lib/cliente-api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -49,7 +49,7 @@ export function UnidadDatos({
     }
     setGuardando(true);
     try {
-      const res = await postJson(`/api/unidades/${vin}`, {
+      const res = await patchJson(`/api/unidades/${vin}`, {
         color: colorV.trim() || null,
         numMotor: motorV.trim() || null,
         kilometraje: kmV === "" ? null : Number(kmV),
