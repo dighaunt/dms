@@ -140,3 +140,36 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* vis-timeline con la paleta del sistema */
+.traza-timeline .vis-timeline {
+  border-color: var(--border);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 12px;
+}
+.traza-timeline .vis-item.traza-rango {
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 45%, transparent);
+  color: var(--foreground);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.traza-timeline .vis-item.traza-rango-abierto {
+  background: color-mix(in oklab, var(--primary) 28%, transparent);
+  border-style: dashed;
+}
+.traza-timeline .vis-item.traza-rango-final {
+  background: oklch(0.95 0.05 160);
+  border-color: oklch(0.7 0.15 160);
+}
+.traza-timeline .vis-labelset .vis-label,
+.traza-timeline .vis-time-axis .vis-text {
+  color: var(--muted-foreground);
+}
+.traza-timeline .vis-panel,
+.traza-timeline .vis-labelset .vis-label,
+.traza-timeline .vis-foreground .vis-group,
+.traza-timeline .vis-time-axis .vis-grid.vis-minor,
+.traza-timeline .vis-time-axis .vis-grid.vis-major {
+  border-color: var(--border);
+}

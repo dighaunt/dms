@@ -4,20 +4,23 @@ import { useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { defineStepper } from "@stepperize/react";
+import {
+  CarIcon,
+  CheckIcon,
+  ClipboardCheckIcon,
+  HandshakeIcon,
+  ScanBarcodeIcon,
+} from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
+import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BotonCopiar } from "@/components/boton-copiar";
-import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -28,13 +31,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
 
@@ -57,20 +53,31 @@ const esquema = z.object({
 
 type Valores = z.input<typeof esquema>;
 
-type FolioEmitido = {
-  documentoId: number;
-  tipo: string;
-  revision: string;
-  folio: string;
+// Onboarding por pasos (@stepperize/react): un dato a la vez, sin fricción.
+const { useStepper, steps } = defineStepper([
+  { id: "vin", titulo: "VIN", icono: ScanBarcodeIcon },
+  { id: "unidad", titulo: "Unidad", icono: CarIcon },
+  { id: "origen", titulo: "Origen", icono: HandshakeIcon },
+  { id: "confirmar", titulo: "Confirmar", icono: ClipboardCheckIcon },
+] as const);
+
+const CAMPOS_POR_PASO: Record<string, (keyof Valores)[]> = {
+  vin: ["vin"],
+  unidad: ["marcaNombre", "modeloNombre", "anioModelo", "color"],
+  origen: ["origen"],
+  confirmar: [],
 };
 
+type FolioEmitido = { documentoId: number; tipo: string; revision: string; folio: string };
 type Resultado = {
   expediente: { id: number; numeroExpediente: string; vin: string; origen: string };
   folios: FolioEmitido[];
 };
 
 export default function NuevoExpedientePage() {
+  const stepper = useStepper();
   const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   const form = useForm<Valores, unknown, z.output<typeof esquema>>({
     resolver: zodResolver(esquema),
@@ -85,23 +92,33 @@ export default function NuevoExpedientePage() {
     },
   });
 
-  async function onSubmit(valores: z.output<typeof esquema>) {
-    const res = await fetch("/api/expedientes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...valores,
-        color: valores.color || undefined,
-      }),
-    });
-    const cuerpo = await res.json();
-    if (!res.ok) {
-      toast.error(cuerpo.error ?? "No se pudo abrir el expediente", {
-        description: cuerpo.detalle,
+  const indiceActual = steps.findIndex((s) => s.id === stepper.current.id);
+
+  async function continuar() {
+    const campos = CAMPOS_POR_PASO[stepper.current.id];
+    if (campos.length > 0 && !(await form.trigger(campos))) return;
+    await stepper.next();
+  }
+
+  async function abrirExpediente(valores: z.output<typeof esquema>) {
+    setEnviando(true);
+    try {
+      const res = await fetch("/api/expedientes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...valores, color: valores.color || undefined }),
       });
-      return;
+      const cuerpo = await res.json();
+      if (!res.ok) {
+        toast.error(cuerpo.error ?? "No se pudo abrir el expediente", {
+          description: cuerpo.detalle,
+        });
+        return;
+      }
+      setResultado(cuerpo);
+    } finally {
+      setEnviando(false);
     }
-    setResultado(cuerpo);
   }
 
   if (resultado) {
@@ -109,7 +126,7 @@ export default function NuevoExpedientePage() {
       <div className="mx-auto max-w-xl space-y-6">
         <div>
           <p className="text-sm text-muted-foreground">
-            <Link href="/expedientes" className="hover:underline">
+            <Link href="/expedientes" className="text-primary hover:underline">
               Expedientes
             </Link>{" "}
             / Nuevo
@@ -150,9 +167,7 @@ export default function NuevoExpedientePage() {
 
         <div className="flex gap-3">
           <Button asChild>
-            <Link href={`/expedientes/${resultado.expediente.id}`}>
-              Ir al expediente
-            </Link>
+            <Link href={`/expedientes/${resultado.expediente.id}`}>Ir al expediente</Link>
           </Button>
           <Button variant="outline" asChild>
             <Link href="/expedientes">Volver al listado</Link>
@@ -162,151 +177,279 @@ export default function NuevoExpedientePage() {
     );
   }
 
-  return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <div>
-        <p className="text-sm text-muted-foreground">
-          <Link href="/expedientes" className="hover:underline">
-            Expedientes
-          </Link>{" "}
-          / Nuevo
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Abrir expediente</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Al abrir se emite el juego día 0: contrato fuente (C-03/C-04), F-03, F-05 y
-          F-06.
-        </p>
-      </div>
+  const valores = form.watch();
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Datos de la unidad</CardTitle>
-          <CardDescription>
-            El VIN identifica el expediente de forma única.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-5">
-              <FormField
-                control={form.control}
-                name="vin"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>VIN</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        value={field.value ?? ""}
-                        onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                        maxLength={17}
-                        placeholder="3N1CN7AD4KL812345"
-                        className="font-mono uppercase"
-                        autoComplete="off"
+  return (
+    <div className="mx-auto max-w-2xl space-y-8">
+      {/* Indicador de pasos estilo onboarding */}
+      <BlurFade delay={0.05}>
+        <ol className="flex items-center justify-center">
+          {steps.map((paso, i) => {
+            const Icono = paso.icono;
+            const hecho = i < indiceActual;
+            const actual = i === indiceActual;
+            return (
+              <li key={paso.id} className="flex items-center">
+                {i > 0 && (
+                  <div
+                    className={cn("h-px w-10 sm:w-16", hecho || actual ? "bg-primary" : "bg-border")}
+                  />
+                )}
+                <div className="flex flex-col items-center gap-1 px-1">
+                  <div
+                    className={cn(
+                      "flex size-9 items-center justify-center rounded-full border-2 transition-colors",
+                      actual && "border-primary bg-primary text-primary-foreground",
+                      hecho && "border-primary bg-background text-primary",
+                      !actual && !hecho && "border-border bg-background text-muted-foreground",
+                    )}
+                  >
+                    {hecho ? <CheckIcon className="size-4" /> : <Icono className="size-4" />}
+                  </div>
+                  <span
+                    className={cn(
+                      "text-[11px]",
+                      actual ? "font-medium text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {paso.titulo}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </BlurFade>
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(abrirExpediente)}>
+          <BlurFade key={stepper.current.id} delay={0.05}>
+            <Card>
+              <CardContent className="pt-6">
+                {stepper.match({
+                  vin: () => (
+                    <div className="space-y-4">
+                      <div>
+                        <h1 className="text-xl font-semibold tracking-tight">
+                          Número de serie (VIN)
+                        </h1>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Identifica el expediente de forma única: un expediente =
+                          un VIN = un folio. Está en la base del parabrisas o en la
+                          puerta del conductor.
+                        </p>
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name="vin"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                value={field.value ?? ""}
+                                onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                                maxLength={17}
+                                placeholder="3N1CN7AD4KL812345"
+                                className="h-12 font-mono text-lg uppercase tracking-wide"
+                                autoComplete="off"
+                                autoFocus
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              {(field.value ?? "").length}/17 caracteres · sin I, O ni Q
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </FormControl>
-                    <FormDescription>
-                      {(field.value ?? "").length}/17 caracteres
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="marcaNombre"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Marca</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="Nissan" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                    </div>
+                  ),
+                  unidad: () => (
+                    <div className="space-y-4">
+                      <div>
+                        <h1 className="text-xl font-semibold tracking-tight">
+                          Datos de la unidad
+                        </h1>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Tal como aparecen en la factura.
+                        </p>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="marcaNombre"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Marca</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="Nissan" autoFocus />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="modeloNombre"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Modelo</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="Versa" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="anioModelo"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Año modelo</FormLabel>
+                              <FormControl>
+                                <Input {...field} type="number" min={1980} max={2100} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="color"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Color (opcional)</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="Gris plata" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  ),
+                  origen: () => (
+                    <div className="space-y-4">
+                      <div>
+                        <h1 className="text-xl font-semibold tracking-tight">
+                          ¿Cómo llega la unidad?
+                        </h1>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Define el contrato fuente del expediente; no se puede
+                          cambiar después.
+                        </p>
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name="origen"
+                        render={({ field }) => (
+                          <FormItem>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              {[
+                                {
+                                  valor: "PROPIA",
+                                  titulo: "Propia",
+                                  icono: CarIcon,
+                                  detalle: "El lote la compra · contrato fuente C-03",
+                                },
+                                {
+                                  valor: "CONSIGNADA",
+                                  titulo: "Consignada",
+                                  icono: HandshakeIcon,
+                                  detalle: "Un consignante la entrega · contrato fuente C-04",
+                                },
+                              ].map((op) => {
+                                const Icono = op.icono;
+                                const activa = field.value === op.valor;
+                                return (
+                                  <button
+                                    key={op.valor}
+                                    type="button"
+                                    onClick={() => field.onChange(op.valor)}
+                                    className={cn(
+                                      "flex flex-col items-center gap-2 rounded-xl border-2 p-6 text-center transition-colors",
+                                      activa
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border hover:border-primary/40",
+                                    )}
+                                  >
+                                    <Icono
+                                      className={cn(
+                                        "size-8",
+                                        activa ? "text-primary" : "text-muted-foreground",
+                                      )}
+                                    />
+                                    <span className="text-sm font-semibold">{op.titulo}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {op.detalle}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  ),
+                  confirmar: () => (
+                    <div className="space-y-4">
+                      <div>
+                        <h1 className="text-xl font-semibold tracking-tight">
+                          Confirmar apertura
+                        </h1>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Al confirmar se genera el número de expediente y el juego
+                          día 0: contrato fuente ({valores.origen === "PROPIA" ? "C-03" : "C-04"}),
+                          F-03, F-05 y F-06.
+                        </p>
+                      </div>
+                      <dl className="divide-y rounded-lg border">
+                        {[
+                          ["VIN", <span key="v" className="font-mono">{valores.vin}</span>],
+                          ["Unidad", `${valores.marcaNombre} ${valores.modeloNombre} · ${valores.anioModelo}`],
+                          ["Color", valores.color || "—"],
+                          ["Origen", valores.origen === "PROPIA" ? "Propia (C-03)" : "Consignada (C-04)"],
+                        ].map(([k, v]) => (
+                          <div key={k as string} className="flex justify-between gap-4 px-4 py-2.5 text-sm">
+                            <dt className="text-muted-foreground">{k}</dt>
+                            <dd className="text-right font-medium">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ),
+                })}
+
+                <div className="mt-6 flex items-center justify-between">
+                  {stepper.isFirst ? (
+                    <Button variant="ghost" type="button" asChild>
+                      <Link href="/expedientes">Cancelar</Link>
+                    </Button>
+                  ) : (
+                    <Button variant="ghost" type="button" onClick={() => void stepper.prev()}>
+                      ← Atrás
+                    </Button>
                   )}
-                />
-                <FormField
-                  control={form.control}
-                  name="modeloNombre"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Modelo</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="Versa" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                  {stepper.isLast ? (
+                    <Button type="submit" disabled={enviando}>
+                      {enviando ? "Abriendo…" : "Abrir expediente y emitir día 0"}
+                    </Button>
+                  ) : (
+                    <Button type="button" onClick={continuar}>
+                      Continuar
+                    </Button>
                   )}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="anioModelo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Año modelo</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="number" min={1980} max={2100} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="color"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Color (opcional)</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="Gris plata" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="origen"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Origen</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecciona el origen" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="PROPIA">
-                          Propia (contrato fuente C-03)
-                        </SelectItem>
-                        <SelectItem value="CONSIGNADA">
-                          Consignada (contrato fuente C-04)
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" type="button" asChild>
-                  <Link href="/expedientes">Cancelar</Link>
-                </Button>
-                <Button type="submit" disabled={form.formState.isSubmitting}>
-                  {form.formState.isSubmitting
-                    ? "Abriendo…"
-                    : "Abrir expediente y emitir día 0"}
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </BlurFade>
+        </form>
+      </Form>
     </div>
   );
 }

@@ -87,9 +87,17 @@ type ExpedienteCabecera = {
   estado_f06: string;
 };
 
+export type EventoHistorial = {
+  estado: string;
+  ocurrido_en: string;
+  registrado_por_nombre: string;
+};
+
 export type ExpedienteDetalle = ExpedienteCabecera & {
   transiciones_validas: string[];
   documentos: DocumentoDetalle[];
+  historial_unidad: EventoHistorial[];
+  historial_f06: EventoHistorial[];
 };
 
 const CAMPOS_CABECERA =
@@ -116,7 +124,7 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
   const exp = cabeceras[0];
   if (!exp) return null;
 
-  const [transiciones, documentos] = await Promise.all([
+  const [transiciones, documentos, historialUnidad, historialF06] = await Promise.all([
     leer<{ hacia: string }>(
       `transiciones?select=hacia&vin=eq.${exp.vin}&order=orden.asc`,
       async () => {
@@ -142,11 +150,39 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
         return rows;
       },
     ),
+    leer<EventoHistorial>(
+      `historial_unidad?select=estado,ocurrido_en,registrado_por_nombre&expediente_id=eq.${id}&order=ocurrido_en.asc`,
+      async () => {
+        const { rows } = await query<EventoHistorial>(
+          `SELECT estado, ocurrido_en::text AS ocurrido_en, registrado_por_nombre
+             FROM public.historial_unidad
+            WHERE expediente_id = $1
+            ORDER BY ocurrido_en`,
+          [id],
+        );
+        return rows;
+      },
+    ),
+    leer<EventoHistorial>(
+      `historial_f06?select=estado,ocurrido_en,registrado_por_nombre&expediente_id=eq.${id}&order=ocurrido_en.asc`,
+      async () => {
+        const { rows } = await query<EventoHistorial>(
+          `SELECT estado, ocurrido_en::text AS ocurrido_en, registrado_por_nombre
+             FROM public.historial_f06
+            WHERE expediente_id = $1
+            ORDER BY ocurrido_en`,
+          [id],
+        );
+        return rows;
+      },
+    ),
   ]);
 
   return {
     ...exp,
     transiciones_validas: transiciones.map((t) => t.hacia),
     documentos,
+    historial_unidad: historialUnidad,
+    historial_f06: historialF06,
   };
 }

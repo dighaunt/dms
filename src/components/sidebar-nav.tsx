@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CirclePlusIcon, FolderOpenIcon, UsersIcon } from "lucide-react";
+import { BookOpenIcon, CirclePlusIcon, FolderOpenIcon, UsersIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ type Item = {
 const OPERACION: Item[] = [
   { href: "/expedientes", etiqueta: "Expedientes", icono: FolderOpenIcon },
   { href: "/expedientes/nuevo", etiqueta: "Abrir expediente", icono: CirclePlusIcon, exacto: true },
+  { href: "/documentacion", etiqueta: "Documentación", icono: BookOpenIcon },
 ];
 
 const ADMINISTRACION: Item[] = [

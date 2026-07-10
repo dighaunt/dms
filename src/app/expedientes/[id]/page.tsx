@@ -16,6 +16,7 @@ import { BotonCopiar } from "@/components/boton-copiar";
 import { EstadoBadge } from "@/components/estado-badge";
 import { LineaTiempoExpediente } from "./documentos";
 import { EmitirFolio } from "./emitir-folio";
+import { HistorialTimeline } from "./historial-timeline";
 
 export const dynamic = "force-dynamic";
 
@@ -105,6 +106,13 @@ export default async function ExpedienteDetallePage({
             documentos={exp.documentos}
           />
         </div>
+      </BlurFade>
+
+      <BlurFade delay={0.18}>
+        <HistorialTimeline
+          historialUnidad={exp.historial_unidad}
+          historialF06={exp.historial_f06}
+        />
       </BlurFade>
     </div>
   );
