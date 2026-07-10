@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CLIQUEALO · Trazabilidad documental (M-01 Rev 3.0)
 
-## Getting Started
+Sistema web de trazabilidad documental para un lote de autos usados: apertura de
+expedientes (un expediente = un VIN = un folio), emisión de folios F-01…F-11 /
+C-01…C-04, carga de escaneos versionados a Cloudflare R2 y ciclo de vida de la
+unidad forzado por la base de datos.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router, `src/proxy.ts` como middleware) + TypeScript + Tailwind + shadcn/ui
+- **Neon Postgres** — SQL plano con `pg` (sin ORM); los candados del manual viven
+  en funciones plpgsql (`traza.emitir_folio`, `traza.cambiar_estado_unidad`)
+- **Neon Auth** — toda ruta exige sesión; primer login hace upsert en `traza.usuario` (nivel N1)
+- **Neon Data API** (PostgREST) — lecturas vía vistas de solo lectura en `public`,
+  autenticadas con el JWT de la sesión; las escrituras siempre pasan por las
+  funciones transaccionales
+- **Cloudflare R2** — bucket privado, PUT/GET prefirmados (10 min), sha256 en cliente
+
+## Puesta en marcha
 
 ```bash
+cp .env.example .env   # llenar valores (ver abajo)
+npm install
+npm run db:migrate     # aplica migrations/*.sql (tabla public._migrations)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Variables de entorno:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Origen |
+|----------|--------|
+| `DATABASE_URL` | Cadena de conexión de Neon |
+| `NEON_AUTH_BASE_URL` / `NEON_AUTH_COOKIE_SECRET` | Página **Auth** del proyecto en Neon (secret ≥ 32 chars) |
+| `DATA_API_URL` | Página **Data API** de Neon (opcional; sin ella las lecturas van por SQL directo) |
+| `R2_*` | Credenciales de Cloudflare R2 |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Reglas duras
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Los candados viven en la BD; la UI solo los refleja. Los errores de negocio
+  llegan como **409** con el mensaje literal del manual.
+- Tablas de hechos son **append-only** (triggers): corrección = cancelación +
+  sustitución; reescaneo = nueva versión.
+- Validación de todos los bodies con zod (**400** con detalle).
