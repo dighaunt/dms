@@ -4,7 +4,10 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { AnimatePresence, motion } from "motion/react";
 import {
+  CheckIcon,
+  ChevronDownIcon,
   CircleDashedIcon,
   ClipboardCheckIcon,
   FileCheck2Icon,
@@ -19,6 +22,7 @@ import { toast } from "sonner";
 
 import { postJson, sha256Hex } from "@/lib/cliente-api";
 import type { DocumentoDetalle } from "@/lib/db/consultas";
+import { ETIQUETA_ESTADO_F06, ETIQUETA_ESTADO_UNIDAD } from "@/lib/estados";
 import { juegoEsperado, NOMBRE_TIPO, type RequisitoDocumento } from "@/lib/juego-documental";
 import { cn } from "@/lib/utils";
 import { BotonCopiar } from "@/components/boton-copiar";
@@ -33,6 +37,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogFolioGenerado, type FolioEmitido } from "./folio-generado";
 
@@ -44,6 +55,19 @@ const ICONO_ETAPA: Record<string, React.ComponentType<{ className?: string }>> =
   EXPEDIENTE: FolderOpenIcon,
   TRAMITES: LandmarkIcon,
   VENTA: HandshakeIcon,
+};
+
+// Etapa de la línea de tiempo en la que «vive» cada estado de la unidad.
+const ETAPA_DE_ESTADO: Record<string, string> = {
+  EN_RECEPCION: "ADQUISICION",
+  EN_INSPECCION: "INSPECCION",
+  EXPEDIENTE_INCOMPLETO: "EXPEDIENTE",
+  LISTO_PARA_VENTA: "VENTA",
+  APARTADA: "VENTA",
+  VENDIDA_PEND_ENTREGA: "VENTA",
+  ENTREGADA: "VENTA",
+  DEVUELTA_CONSIGNANTE: "VENTA",
+  BAJA: "VENTA",
 };
 
 type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "CANCELADO";
@@ -63,33 +87,74 @@ const ICONO_ESTADO: Record<EstadoRequisito, { icono: React.ComponentType<{ class
   CANCELADO: { icono: FileX2Icon, clase: "text-red-500" },
 };
 
-// Juego documental esperado como checklist por etapa (patrón Remote/Pipedrive):
-// cada requisito muestra su estado, qué destraba, y la acción directa.
-export function JuegoDocumental({
+/**
+ * Línea de tiempo del expediente: documentos y ciclo de vida UNIDOS.
+ * Cada etapa es un folder desplegable con lo que contiene y lo que falta;
+ * la acción de avanzar la unidad aparece dentro de la etapa que la destraba,
+ * y el estado F-06 vive dentro de la etapa «Expediente».
+ */
+export function LineaTiempoExpediente({
   expedienteId,
   numeroExpediente,
   vin,
   origen,
+  estadoUnidad,
+  estadoF06,
+  transicionesValidas,
   documentos,
 }: {
   expedienteId: number;
   numeroExpediente: string;
   vin: string;
   origen: "PROPIA" | "CONSIGNADA";
+  estadoUnidad: string;
+  estadoF06: string;
+  transicionesValidas: string[];
   documentos: DocumentoDetalle[];
 }) {
   const router = useRouter();
+  const etapas = juegoEsperado(origen);
+  const etapaActual = ETAPA_DE_ESTADO[estadoUnidad] ?? "ADQUISICION";
+  const indiceActual = etapas.findIndex((e) => e.codigo === etapaActual);
+
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set([etapaActual]));
   const [subirDoc, setSubirDoc] = useState<DocumentoDetalle | null>(null);
   const [cancelarDoc, setCancelarDoc] = useState<DocumentoDetalle | null>(null);
   const [pagoDoc, setPagoDoc] = useState<DocumentoDetalle | null>(null);
   const [folioNuevo, setFolioNuevo] = useState<FolioEmitido | null>(null);
   const [emitiendo, setEmitiendo] = useState<string | null>(null);
+  const [avanzando, setAvanzando] = useState<string | null>(null);
 
   const porTipo = new Map<string, DocumentoDetalle[]>();
   for (const d of documentos) {
     porTipo.set(d.tipo_codigo, [...(porTipo.get(d.tipo_codigo) ?? []), d]);
   }
-  const etapas = juegoEsperado(origen);
+
+  // Transiciones del camino feliz asignadas a la etapa que las destraba;
+  // el resto (baja, devolución, regresiones) queda en «Otras acciones».
+  const transicionesPorEtapa = new Map<string, string[]>();
+  const otrasTransiciones: string[] = [];
+  for (const hacia of transicionesValidas) {
+    let etapa: string | null = null;
+    if (hacia === "EN_INSPECCION") etapa = "INSPECCION";
+    else if (hacia === "EXPEDIENTE_INCOMPLETO" && estadoUnidad === "EN_INSPECCION")
+      etapa = "EXPEDIENTE";
+    else if (hacia === "LISTO_PARA_VENTA" && estadoUnidad === "EXPEDIENTE_INCOMPLETO")
+      etapa = "EXPEDIENTE";
+    else if (["APARTADA", "VENDIDA_PEND_ENTREGA", "ENTREGADA"].includes(hacia))
+      etapa = "VENTA";
+    if (etapa) transicionesPorEtapa.set(etapa, [...(transicionesPorEtapa.get(etapa) ?? []), hacia]);
+    else otrasTransiciones.push(hacia);
+  }
+
+  function alternar(codigo: string) {
+    setAbiertas((prev) => {
+      const s = new Set(prev);
+      if (s.has(codigo)) s.delete(codigo);
+      else s.add(codigo);
+      return s;
+    });
+  }
 
   async function emitir(tipo: string) {
     setEmitiendo(tipo);
@@ -106,54 +171,178 @@ export function JuegoDocumental({
     }
   }
 
+  async function avanzar(hacia: string) {
+    setAvanzando(hacia);
+    try {
+      const ok = await postJson(`/api/unidades/${vin}/estado`, { hacia });
+      if (ok) {
+        toast.success(`Unidad ahora en ${ETIQUETA_ESTADO_UNIDAD[hacia] ?? hacia}`);
+        router.refresh();
+      }
+    } finally {
+      setAvanzando(null);
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      {etapas.map((etapa) => {
+    <div>
+      {etapas.map((etapa, i) => {
         const IconoEtapa = ICONO_ETAPA[etapa.codigo] ?? FolderOpenIcon;
+        const abierta = abiertas.has(etapa.codigo);
+        const esActual = etapa.codigo === etapaActual;
+        const pasada = i < indiceActual;
+
         const medibles = etapa.requisitos.filter((r) => r.exigencia !== "segun_aplique");
         const completos = medibles.filter((r) => {
           const e = estadoDe(porTipo.get(r.tipo) ?? []);
           return e === "EMITIDO" || e === "ESCANEADO";
         }).length;
+        const etapaCompleta = medibles.length > 0 && completos === medibles.length;
+        const transiciones = transicionesPorEtapa.get(etapa.codigo) ?? [];
 
         return (
-          <section key={etapa.codigo} className="overflow-hidden rounded-lg border bg-background shadow-xs">
-            <header className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-                <IconoEtapa className="size-4 text-primary" />
+          <div key={etapa.codigo} className="relative flex gap-4">
+            {/* Riel de la línea de tiempo */}
+            <div className="flex flex-col items-center">
+              <div
+                className={cn(
+                  "z-10 flex size-9 shrink-0 items-center justify-center rounded-full border-2 bg-background transition-colors",
+                  esActual && "border-primary bg-primary/10",
+                  !esActual && (pasada || etapaCompleta) && "border-emerald-500 bg-emerald-50",
+                  !esActual && !pasada && !etapaCompleta && "border-border",
+                )}
+              >
+                {!esActual && (pasada || etapaCompleta) ? (
+                  <CheckIcon className="size-4 text-emerald-600" />
+                ) : (
+                  <IconoEtapa
+                    className={cn("size-4", esActual ? "text-primary" : "text-muted-foreground")}
+                  />
+                )}
               </div>
-              <h3 className="flex-1 text-sm font-medium">{etapa.etiqueta}</h3>
-              {medibles.length > 0 && (
-                <span
-                  className={cn(
-                    "text-xs tabular-nums",
-                    completos === medibles.length
-                      ? "font-medium text-emerald-600"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {completos} de {medibles.length}
-                </span>
+              {i < etapas.length - 1 && (
+                <div className={cn("w-px flex-1", pasada ? "bg-emerald-300" : "bg-border")} />
               )}
-            </header>
+            </div>
 
-            <ul className="divide-y">
-              {etapa.requisitos.map((req) => (
-                <FilaRequisito
-                  key={req.tipo}
-                  requisito={req}
-                  docs={porTipo.get(req.tipo) ?? []}
-                  emitiendo={emitiendo === req.tipo}
-                  onEmitir={() => emitir(req.tipo)}
-                  onSubir={setSubirDoc}
-                  onCancelar={setCancelarDoc}
-                  onPago={setPagoDoc}
+            {/* Folder de la etapa */}
+            <div className="min-w-0 flex-1 pb-5">
+              <button
+                type="button"
+                onClick={() => alternar(etapa.codigo)}
+                className={cn(
+                  "flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-background px-4 py-3 text-left shadow-xs transition-colors hover:bg-muted/40",
+                  esActual && "border-primary/40",
+                )}
+              >
+                <span className="text-sm font-medium">{etapa.etiqueta}</span>
+                {esActual && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                    <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                    unidad aquí · {ETIQUETA_ESTADO_UNIDAD[estadoUnidad] ?? estadoUnidad}
+                  </span>
+                )}
+                <span className="flex-1" />
+                {medibles.length > 0 && (
+                  <span
+                    className={cn(
+                      "text-xs tabular-nums",
+                      etapaCompleta ? "font-medium text-emerald-600" : "text-muted-foreground",
+                    )}
+                  >
+                    {completos} de {medibles.length}
+                  </span>
+                )}
+                <ChevronDownIcon
+                  className={cn(
+                    "size-4 text-muted-foreground transition-transform duration-200",
+                    abierta && "rotate-180",
+                  )}
                 />
-              ))}
-            </ul>
-          </section>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {abierta && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-2 rounded-lg border bg-background shadow-xs">
+                      <ul className="divide-y">
+                        {etapa.requisitos.map((req) => (
+                          <FilaRequisito
+                            key={req.tipo}
+                            requisito={req}
+                            docs={porTipo.get(req.tipo) ?? []}
+                            emitiendo={emitiendo === req.tipo}
+                            onEmitir={() => emitir(req.tipo)}
+                            onSubir={setSubirDoc}
+                            onCancelar={setCancelarDoc}
+                            onPago={setPagoDoc}
+                          />
+                        ))}
+                      </ul>
+
+                      {/* Acciones de ciclo de vida que esta etapa destraba */}
+                      {(transiciones.length > 0 || etapa.codigo === "EXPEDIENTE") && (
+                        <div className="space-y-3 border-t bg-muted/30 px-4 py-3">
+                          {etapa.codigo === "EXPEDIENTE" && (
+                            <SelectorF06
+                              expedienteId={expedienteId}
+                              estadoActual={estadoF06}
+                            />
+                          )}
+                          {transiciones.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                Esta etapa destraba:
+                              </span>
+                              {transiciones.map((t) => (
+                                <Button
+                                  key={t}
+                                  size="sm"
+                                  className="h-7 px-3 text-xs"
+                                  disabled={avanzando !== null}
+                                  onClick={() => avanzar(t)}
+                                >
+                                  {avanzando === t
+                                    ? "Avanzando…"
+                                    : `Avanzar a ${ETIQUETA_ESTADO_UNIDAD[t] ?? t}`}
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
         );
       })}
+
+      {otrasTransiciones.length > 0 && (
+        <div className="ml-13 flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-4 py-3">
+          <span className="text-xs text-muted-foreground">Otras acciones:</span>
+          {otrasTransiciones.map((t) => (
+            <Button
+              key={t}
+              size="sm"
+              variant="outline"
+              className={cn("h-7 px-3 text-xs", t === "BAJA" && "text-destructive")}
+              disabled={avanzando !== null}
+              onClick={() => avanzar(t)}
+            >
+              {avanzando === t ? "Aplicando…" : ETIQUETA_ESTADO_UNIDAD[t] ?? t}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <DialogFolioGenerado
         folio={folioNuevo}
@@ -192,6 +381,65 @@ export function JuegoDocumental({
           }}
         />
       )}
+    </div>
+  );
+}
+
+const ESTADOS_F06 = ["INCOMPLETO", "COMPLETO", "LISTO_PARA_VENTA"] as const;
+
+function SelectorF06({
+  expedienteId,
+  estadoActual,
+}: {
+  expedienteId: number;
+  estadoActual: string;
+}) {
+  const router = useRouter();
+  const [estado, setEstado] = useState<string | undefined>();
+  const [enviando, setEnviando] = useState(false);
+
+  async function registrar() {
+    if (!estado) return;
+    setEnviando(true);
+    try {
+      const res = await postJson(`/api/expedientes/${expedienteId}/f06`, { estado });
+      if (!res) return;
+      toast.success(`F-06 ahora en ${ETIQUETA_ESTADO_F06[estado] ?? estado}`);
+      setEstado(undefined);
+      router.refresh();
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground">
+        Casilla F-06 (la única que autoriza C-01/C-02):
+      </span>
+      <Select value={estado} onValueChange={setEstado}>
+        <SelectTrigger size="sm" className="w-48 bg-background">
+          <SelectValue
+            placeholder={`Actual: ${ETIQUETA_ESTADO_F06[estadoActual] ?? estadoActual}`}
+          />
+        </SelectTrigger>
+        <SelectContent>
+          {ESTADOS_F06.map((e) => (
+            <SelectItem key={e} value={e} disabled={e === estadoActual}>
+              {ETIQUETA_ESTADO_F06[e]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8 px-3 text-xs"
+        onClick={registrar}
+        disabled={!estado || enviando}
+      >
+        {enviando ? "Registrando…" : "Registrar"}
+      </Button>
     </div>
   );
 }

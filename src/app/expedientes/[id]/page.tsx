@@ -14,11 +14,8 @@ import {
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BotonCopiar } from "@/components/boton-copiar";
 import { EstadoBadge } from "@/components/estado-badge";
-import { JuegoDocumental } from "./documentos";
+import { LineaTiempoExpediente } from "./documentos";
 import { EmitirFolio } from "./emitir-folio";
-import { SeccionF06 } from "./f06";
-import { StepperCicloVida } from "./stepper";
-import { TabsDetalle } from "./tabs-detalle";
 
 export const dynamic = "force-dynamic";
 
@@ -85,40 +82,29 @@ export default async function ExpedienteDetallePage({
       </BlurFade>
 
       <BlurFade delay={0.12}>
-        <TabsDetalle
-          documentos={
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-medium">
-                  Juego documental del expediente
-                </h2>
-                <EmitirFolio
-                  expedienteId={exp.id}
-                  numeroExpediente={exp.numero_expediente}
-                  vin={exp.vin}
-                  origen={exp.origen}
-                />
-              </div>
-              <JuegoDocumental
-                expedienteId={exp.id}
-                numeroExpediente={exp.numero_expediente}
-                vin={exp.vin}
-                origen={exp.origen}
-                documentos={exp.documentos}
-              />
-            </div>
-          }
-          ciclo={
-            <div className="space-y-6">
-              <StepperCicloVida
-                vin={exp.vin}
-                estadoActual={exp.estado_unidad}
-                transicionesValidas={exp.transiciones_validas}
-              />
-              <SeccionF06 expedienteId={exp.id} estadoActual={exp.estado_f06} />
-            </div>
-          }
-        />
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-medium">
+              Línea de tiempo del expediente
+            </h2>
+            <EmitirFolio
+              expedienteId={exp.id}
+              numeroExpediente={exp.numero_expediente}
+              vin={exp.vin}
+              origen={exp.origen}
+            />
+          </div>
+          <LineaTiempoExpediente
+            expedienteId={exp.id}
+            numeroExpediente={exp.numero_expediente}
+            vin={exp.vin}
+            origen={exp.origen}
+            estadoUnidad={exp.estado_unidad}
+            estadoF06={exp.estado_f06}
+            transicionesValidas={exp.transiciones_validas}
+            documentos={exp.documentos}
+          />
+        </div>
       </BlurFade>
     </div>
   );
