@@ -48,6 +48,12 @@ const esquema = z.object({
   modeloNombre: z.string().trim().min(1, "Requerido"),
   anioModelo: z.coerce.number<string | number>().int().min(1980, "Desde 1980").max(2100),
   color: z.string().trim().optional(),
+  numMotor: z.string().trim().optional(),
+  kilometraje: z
+    .string()
+    .trim()
+    .regex(/^\d*$/, "Solo números, sin comas")
+    .optional(),
   origen: z.enum(["PROPIA", "CONSIGNADA"], { error: "Elige el origen" }),
 });
 
@@ -63,7 +69,7 @@ const { useStepper, steps } = defineStepper([
 
 const CAMPOS_POR_PASO: Record<string, (keyof Valores)[]> = {
   vin: ["vin"],
-  unidad: ["marcaNombre", "modeloNombre", "anioModelo", "color"],
+  unidad: ["marcaNombre", "modeloNombre", "anioModelo", "color", "numMotor", "kilometraje"],
   origen: ["origen"],
   confirmar: [],
 };
@@ -88,6 +94,8 @@ export default function NuevoExpedientePage() {
       modeloNombre: "",
       anioModelo: new Date().getFullYear() - 5,
       color: "",
+      numMotor: "",
+      kilometraje: "",
       origen: undefined,
     },
   });
@@ -106,7 +114,12 @@ export default function NuevoExpedientePage() {
       const res = await fetch("/api/expedientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...valores, color: valores.color || undefined }),
+        body: JSON.stringify({
+          ...valores,
+          color: valores.color || undefined,
+          numMotor: valores.numMotor || undefined,
+          kilometraje: valores.kilometraje ? Number(valores.kilometraje) : undefined,
+        }),
       });
       const cuerpo = await res.json();
       if (!res.ok) {
@@ -328,6 +341,35 @@ export default function NuevoExpedientePage() {
                             </FormItem>
                           )}
                         />
+                        <FormField
+                          control={form.control}
+                          name="numMotor"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>N° de motor (opcional)</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="HR16-123456" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="kilometraje"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Kilometraje al ingreso (opcional)</FormLabel>
+                              <FormControl>
+                                <Input {...field} inputMode="numeric" placeholder="85000" />
+                              </FormControl>
+                              <FormDescription>
+                                Estos datos prellenan los formatos y contratos del expediente.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
                     </div>
                   ),
@@ -413,6 +455,8 @@ export default function NuevoExpedientePage() {
                           ["VIN", <span key="v" className="font-mono">{valores.vin}</span>],
                           ["Unidad", `${valores.marcaNombre} ${valores.modeloNombre} · ${valores.anioModelo}`],
                           ["Color", valores.color || "—"],
+                          ["N° de motor", valores.numMotor || "—"],
+                          ["Kilometraje", valores.kilometraje ? `${Number(valores.kilometraje).toLocaleString("es-MX")} km` : "—"],
                           ["Origen", valores.origen === "PROPIA" ? "Propia (C-03)" : "Consignada (C-04)"],
                         ].map(([k, v]) => (
                           <div key={k as string} className="flex justify-between gap-4 px-4 py-2.5 text-sm">

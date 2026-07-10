@@ -18,6 +18,8 @@ const bodySchema = z.object({
   modeloNombre: z.string().trim().min(1),
   anioModelo: z.number().int().min(1980).max(2100),
   color: z.string().trim().min(1).optional(),
+  numMotor: z.string().trim().min(1).optional(),
+  kilometraje: z.number().int().min(0).optional(),
   origen: z.enum(["PROPIA", "CONSIGNADA"]),
 });
 
@@ -53,9 +55,18 @@ export async function POST(request: Request) {
         [marca.rows[0].id, data.modeloNombre],
       );
       await client.query(
-        `INSERT INTO traza.unidad (vin, modelo_id, anio_modelo, color, creado_por)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [data.vin, modelo.rows[0].id, data.anioModelo, data.color ?? null, usuario.id],
+        `INSERT INTO traza.unidad
+             (vin, modelo_id, anio_modelo, color, num_motor, kilometraje_ingreso, creado_por)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          data.vin,
+          modelo.rows[0].id,
+          data.anioModelo,
+          data.color ?? null,
+          data.numMotor ?? null,
+          data.kilometraje ?? null,
+          usuario.id,
+        ],
       );
       const expediente = await client.query<{
         id: string;
