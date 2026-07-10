@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircleIcon, LoaderCircleIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -12,29 +12,75 @@ import { Input } from "@/components/ui/input";
 import { InputPassword } from "@/components/ui/input-password";
 import { Label } from "@/components/ui/label";
 import { iniciarSesion } from "@/lib/auth/client";
+import { cn } from "@/lib/utils";
+
+type ErroresCampos = {
+  email?: string;
+  password?: string;
+};
+
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
   const router = useRouter();
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [recordar, setRecordar] = useState(false);
+  const [erroresCampos, setErroresCampos] = useState<ErroresCampos>({});
+  const [credencialesInvalidas, setCredencialesInvalidas] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+
+  function validarFormulario() {
+    const errores: ErroresCampos = {};
+    const correo = email.trim();
+
+    if (!correo) {
+      errores.email = "Ingresa tu correo electrónico.";
+    } else if (!EMAIL_VALIDO.test(correo)) {
+      errores.email = "Ingresa un correo electrónico válido.";
+    }
+
+    if (!password) {
+      errores.password = "Ingresa tu contraseña.";
+    }
+
+    setErroresCampos(errores);
+
+    if (errores.email) {
+      emailRef.current?.focus();
+    } else if (errores.password) {
+      passwordRef.current?.focus();
+    }
+
+    return Object.keys(errores).length === 0;
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setCredencialesInvalidas(false);
+
+    if (!validarFormulario()) return;
+
     setCargando(true);
 
     try {
-      const result = await iniciarSesion(email, password, recordar);
+      const result = await iniciarSesion(email.trim(), password, recordar);
       if (!result.ok) {
-        setError(result.error);
+        setCredencialesInvalidas(true);
+        setError("Correo o contraseña incorrectos. Verifica tus datos.");
         return;
       }
 
       router.push("/expedientes");
       router.refresh();
+    } catch {
+      setError(
+        "No pudimos verificar tu acceso. Revisa tu conexión e inténtalo de nuevo.",
+      );
     } finally {
       setCargando(false);
     }
@@ -55,6 +101,7 @@ export default function LoginPage() {
         <div className="flex flex-1 items-center justify-center py-12">
           <form
             onSubmit={onSubmit}
+            noValidate
             aria-busy={cargando}
             aria-describedby={error ? "login-error" : undefined}
             className="w-full max-w-[28rem]"
@@ -72,19 +119,51 @@ export default function LoginPage() {
                     Correo electrónico
                   </Label>
                   <Input
+                    ref={emailRef}
                     id="email"
                     type="email"
                     inputMode="email"
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setError(null);
+                      setCredencialesInvalidas(false);
+                      setErroresCampos((actuales) => ({
+                        ...actuales,
+                        email: undefined,
+                      }));
+                    }}
                     placeholder="nombre@empresa.com"
                     required
                     autoFocus
                     autoComplete="email"
                     disabled={cargando}
-                    aria-invalid={Boolean(error)}
-                    className="mt-2.5 h-12 rounded-xl border-slate-200 bg-white px-4 text-[0.95rem] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow] placeholder:text-slate-400 focus-visible:border-[#004ffe]/60 focus-visible:ring-[#004ffe]/12"
+                    aria-invalid={Boolean(
+                      erroresCampos.email || credencialesInvalidas,
+                    )}
+                    aria-describedby={
+                      erroresCampos.email ? "email-error" : undefined
+                    }
+                    className={cn(
+                      "h-12 rounded-xl border-slate-200 bg-white px-4 text-[0.95rem] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow] placeholder:text-slate-400 focus-visible:border-[#004ffe]/60 focus-visible:ring-[#004ffe]/12",
+                      (erroresCampos.email || credencialesInvalidas) &&
+                        "border-red-400 shadow-[0_0_0_3px_rgba(239,68,68,0.10)] focus-visible:border-red-500 focus-visible:ring-red-500/20",
+                    )}
                   />
+                  <AnimatePresence initial={false}>
+                    {erroresCampos.email && (
+                      <motion.p
+                        id="email-error"
+                        role="alert"
+                        initial={{ opacity: 0, y: -4, height: 0 }}
+                        animate={{ opacity: 1, y: 0, height: "auto" }}
+                        exit={{ opacity: 0, y: -4, height: 0 }}
+                        className="overflow-hidden text-xs font-medium text-red-600"
+                      >
+                        {erroresCampos.email}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
                 </div>
               </BlurFade>
 
@@ -94,16 +173,48 @@ export default function LoginPage() {
                     Contraseña
                   </Label>
                   <InputPassword
+                    ref={passwordRef}
                     id="password"
                     value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setError(null);
+                      setCredencialesInvalidas(false);
+                      setErroresCampos((actuales) => ({
+                        ...actuales,
+                        password: undefined,
+                      }));
+                    }}
                     placeholder="Ingresa tu contraseña"
                     required
                     autoComplete="current-password"
                     disabled={cargando}
-                    aria-invalid={Boolean(error)}
-                    className="mt-2.5 h-12 rounded-xl border-slate-200 bg-white px-4 pr-11 text-[0.95rem] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow] placeholder:text-slate-400 focus-visible:border-[#004ffe]/60 focus-visible:ring-[#004ffe]/12"
+                    aria-invalid={Boolean(
+                      erroresCampos.password || credencialesInvalidas,
+                    )}
+                    aria-describedby={
+                      erroresCampos.password ? "password-error" : undefined
+                    }
+                    className={cn(
+                      "h-12 rounded-xl border-slate-200 bg-white px-4 pr-11 text-[0.95rem] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow] placeholder:text-slate-400 focus-visible:border-[#004ffe]/60 focus-visible:ring-[#004ffe]/12",
+                      (erroresCampos.password || credencialesInvalidas) &&
+                        "border-red-400 shadow-[0_0_0_3px_rgba(239,68,68,0.10)] focus-visible:border-red-500 focus-visible:ring-red-500/20",
+                    )}
                   />
+                  <AnimatePresence initial={false}>
+                    {erroresCampos.password && (
+                      <motion.p
+                        id="password-error"
+                        role="alert"
+                        initial={{ opacity: 0, y: -4, height: 0 }}
+                        animate={{ opacity: 1, y: 0, height: "auto" }}
+                        exit={{ opacity: 0, y: -4, height: 0 }}
+                        className="overflow-hidden text-xs font-medium text-red-600"
+                      >
+                        {erroresCampos.password}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
                 </div>
               </BlurFade>
 
