@@ -133,6 +133,7 @@ export default async function ExpedienteDetallePage({
             transicionesValidas={exp.transiciones_validas}
             documentos={exp.documentos}
             excepciones={exp.excepciones}
+            solicitudesPendientes={exp.solicitudesPendientes}
           />
         </div>
       </BlurFade>

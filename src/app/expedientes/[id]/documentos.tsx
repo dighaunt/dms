@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
   CircleAlertIcon,
@@ -19,6 +20,7 @@ import {
   HandshakeIcon,
   InfoIcon,
   LandmarkIcon,
+  LayersIcon,
   ListChecksIcon,
   ListIcon,
   ScanLineIcon,
@@ -38,7 +40,11 @@ import {
   type ObjetivoCandado,
 } from "@/lib/candados-ui";
 import { postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
-import type { DocumentoDetalle, ExcepcionDocumental } from "@/lib/db/consultas";
+import type {
+  DocumentoDetalle,
+  ExcepcionDocumental,
+  SolicitudRiesgoPendiente,
+} from "@/lib/db/consultas";
 import { ETIQUETA_ESTADO_F06, ETIQUETA_ESTADO_UNIDAD } from "@/lib/estados";
 import {
   juegoEsperado,
@@ -46,6 +52,7 @@ import {
   TIPOS_LEGACY,
   type RequisitoDocumento,
 } from "@/lib/juego-documental";
+import { DEPENDENCIAS } from "@/lib/mapa-documental";
 import { cn } from "@/lib/utils";
 import { BotonCopiar } from "@/components/boton-copiar";
 import { Button } from "@/components/ui/button";
@@ -173,46 +180,148 @@ const ESTILO_CARPETA: Record<
   },
 };
 
-// Como si abrieras la carpeta física: una pestaña por documento que
-// DEBERÍA existir ahí, coloreada por lo que realmente hay. El candado real
-// sigue viviendo en BD — esto es solo la lectura visual del expediente.
+type ConjuntoCarpeta =
+  | { tipo: "grupo"; madre: RequisitoDocumento; hijos: { requisito: RequisitoDocumento; etiqueta: string }[] }
+  | { tipo: "suelta"; requisito: RequisitoDocumento };
+
+// Reusa DEPENDENCIAS (fuente de verdad del grafo madre → hijo, incluida la
+// etiqueta "día 0" del paquete que abrir_expediente emite junto) para saber
+// qué pestañas de ESTA etapa comparten documento madre y deben verse dentro
+// de un mismo contenedor en vez de sueltas en el wrap.
+function agruparConjuntos(requisitos: RequisitoDocumento[]): ConjuntoCarpeta[] {
+  const tipos = new Set(requisitos.map((r) => r.tipo));
+  const dentroDeEtapa = DEPENDENCIAS.filter((d) => tipos.has(d.de) && tipos.has(d.a));
+  const sonHijos = new Set(dentroDeEtapa.map((d) => d.a));
+
+  return requisitos
+    .filter((r) => !sonHijos.has(r.tipo))
+    .map((r) => {
+      const hijos = dentroDeEtapa
+        .filter((d) => d.de === r.tipo)
+        .map((d) => ({
+          requisito: requisitos.find((x) => x.tipo === d.a)!,
+          etiqueta: d.etiqueta,
+        }));
+      return hijos.length > 0
+        ? ({ tipo: "grupo", madre: r, hijos } as const)
+        : ({ tipo: "suelta", requisito: r } as const);
+    });
+}
+
+const VARIANTES_CASCADA = {
+  apilado: {},
+  repartido: { transition: { staggerChildren: 0.09, delayChildren: 0.03 } },
+};
+
+const VARIANTES_ETAPA_CASCADA = {
+  apilado: { opacity: 0, y: -10, scale: 0.98 },
+  repartido: { opacity: 1, y: 0, scale: 1 },
+};
+
+// Como si abrieras la carpeta física: un contenedor por documento madre con
+// sus hijos adentro (o una pestaña suelta si no comparte madre en esta
+// etapa), coloreado por lo que realmente hay. El candado real sigue
+// viviendo en BD — esto es solo la lectura visual del expediente. Al hacer
+// clic en una pestaña se abre, inline y animado, lo que tiene adentro.
 function VistaCarpeta({
   etapas,
   porTipo,
   excepcionPorTipo,
+  solicitudPendientePorTipo,
   indiceActual,
 }: {
   etapas: ReturnType<typeof juegoEsperado>;
   porTipo: Map<string, DocumentoDetalle[]>;
   excepcionPorTipo: Map<string, ExcepcionDocumental>;
+  solicitudPendientePorTipo: Map<string, SolicitudRiesgoPendiente>;
   indiceActual: number;
 }) {
+  const [abierto, setAbierto] = useState<string | null>(null);
+
+  function alternarPestana(tipo: string) {
+    setAbierto((prev) => (prev === tipo ? null : tipo));
+  }
+
   return (
     <div className="mb-6 rounded-2xl border bg-gradient-to-b from-muted/30 to-background p-5">
       <p className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground">
         <FolderOpenIcon className="size-3.5" />
-        Cada pestaña es un documento que debería existir en esta carpeta.
+        Cada pestaña es un documento que debería existir en esta carpeta. Las que comparten
+        documento madre quedan agrupadas; haz clic en una para abrirla.
       </p>
-      <div className="space-y-5">
-        {etapas.map((etapa, i) => (
-          <div key={etapa.codigo}>
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-              {etapa.etiqueta}
-            </p>
-            <div className="flex flex-wrap gap-2.5">
-              {etapa.requisitos.map((requisito) => (
-                <PestanaCarpeta
-                  key={requisito.tipo}
-                  requisito={requisito}
-                  docs={porTipo.get(requisito.tipo) ?? []}
-                  excepcion={excepcionPorTipo.get(requisito.tipo) ?? null}
-                  etapaAlcanzada={i <= indiceActual}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      <motion.div
+        initial="apilado"
+        animate="repartido"
+        variants={VARIANTES_CASCADA}
+        className="space-y-5"
+      >
+        {etapas.map((etapa, i) => {
+          const etapaAlcanzada = i <= indiceActual;
+          const conjuntos = agruparConjuntos(etapa.requisitos);
+          const abiertoEnEtapa = etapa.requisitos.find((r) => r.tipo === abierto) ?? null;
+
+          return (
+            <motion.div
+              key={etapa.codigo}
+              variants={VARIANTES_ETAPA_CASCADA}
+              transition={{ type: "spring", stiffness: 380, damping: 32 }}
+            >
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                {etapa.etiqueta}
+              </p>
+              <div className="flex flex-wrap items-start gap-3">
+                {conjuntos.map((c) =>
+                  c.tipo === "grupo" ? (
+                    <CarpetaMadre
+                      key={c.madre.tipo}
+                      madre={c.madre}
+                      hijos={c.hijos}
+                      porTipo={porTipo}
+                      excepcionPorTipo={excepcionPorTipo}
+                      solicitudPendientePorTipo={solicitudPendientePorTipo}
+                      etapaAlcanzada={etapaAlcanzada}
+                      abierto={abierto}
+                      onAlternar={alternarPestana}
+                    />
+                  ) : (
+                    <PestanaCarpeta
+                      key={c.requisito.tipo}
+                      requisito={c.requisito}
+                      docs={porTipo.get(c.requisito.tipo) ?? []}
+                      excepcion={excepcionPorTipo.get(c.requisito.tipo) ?? null}
+                      solicitudPendiente={solicitudPendientePorTipo.get(c.requisito.tipo) ?? null}
+                      etapaAlcanzada={etapaAlcanzada}
+                      abierta={abierto === c.requisito.tipo}
+                      onAlternar={() => alternarPestana(c.requisito.tipo)}
+                    />
+                  ),
+                )}
+              </div>
+
+              <AnimatePresence initial={false}>
+                {abiertoEnEtapa && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <ContenidoCarpeta
+                      requisito={abiertoEnEtapa}
+                      docs={porTipo.get(abiertoEnEtapa.tipo) ?? []}
+                      excepcion={excepcionPorTipo.get(abiertoEnEtapa.tipo) ?? null}
+                      solicitudPendiente={solicitudPendientePorTipo.get(abiertoEnEtapa.tipo) ?? null}
+                      etapaAlcanzada={etapaAlcanzada}
+                      onCerrar={() => setAbierto(null)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
+      </motion.div>
       <div className="mt-5 flex flex-wrap gap-4 border-t pt-4 text-[11px] text-muted-foreground">
         {(Object.keys(ESTILO_CARPETA) as ColorCarpeta[]).map((color) => {
           const { icono: Icono, etiqueta, clase } = ESTILO_CARPETA[color];
@@ -230,61 +339,208 @@ function VistaCarpeta({
   );
 }
 
+// Carpeta madre: agrupa visualmente al documento que dispara el conjunto
+// (p.ej. C-03/C-04 del paquete día 0, o F-06 con su checklist maestro
+// F-07/F-08) junto a los hijos que DEPENDENCIAS marca como emitidos con
+// ella o destrabados por ella dentro de esta misma etapa.
+function CarpetaMadre({
+  madre,
+  hijos,
+  porTipo,
+  excepcionPorTipo,
+  solicitudPendientePorTipo,
+  etapaAlcanzada,
+  abierto,
+  onAlternar,
+}: {
+  madre: RequisitoDocumento;
+  hijos: { requisito: RequisitoDocumento; etiqueta: string }[];
+  porTipo: Map<string, DocumentoDetalle[]>;
+  excepcionPorTipo: Map<string, ExcepcionDocumental>;
+  solicitudPendientePorTipo: Map<string, SolicitudRiesgoPendiente>;
+  etapaAlcanzada: boolean;
+  abierto: string | null;
+  onAlternar: (tipo: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-dashed bg-muted/20 p-2.5">
+      <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+        <LayersIcon className="size-3" />
+        Conjunto · madre {madre.tipo}
+      </p>
+      <div className="flex flex-wrap items-start gap-2.5">
+        <PestanaCarpeta
+          requisito={madre}
+          docs={porTipo.get(madre.tipo) ?? []}
+          excepcion={excepcionPorTipo.get(madre.tipo) ?? null}
+          solicitudPendiente={solicitudPendientePorTipo.get(madre.tipo) ?? null}
+          etapaAlcanzada={etapaAlcanzada}
+          abierta={abierto === madre.tipo}
+          onAlternar={() => onAlternar(madre.tipo)}
+          esMadre
+        />
+        <div className="flex flex-wrap items-start gap-2 border-l pl-2.5">
+          {hijos.map(({ requisito, etiqueta }) => (
+            <div key={requisito.tipo} className="flex flex-col items-start gap-1">
+              <PestanaCarpeta
+                requisito={requisito}
+                docs={porTipo.get(requisito.tipo) ?? []}
+                excepcion={excepcionPorTipo.get(requisito.tipo) ?? null}
+                solicitudPendiente={solicitudPendientePorTipo.get(requisito.tipo) ?? null}
+                etapaAlcanzada={etapaAlcanzada}
+                abierta={abierto === requisito.tipo}
+                onAlternar={() => onAlternar(requisito.tipo)}
+              />
+              <span className="pl-1 text-[9px] text-muted-foreground/70">{etiqueta}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PestanaCarpeta({
   requisito,
   docs,
   excepcion,
+  solicitudPendiente,
   etapaAlcanzada,
+  abierta,
+  onAlternar,
+  esMadre = false,
 }: {
   requisito: RequisitoDocumento;
   docs: DocumentoDetalle[];
   excepcion: ExcepcionDocumental | null;
+  solicitudPendiente: SolicitudRiesgoPendiente | null;
   etapaAlcanzada: boolean;
+  abierta: boolean;
+  onAlternar: () => void;
+  esMadre?: boolean;
+}) {
+  const estado = estadoDe(docs, excepcion !== null);
+  const color = colorCarpetaDe(estado, requisito, etapaAlcanzada);
+  const { clase, icono: Icono } = ESTILO_CARPETA[color];
+  const solicitudSinResolver = !excepcion && solicitudPendiente !== null;
+
+  return (
+    <button
+      type="button"
+      onClick={onAlternar}
+      aria-expanded={abierta}
+      aria-label={`${abierta ? "Cerrar" : "Abrir"} carpeta ${requisito.tipo}`}
+      className={cn(
+        "relative flex min-w-[104px] flex-col items-start gap-1.5 rounded-lg rounded-tl-none border-2 px-3 py-2.5 text-left shadow-sm transition-transform hover:-translate-y-0.5",
+        clase,
+        esMadre && "min-w-[116px] font-semibold",
+        abierta && "-translate-y-0.5 ring-2 ring-primary/50",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn("absolute -top-2 left-2.5 h-2 w-7 rounded-t-md border-2 border-b-0", clase)}
+      />
+      {solicitudSinResolver && (
+        <span
+          aria-hidden="true"
+          className="absolute -inset-0.5 animate-pulse rounded-lg ring-2 ring-amber-400/80"
+        />
+      )}
+      <Icono className="size-3.5" />
+      <span className="font-mono text-[11px] font-semibold">{requisito.tipo}</span>
+    </button>
+  );
+}
+
+// Lo que hay "adentro" de la pestaña al abrirla: nombre completo, propósito,
+// estado, motivo (excepción o solicitud pendiente) y a quién destraba —
+// usando DEPENDENCIAS (de === requisito.tipo) para el grafo, sin limitarlo a
+// esta etapa, porque lo que destraba puede vivir etapas más adelante.
+function ContenidoCarpeta({
+  requisito,
+  docs,
+  excepcion,
+  solicitudPendiente,
+  etapaAlcanzada,
+  onCerrar,
+}: {
+  requisito: RequisitoDocumento;
+  docs: DocumentoDetalle[];
+  excepcion: ExcepcionDocumental | null;
+  solicitudPendiente: SolicitudRiesgoPendiente | null;
+  etapaAlcanzada: boolean;
+  onCerrar: () => void;
 }) {
   const estado = estadoDe(docs, excepcion !== null);
   const color = colorCarpetaDe(estado, requisito, etapaAlcanzada);
   const { clase, icono: Icono, etiqueta } = ESTILO_CARPETA[color];
+  const destraba = DEPENDENCIAS.filter((d) => d.de === requisito.tipo);
 
   const detalle = excepcion
     ? `Excepción legacy: ${excepcion.motivo}`
-    : estado === "CANCELADO"
-      ? "Cancelado sin sustituto vigente: pérdida registrada en el expediente."
-      : requisito.proposito;
+    : solicitudPendiente
+      ? `Solicitud enviada, pendiente de aprobación N3: ${solicitudPendiente.motivo}`
+      : estado === "CANCELADO"
+        ? "Cancelado sin sustituto vigente: pérdida registrada en el expediente."
+        : requisito.proposito;
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
+    <div className="mt-3 rounded-xl border bg-background/70 p-4 shadow-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
+            {NOMBRE_TIPO[requisito.tipo] ?? requisito.tipo}
+            <span className="font-mono text-xs font-normal text-muted-foreground">
+              {requisito.tipo}
+            </span>
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{detalle}</p>
+        </div>
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Cerrar carpeta ${requisito.tipo}`}
+          onClick={onCerrar}
+        >
+          <ChevronDownIcon className="size-4 rotate-180" />
+        </Button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span
           className={cn(
-            "relative flex min-w-[104px] flex-col items-start gap-1.5 rounded-lg rounded-tl-none border-2 px-3 py-2.5 text-left shadow-sm transition-transform hover:-translate-y-0.5",
+            "inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
             clase,
           )}
         >
-          <span
-            aria-hidden="true"
-            className={cn("absolute -top-2 left-2.5 h-2 w-7 rounded-t-md border-2 border-b-0", clase)}
-          />
-          <Icono className="size-3.5" />
-          <span className="font-mono text-[11px] font-semibold">{requisito.tipo}</span>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent side="top" className="w-72">
-        <PopoverHeader>
-          <PopoverTitle>
-            {NOMBRE_TIPO[requisito.tipo] ?? requisito.tipo}
-            <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
-              {requisito.tipo}
-            </span>
-          </PopoverTitle>
-          <PopoverDescription className="leading-relaxed">{detalle}</PopoverDescription>
-        </PopoverHeader>
-        <p className={cn("mt-3 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium", clase)}>
           <Icono className="size-3" />
           {etiqueta}
-        </p>
-      </PopoverContent>
-    </Popover>
+        </span>
+        {docs.length > 0 && (
+          <span className="text-[11px] text-muted-foreground">
+            {docs.length} {docs.length === 1 ? "folio" : "folios"} en este documento
+          </span>
+        )}
+      </div>
+
+      {destraba.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3 text-[11px] text-muted-foreground">
+          <ArrowRightIcon className="size-3 shrink-0" />
+          destraba:
+          {destraba.map((d) => (
+            <span
+              key={d.a}
+              className="rounded-full border bg-muted/40 px-2 py-0.5 font-mono text-[10px] font-medium text-foreground"
+              title={d.etiqueta}
+            >
+              {d.a}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -304,6 +560,7 @@ export function LineaTiempoExpediente({
   transicionesValidas,
   documentos,
   excepciones,
+  solicitudesPendientes,
 }: {
   expedienteId: number;
   numeroExpediente: string;
@@ -314,12 +571,16 @@ export function LineaTiempoExpediente({
   transicionesValidas: string[];
   documentos: DocumentoDetalle[];
   excepciones: ExcepcionDocumental[];
+  solicitudesPendientes: SolicitudRiesgoPendiente[];
 }) {
   const router = useRouter();
   const etapas = juegoEsperado(origen);
   const etapaActual = ETAPA_DE_ESTADO[estadoUnidad] ?? "ADQUISICION";
   const indiceActual = etapas.findIndex((e) => e.codigo === etapaActual);
   const excepcionPorTipo = new Map(excepciones.map((e) => [e.tipo_codigo, e]));
+  const solicitudPendientePorTipo = new Map(
+    solicitudesPendientes.map((s) => [s.tipo_codigo, s]),
+  );
 
   const [vista, setVista] = useState<"linea" | "carpeta">("linea");
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set([etapaActual]));
@@ -475,14 +736,25 @@ export function LineaTiempoExpediente({
         </div>
       </div>
 
-      {vista === "carpeta" && (
-        <VistaCarpeta
-          etapas={etapas}
-          porTipo={porTipo}
-          excepcionPorTipo={excepcionPorTipo}
-          indiceActual={indiceActual}
-        />
-      )}
+      <AnimatePresence initial={false}>
+        {vista === "carpeta" && (
+          <motion.div
+            key="vista-carpeta"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+            <VistaCarpeta
+              etapas={etapas}
+              porTipo={porTipo}
+              excepcionPorTipo={excepcionPorTipo}
+              solicitudPendientePorTipo={solicitudPendientePorTipo}
+              indiceActual={indiceActual}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {vista === "linea" &&
       etapas.map((etapa, i) => {
@@ -659,6 +931,7 @@ export function LineaTiempoExpediente({
                             requisito={req}
                             docs={porTipo.get(req.tipo) ?? []}
                             excepcion={excepcionPorTipo.get(req.tipo) ?? null}
+                            solicitudPendiente={solicitudPendientePorTipo.get(req.tipo) ?? null}
                             orden={indice}
                             emitiendo={emitiendo === req.tipo}
                             onEmitir={() => emitir(req.tipo)}
@@ -798,7 +1071,7 @@ export function LineaTiempoExpediente({
         />
       )}
       {declararTipo && (
-        <DialogDeclararExcepcion
+        <DialogSolicitarExcepcion
           expedienteId={expedienteId}
           tipoCodigo={declararTipo}
           nombreTipo={NOMBRE_TIPO[declararTipo] ?? declararTipo}
@@ -988,6 +1261,39 @@ function CalloutExcepcionLegacy({ excepcion }: { excepcion: ExcepcionDocumental 
   );
 }
 
+// Aviso provisional: la solicitud ya salió, pero todavía no hay decisión de
+// un N3. Más liviano que CalloutExcepcionLegacy porque puede resolverse en
+// cualquier sentido (aprobar o rechazar) desde /modo-riesgo.
+function CalloutSolicitudPendiente({ solicitud }: { solicitud: SolicitudRiesgoPendiente }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="mt-2 flex w-full items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 transition-colors hover:bg-amber-100"
+        >
+          <ShieldAlertIcon aria-hidden="true" className="size-3.5 shrink-0 text-amber-600" />
+          <span className="font-medium">Solicitud enviada, pendiente de aprobación N3</span>
+          <InfoIcon className="ml-auto size-3 shrink-0 opacity-55" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" className="w-72">
+        <PopoverHeader>
+          <PopoverTitle>Excepción legacy solicitada</PopoverTitle>
+          <PopoverDescription className="leading-relaxed">
+            {solicitud.motivo}
+          </PopoverDescription>
+        </PopoverHeader>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Solicitada por {solicitud.solicitado_por_nombre} el{" "}
+          {format(new Date(solicitud.solicitado_en), "d MMM yyyy", { locale: es })} · a la espera
+          de que un administrador (N3) la apruebe o la rechace desde /modo-riesgo.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 const ESTADOS_F06 = ["INCOMPLETO", "COMPLETO", "LISTO_PARA_VENTA"] as const;
 
 function SelectorF06({
@@ -1083,6 +1389,7 @@ function FilaRequisito({
   requisito,
   docs,
   excepcion,
+  solicitudPendiente,
   orden,
   emitiendo,
   onEmitir,
@@ -1097,6 +1404,7 @@ function FilaRequisito({
   requisito: RequisitoDocumento;
   docs: DocumentoDetalle[];
   excepcion: ExcepcionDocumental | null;
+  solicitudPendiente: SolicitudRiesgoPendiente | null;
   orden: number;
   emitiendo: boolean;
   onEmitir: () => void;
@@ -1280,6 +1588,10 @@ function FilaRequisito({
 
                 {excepcion && <CalloutExcepcionLegacy excepcion={excepcion} />}
 
+                {!excepcion && solicitudPendiente && (
+                  <CalloutSolicitudPendiente solicitud={solicitudPendiente} />
+                )}
+
                 {docs.length > 0 ? (
                   <ul className="ml-4 mt-3 space-y-2 border-l border-dashed pl-4">
                     {docs.map((doc, indice) => (
@@ -1343,18 +1655,22 @@ function FilaRequisito({
                                 onConfirmar={() => onSubir(doc)}
                               />
                             )}
-                            {esExcepcionable && !doc.cancelado && !doc.escaneado && !excepcion && (
-                              <AccionExplicada
-                                etiqueta="Declarar inexistente"
-                                titulo={`Declarar ${requisito.tipo} inexistente por legacy`}
-                                descripcion="Para unidades adquiridas antes del sistema, sin el papel físico de este documento. Requiere un token de modo riesgo vigente, autorizado por un administrador (N3) distinto de quien declara — pídelo primero si aún no existe."
-                                confirmar="Continuar"
-                                variant="ghost"
-                                className="h-7 px-2 text-[11px] text-amber-700 hover:text-amber-800"
-                                icono={<ShieldAlertIcon className="size-3" />}
-                                onConfirmar={() => onDeclararExcepcion(requisito.tipo)}
-                              />
-                            )}
+                            {esExcepcionable &&
+                              !doc.cancelado &&
+                              !doc.escaneado &&
+                              !excepcion &&
+                              !solicitudPendiente && (
+                                <AccionExplicada
+                                  etiqueta="Solicitar excepción (legacy)"
+                                  titulo={`Solicitar excepción de ${requisito.tipo} por legacy`}
+                                  descripcion="Para unidades adquiridas antes del sistema, sin el papel físico de este documento. La solicitud queda pendiente hasta que un administrador (N3) que no seas tú la apruebe o la rechace desde /modo-riesgo."
+                                  confirmar="Continuar"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[11px] text-amber-700 hover:text-amber-800"
+                                  icono={<ShieldAlertIcon className="size-3" />}
+                                  onConfirmar={() => onDeclararExcepcion(requisito.tipo)}
+                                />
+                              )}
                             {doc.version_maxima != null && (
                               <AccionExplicada
                                 etiqueta="Ver escaneo"
@@ -1654,11 +1970,11 @@ function DialogCancelar({
   );
 }
 
-// Paso 2 del procedimiento de excepción legacy. El candado real vive en
-// traza.declarar_excepcion_legacy: sin un token de modo riesgo vigente
-// emitido por un N3 distinto de quien declara, la API responde 409 y el
-// mensaje literal explica qué falta (postJson ya lo muestra en un toast).
-function DialogDeclararExcepcion({
+// Paso 1 del procedimiento de excepción legacy: cualquier usuario autenticado
+// solicita, y la solicitud queda PENDIENTE hasta que un N3 distinto de quien
+// solicitó la apruebe o la rechace desde /modo-riesgo (traza.decidir_solicitud_riesgo).
+// Ya no hace falta un token de modo riesgo previo.
+function DialogSolicitarExcepcion({
   expedienteId,
   tipoCodigo,
   nombreTipo,
@@ -1675,15 +1991,15 @@ function DialogDeclararExcepcion({
   const [enviando, setEnviando] = useState(false);
   const motivoValido = motivo.trim().length >= 40;
 
-  async function declarar() {
+  async function solicitar() {
     setEnviando(true);
     try {
-      const res = await postJson<{ excepcionId: number }>(
-        `/api/expedientes/${expedienteId}/excepciones`,
+      const res = await postJson<{ solicitudId: number }>(
+        `/api/expedientes/${expedienteId}/solicitudes-riesgo`,
         { tipoCodigo, motivo },
       );
       if (!res) return;
-      toast.success(`${nombreTipo} (${tipoCodigo}) declarado inexistente por excepción legacy`);
+      toast.success("Solicitud enviada; un administrador (N3) debe aprobarla");
       onDone();
     } finally {
       setEnviando(false);
@@ -1694,13 +2010,12 @@ function DialogDeclararExcepcion({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Declarar inexistente · {tipoCodigo}</DialogTitle>
+          <DialogTitle>Solicitar excepción legacy · {tipoCodigo}</DialogTitle>
           <DialogDescription>
             Para unidades legacy (adquiridas antes de existir el sistema) sin el
-            papel físico de {nombreTipo}. Necesitas un token de modo riesgo
-            vigente para este expediente y este tipo, autorizado por un
-            administrador (N3) que no seas tú mismo — pídeselo antes de
-            continuar si aún no existe.
+            papel físico de {nombreTipo}. Esto no declara la excepción todavía:
+            queda PENDIENTE hasta que un administrador (N3), que no seas tú, la
+            apruebe o la rechace desde /modo-riesgo.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
@@ -1726,10 +2041,10 @@ function DialogDeclararExcepcion({
           </Button>
           <Button
             variant="destructive"
-            onClick={declarar}
+            onClick={solicitar}
             disabled={!motivoValido || enviando}
           >
-            {enviando ? "Declarando…" : "Declarar inexistente"}
+            {enviando ? "Enviando…" : "Enviar solicitud"}
           </Button>
         </DialogFooter>
       </DialogContent>

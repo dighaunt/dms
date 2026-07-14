@@ -116,6 +116,20 @@ export function AnexosExpediente({
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground">{ficha.descripcion}</p>
+                  {ficha.custodia && (
+                    <div className="mt-1.5 space-y-0.5 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] leading-relaxed">
+                      <p>
+                        <span className="font-semibold text-foreground">Original:</span>{" "}
+                        <span className="text-muted-foreground">{ficha.custodia.original}</span>
+                      </p>
+                      {ficha.custodia.copia && (
+                        <p>
+                          <span className="font-semibold text-foreground">Copia:</span>{" "}
+                          <span className="text-muted-foreground">{ficha.custodia.copia}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {cargado && (
                   <Button
