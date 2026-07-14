@@ -144,6 +144,17 @@
   }
 }
 
+/* Onda de actividad pendiente: nace en el borde de la pestaña de carpeta,
+   se expande apenas y desaparece antes de reiniciar. */
+@keyframes folder-aura {
+  0%, 14% { opacity: 0; transform: scale(1); }
+  18% { opacity: .95; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.075); }
+}
+.folder-aura {
+  animation: folder-aura 1.3s ease-out infinite;
+}
+
 /* vis-timeline con la paleta del sistema */
 .traza-timeline .vis-timeline {
   border-color: var(--border);
