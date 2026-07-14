@@ -33,6 +33,7 @@ import { toast } from "sonner";
 
 import { CircleCheckIcon } from "@/components/animate-ui/icons/circle-check";
 import { LockKeyholeIcon } from "@/components/animate-ui/icons/lock-keyhole";
+import { GuiaOperativaResumen } from "@/components/guia-operativa-formato";
 import {
   animoDeCandado,
   idDeObjetivo,
@@ -524,6 +525,8 @@ function ContenidoCarpeta({
           </span>
         )}
       </div>
+
+      <GuiaOperativaResumen tipo={requisito.tipo} />
 
       {destraba.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3 text-[11px] text-muted-foreground">

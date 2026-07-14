@@ -6,6 +6,11 @@ export type GuiaOperativa = {
   solicita: string[];
   cierra: string[];
   alerta?: string;
+  perfiles?: Array<{
+    titulo: string;
+    resumen: string;
+    alerta?: string;
+  }>;
 };
 
 const GUIAS: Record<string, GuiaOperativa> = {
@@ -88,9 +93,8 @@ const GUIAS: Record<string, GuiaOperativa> = {
   "F-03": {
     etapa: "KYC · identificación de contraparte",
     solicita: [
-      "Persona física mexicana: INE vigente; alternativa: pasaporte mexicano o cédula profesional vigente. Pide CURP, RFC si aplica y comprobante de domicilio ≤ 3 meses.",
-      "Persona extranjera: pasaporte vigente y residencia temporal/permanente. Persona moral: acta, poder, INE del representante, constancia fiscal y beneficiario controlador.",
-      "Quien firma por otro: poder para el acto específico, INE del apoderado e identificación del poderdante.",
+      "Identifica primero quién firma: persona física, extranjera, persona moral o apoderado. Pide el juego correspondiente antes de capturar.",
+      "La persona firma con sus originales a la vista; no captures desde fotos o copias que no hayas cotejado.",
     ],
     cierra: [
       "Captura con la contraparte presente y el original a la vista; marca las verificaciones de cotejo que exige el formato.",
@@ -98,6 +102,25 @@ const GUIAS: Record<string, GuiaOperativa> = {
       "Escanea e integra la copia el mismo día; no aceptes una copia previa sin ver su original.",
     ],
     alerta: "Si hay nombres que no coinciden, identificación alterada, negativa de KYC o extranjero que transmite propiedad solo con FMM: detén y escala.",
+    perfiles: [
+      {
+        titulo: "Persona física mexicana",
+        resumen: "INE vigente. Alternativas: pasaporte mexicano o cédula profesional vigente. Además CURP, RFC si aplica y comprobante de domicilio de máximo 3 meses.",
+      },
+      {
+        titulo: "Persona física extranjera",
+        resumen: "Pasaporte vigente y tarjeta de residente temporal o permanente. Si transmite propiedad solo con FMM, no continúes: escala a N3.",
+      },
+      {
+        titulo: "Persona moral",
+        resumen: "Acta constitutiva certificada a la vista, poder del representante para este acto, INE del representante y constancia de situación fiscal. Identifica también al beneficiario controlador.",
+        alerta: "Si no identifica al beneficiario controlador, no hay operación; escala a N3.",
+      },
+      {
+        titulo: "Firma un apoderado",
+        resumen: "Poder notarial que permita vender o comprar el vehículo, INE del apoderado e identificación del poderdante. Revisa que el poder corresponda al acto.",
+      },
+    ],
   },
   "F-04": {
     etapa: "Adquisición · recibo de pago",
