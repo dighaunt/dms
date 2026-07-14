@@ -14,7 +14,6 @@ import {
   ClipboardCheckIcon,
   FileCheck2Icon,
   FileTextIcon,
-  FileX2Icon,
   FolderIcon,
   FolderOpenIcon,
   HandshakeIcon,
@@ -112,14 +111,14 @@ const ETAPA_DE_ESTADO: Record<string, string> = {
   BAJA: "VENTA",
 };
 
-type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "CANCELADO" | "EXCEPCION_LEGACY";
+type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "ANULADO";
 
 function estadoDe(docs: DocumentoDetalle[], tieneExcepcion = false): EstadoRequisito {
-  if (tieneExcepcion) return "EXCEPCION_LEGACY";
+  if (tieneExcepcion) return "ANULADO";
   const vigentes = docs.filter((d) => !d.cancelado);
   if (vigentes.some((d) => d.escaneado)) return "ESCANEADO";
   if (vigentes.length > 0) return "EMITIDO";
-  if (docs.length > 0) return "CANCELADO";
+  if (docs.length > 0) return "ANULADO";
   return "PENDIENTE";
 }
 
@@ -127,17 +126,15 @@ const ICONO_ESTADO: Record<EstadoRequisito, { icono: React.ComponentType<{ class
   PENDIENTE: { icono: CircleDashedIcon, clase: "text-muted-foreground/60" },
   EMITIDO: { icono: FileTextIcon, clase: "text-foreground" },
   ESCANEADO: { icono: FileCheck2Icon, clase: "text-emerald-600" },
-  CANCELADO: { icono: FileX2Icon, clase: "text-red-500" },
-  EXCEPCION_LEGACY: { icono: ShieldAlertIcon, clase: "text-amber-600" },
+  ANULADO: { icono: SkullIcon, clase: "text-zinc-950" },
 };
 
 const EXPLICACION_ESTADO: Record<EstadoRequisito, string> = {
   PENDIENTE: "Todavía no existe un folio. Emitirlo crea un consecutivo permanente en la trazabilidad.",
   EMITIDO: "El folio ya existe y el PDF está disponible; falta cargar el documento firmado o escaneado.",
   ESCANEADO: "Existe al menos un escaneo resguardado. Cada nueva carga crea otra versión y conserva las anteriores.",
-  CANCELADO: "El folio se conserva para auditoría, pero ya no admite operaciones. Puede emitirse un sustituto.",
-  EXCEPCION_LEGACY:
-    "Se declaró, en modo riesgo y con autorización de un administrador (N3), que este papel nunca existió por ser una unidad legacy previa al sistema. Queda visible en el historial para siempre.",
+  ANULADO:
+    "El documento se conserva para auditoría, pero no está habilitado ni admite operaciones. Cuando la anulación es por origen pre-sistema, la autorización N3 permanece visible en el historial.",
 };
 
 type ColorCarpeta = "verde" | "amarillo" | "gris" | "muerto";
@@ -151,7 +148,7 @@ function colorCarpetaDe(
   requisito: RequisitoDocumento,
   etapaAlcanzada: boolean,
 ): ColorCarpeta {
-  if (estado === "EXCEPCION_LEGACY" || estado === "CANCELADO") return "muerto";
+  if (estado === "ANULADO") return "muerto";
   if (estado === "ESCANEADO") return "verde";
   if (estado === "EMITIDO") return "amarillo";
   if (!etapaAlcanzada || requisito.exigencia === "segun_aplique") return "gris";
@@ -178,9 +175,9 @@ const ESTILO_CARPETA: Record<
     etiqueta: "Aún no es su ciclo",
   },
   muerto: {
-    clase: "border-zinc-400 bg-zinc-200/70 text-zinc-600",
+    clase: "border-zinc-900 bg-zinc-100 text-zinc-950",
     icono: SkullIcon,
-    etiqueta: "Pérdida / legacy",
+    etiqueta: "Anulado",
   },
 };
 
@@ -485,8 +482,8 @@ function ContenidoCarpeta({
     ? `Excepción legacy: ${excepcion.motivo}`
     : solicitudPendiente
       ? `Solicitud enviada, pendiente de aprobación N3: ${solicitudPendiente.motivo}`
-      : estado === "CANCELADO"
-        ? "Cancelado sin sustituto vigente: pérdida registrada en el expediente."
+      : estado === "ANULADO"
+        ? "Anulado: permanece en el expediente solo como evidencia de auditoría."
         : requisito.proposito;
 
   return (
@@ -772,7 +769,7 @@ export function LineaTiempoExpediente({
         const medibles = etapa.requisitos.filter((r) => r.exigencia !== "segun_aplique");
         const completos = medibles.filter((r) => {
           const e = estadoDe(porTipo.get(r.tipo) ?? [], excepcionPorTipo.has(r.tipo));
-          return e === "EMITIDO" || e === "ESCANEADO" || e === "EXCEPCION_LEGACY";
+          return e === "EMITIDO" || e === "ESCANEADO";
         }).length;
         const etapaCompleta = medibles.length > 0 && completos === medibles.length;
         const transiciones = transicionesPorEtapa.get(etapa.codigo) ?? [];
@@ -844,8 +841,7 @@ export function LineaTiempoExpediente({
                             estadoHijo === "ESCANEADO" &&
                               "border-emerald-200 bg-emerald-50/45",
                             estadoHijo === "EMITIDO" && "border-primary/20 bg-primary/[0.025]",
-                            estadoHijo === "EXCEPCION_LEGACY" &&
-                              "border-amber-200 bg-amber-50/45",
+                            estadoHijo === "ANULADO" && "border-zinc-900 bg-zinc-100",
                           )}
                         />
                       );
@@ -1259,12 +1255,12 @@ function CalloutCandado({
 // se declaró inexistente, quién lo pidió y qué N3 lo autorizó en modo riesgo.
 function CalloutExcepcionLegacy({ excepcion }: { excepcion: ExcepcionDocumental }) {
   return (
-    <div className="mt-2 flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-      <ShieldAlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-600" />
+    <div className="mt-2 flex items-start gap-2.5 rounded-lg border border-zinc-900 bg-zinc-100 px-3 py-2.5">
+      <SkullIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-zinc-950" />
       <div className="min-w-0 flex-1 text-xs leading-relaxed">
-        <p className="font-semibold text-amber-800">Excepción legacy declarada</p>
-        <p className="mt-0.5 text-amber-800">{excepcion.motivo}</p>
-        <p className="mt-1 text-amber-700">
+        <p className="font-semibold text-zinc-950">Anulado por origen pre-sistema</p>
+        <p className="mt-0.5 text-zinc-800">{excepcion.motivo}</p>
+        <p className="mt-1 text-zinc-700">
           Solicitada por {excepcion.solicitado_por_nombre} el{" "}
           {format(new Date(excepcion.solicitado_en), "d MMM yyyy", { locale: es })} · autorizada en
           modo riesgo por {excepcion.autorizado_por_nombre}
@@ -1526,7 +1522,7 @@ function FilaRequisito({
               className={cn(
                 "flex size-9 shrink-0 items-center justify-center rounded-xl border bg-background shadow-xs",
                 estado === "ESCANEADO" && "border-emerald-200 bg-emerald-50",
-                estado === "CANCELADO" && "border-red-200 bg-red-50",
+                estado === "ANULADO" && "border-zinc-900 bg-zinc-100",
               )}
             >
               <Icono className={cn("size-4", clase)} />
@@ -1554,11 +1550,10 @@ function FilaRequisito({
                 estado === "ESCANEADO" && "border-emerald-200 text-emerald-700",
                 estado === "EMITIDO" && "border-primary/20 text-primary",
                 estado === "PENDIENTE" && "text-muted-foreground",
-                estado === "CANCELADO" && "border-red-200 text-red-600",
-                estado === "EXCEPCION_LEGACY" && "border-amber-200 bg-amber-50 text-amber-700",
+                estado === "ANULADO" && "border-zinc-900 bg-zinc-100 text-zinc-950",
               )}
             />
-            {(estado === "PENDIENTE" || estado === "CANCELADO") && (
+            {estado === "PENDIENTE" && (
               <AccionExplicada
                 etiqueta={emitiendo ? "Emitiendo…" : `Emitir ${requisito.tipo}`}
                 titulo={`Emitir ${requisito.tipo}`}
@@ -1655,7 +1650,7 @@ function FilaRequisito({
                           </div>
 
                           <div className="mt-2 flex flex-wrap items-center gap-1 border-t pt-2">
-                            {!doc.cancelado && (
+                            {!doc.cancelado && !excepcion && (
                               <AbrirWizardButton onOpen={() => onCapturar(doc.id)} />
                             )}
                             {!doc.cancelado && !excepcion && (
@@ -1710,7 +1705,7 @@ function FilaRequisito({
                                   onConfirmar={() => onPago(doc)}
                                 />
                               )}
-                            {!doc.cancelado && (
+                            {!doc.cancelado && !excepcion && (
                               <AccionExplicada
                                 etiqueta="Cancelar"
                                 titulo={`Cancelar ${doc.folio}`}
@@ -1744,7 +1739,7 @@ function FilaRequisito({
 
 function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
   const estado: EstadoRequisito = doc.cancelado
-    ? "CANCELADO"
+    ? "ANULADO"
     : doc.escaneado
       ? "ESCANEADO"
       : "EMITIDO";
@@ -1753,7 +1748,7 @@ function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
       estado={estado}
       className={cn(
         "px-2 py-px font-medium normal-case tracking-normal",
-        estado === "CANCELADO" && "border-red-200 bg-red-50 text-red-700",
+        estado === "ANULADO" && "border-zinc-900 bg-zinc-100 text-zinc-950",
         estado === "ESCANEADO" && "border-emerald-200 bg-emerald-50 text-emerald-700",
         estado === "EMITIDO" && "bg-background text-foreground",
       )}
@@ -1761,6 +1756,7 @@ function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
       {estado === "ESCANEADO" && doc.version_maxima != null && doc.version_maxima > 1 && (
         <span className="text-emerald-600">v{doc.version_maxima}</span>
       )}
+      {estado === "ANULADO" && <SkullIcon aria-hidden="true" className="size-3 text-zinc-950" />}
       {doc.tipo_codigo === "C-02" && doc.pago_verificado && !doc.cancelado && (
         <span className="inline-flex items-center gap-0.5 text-emerald-600">
           · pago
@@ -2115,7 +2111,7 @@ function DialogCancelar({
         <DialogHeader>
           <DialogTitle>Cancelar documento · {doc.folio}</DialogTitle>
           <DialogDescription>
-            El documento CANCELADO se conserva en el expediente. La corrección es
+            El documento ANULADO se conserva en el expediente. La corrección es
             cancelación + folio sustituto del mismo tipo.
           </DialogDescription>
         </DialogHeader>
