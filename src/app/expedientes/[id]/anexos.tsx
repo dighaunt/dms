@@ -34,15 +34,6 @@ import {
 
 const TIPOS_ACEPTADOS = "application/pdf,image/jpeg,image/png";
 
-function contentTypeAnexo(archivo: File): "application/pdf" | "image/jpeg" | "image/png" | null {
-  if (["application/pdf", "image/jpeg", "image/png"].includes(archivo.type)) return archivo.type as "application/pdf" | "image/jpeg" | "image/png";
-  const extension = archivo.name.split(".").pop()?.toLowerCase();
-  if (extension === "pdf") return "application/pdf";
-  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
-  if (extension === "png") return "image/png";
-  return null;
-}
-
 export type AnexoCargado = {
   clave: string;
   version_maxima: number;
@@ -342,29 +333,25 @@ function DialogSubirAnexo({
 
   async function subir() {
     if (!archivo) return;
-    const contentType = contentTypeAnexo(archivo);
-    if (!contentType) {
-      toast.error("Selecciona un PDF, JPG o PNG de máximo 25 MB");
-      return;
-    }
     setSubiendo(true);
     try {
       const buffer = await archivo.arrayBuffer();
       const sha256 = await sha256Hex(buffer);
 
-      const presign = await postJson<{ url: string; rutaObjeto: string }>(
+      const presign = await postJson<{ url: string; rutaObjeto: string; contentType: string }>(
         `/api/expedientes/${expedienteId}/anexos/presign`,
         {
           clave: ficha.clave,
+          nombreArchivo: archivo.name,
           tamanoBytes: archivo.size,
-          contentType,
+          contentType: archivo.type,
         },
       );
       if (!presign) return;
 
       const put = await fetch(presign.url, {
         method: "PUT",
-        headers: { "Content-Type": contentType },
+        headers: { "Content-Type": presign.contentType },
         body: archivo,
       });
       if (!put.ok) {
@@ -378,7 +365,7 @@ function DialogSubirAnexo({
           clave: ficha.clave,
           sha256,
           rutaObjeto: presign.rutaObjeto,
-          contentType,
+          contentType: presign.contentType,
           tamanoBytes: archivo.size,
         },
       );

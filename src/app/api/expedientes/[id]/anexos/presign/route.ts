@@ -21,9 +21,18 @@ const TIPOS_ANEXO = ["application/pdf", "image/jpeg", "image/png"] as const;
 
 const bodySchema = z.object({
   clave: z.string().trim().min(1),
+  nombreArchivo: z.string().trim().min(1).max(255),
   tamanoBytes: z.number().int().min(1).max(MAX_BYTES),
-  contentType: z.enum(TIPOS_ANEXO, { error: "Solo PDF o imagen (jpeg/png)" }),
+  contentType: z.string().trim(),
 });
+
+function tipoCanonico(nombreArchivo: string): (typeof TIPOS_ANEXO)[number] | null {
+  const extension = nombreArchivo.split(".").pop()?.toLowerCase();
+  if (extension === "pdf") return "application/pdf";
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "png") return "image/png";
+  return null;
+}
 
 // PUT prefirmado al store privado con ruta anexos/{expediente}/{clave}/v{n}.
 export async function POST(
@@ -43,6 +52,8 @@ export async function POST(
 
   const ficha = fichaAnexo(data.clave);
   if (!ficha) return respuesta404("Anexo no catalogado");
+  const contentType = tipoCanonico(data.nombreArchivo);
+  if (!contentType) return NextResponse.json({ error: "Solo PDF, JPG o PNG" }, { status: 400 });
 
   try {
     const exp = await query<{
@@ -67,14 +78,15 @@ export async function POST(
       );
     }
 
-    const extension = CONTENT_TYPES_PERMITIDOS[data.contentType];
+    const extension = CONTENT_TYPES_PERMITIDOS[contentType];
     const rutaObjeto = `anexos/${e.numero_expediente}/${data.clave}/v${e.siguiente_version}.${extension}`;
-    const url = await presignPut(rutaObjeto, data.contentType, data.tamanoBytes);
+    const url = await presignPut(rutaObjeto, contentType, data.tamanoBytes);
 
     return NextResponse.json({
       url,
       rutaObjeto,
       version: e.siguiente_version,
+      contentType,
       venceEnSegundos: 600,
     });
   } catch (error) {
