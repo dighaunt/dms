@@ -477,8 +477,8 @@ function PestanaCarpeta({
       />
       {color === "amarillo" && !abierta && (
         <>
-          <span aria-hidden="true" className="pointer-events-none absolute -inset-1.5 animate-pulse rounded-lg rounded-tl-none bg-amber-300/20 blur-sm" />
-          <span aria-hidden="true" className="pointer-events-none absolute -left-0.5 -top-3 h-3 w-8 animate-pulse rounded-t-md border-2 border-b-0 border-amber-400/70" />
+          <span aria-hidden="true" className="pointer-events-none absolute -inset-1 animate-pulse rounded-[10px] rounded-tl-none border-2 border-amber-400/75" />
+          <span aria-hidden="true" className="pointer-events-none absolute -top-3 left-1.5 h-3 w-8 animate-pulse rounded-t-md border-2 border-b-0 border-amber-400/75" />
         </>
       )}
       {solicitudSinResolver && (
