@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   leerBody,
   parseId,
+  requerirDocumentoEditable,
   requerirUsuario,
   respuesta404,
   respuestaError,
@@ -22,19 +23,37 @@ export async function POST(
 
   const id = parseId((await params).id);
   if (id === null) return respuesta404("Documento no encontrado");
+  const cierreError = await requerirDocumentoEditable(id, usuario);
+  if (cierreError) return cierreError;
 
   const { data, error: bodyError } = await leerBody(request, bodySchema);
   if (bodyError) return bodyError;
 
   try {
-    const doc = await query<{ tipo_codigo: string }>(
-      `SELECT tipo_codigo FROM traza.documento WHERE id = $1`,
+    const doc = await query<{ tipo_codigo: string; expediente_id: number }>(
+      `SELECT tipo_codigo, expediente_id FROM traza.documento WHERE id = $1`,
       [id],
     );
     if (doc.rowCount === 0) return respuesta404("Documento no encontrado");
     if (doc.rows[0].tipo_codigo !== "C-02") {
       return NextResponse.json(
         { error: "La verificación de pago solo aplica al contrato C-02" },
+        { status: 409 },
+      );
+    }
+    const comprobante = await query<{ existe: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM traza.anexo_expediente
+          WHERE expediente_id = $1 AND clave = 'comprobante_pago'
+       ) AS existe`,
+      [doc.rows[0].expediente_id],
+    );
+    if (!comprobante.rows[0]?.existe) {
+      return NextResponse.json(
+        {
+          error: "Antes de verificar el pago, sube el comprobante en Anexos del expediente.",
+          anexoPendiente: "comprobante_pago",
+        },
         { status: 409 },
       );
     }

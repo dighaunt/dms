@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   leerBody,
   parseId,
+  requerirDocumentoEditable,
   requerirUsuario,
   respuesta404,
   respuestaError,
@@ -43,6 +44,8 @@ export async function PATCH(
   if (id === null) return respuesta404("Documento no encontrado");
   const { data, error: bodyError } = await leerBody(request, bodySchema);
   if (bodyError) return bodyError;
+  const cierreError = await requerirDocumentoEditable(id, usuario);
+  if (cierreError) return cierreError;
 
   try {
     const result = await guardarCapturaDocumento(

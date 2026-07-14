@@ -28,6 +28,7 @@ export type TokenSistema =
   | "fecha"
   | "fechaApertura"
   | "emisor"
+  | "empresaCliquealo"
   | "compradorLote"
   | "f06Incompleto"
   | "f06Completo"
@@ -94,9 +95,9 @@ const CAMPOS_SISTEMA: Record<string, Record<string, TokenSistema>> = {
   "F-08": { t0233: "folio", t0234: "expVin", t0235: "marcaSubmarcaAnio", t0236: "vin" },
   "F-09": { t0269: "folio", t0270: "expVin", t0271: "marcaSubmarcaAnio", t0272: "vin", t0273: "numeroExpediente" },
   "F-10": { t0325: "folio", t0326: "expVin", t0327: "numeroExpediente", t0328: "vin", t0329: "fecha" },
-  "F-11": { t0371: "folio", t0372: "expVin", t0373: "folio", t0374: "vin", t0375: "fecha", t0376: "marcaSubmarcaAnio" },
+  "F-11": { t0371: "folio", t0372: "expVin", t0373: "folio", t0374: "vin", t0375: "fecha", t0376: "marcaSubmarcaAnio", t0394: "empresaCliquealo" },
   "C-01": { C01_folio_1: "folio", C01_vin_2: "expVin", C01_f_11: "fecha", C01_f_13: "marcaSubmarca", C01_f_15: "anio", C01_f_16: "color", C01_f_17: "kilometraje", C01_f_18: "vin", C01_f_19: "numMotor" },
-  "C-02": { C02_folio_33: "folio", C02_vin_34: "expVin", C02_f_43: "fecha", C02_f_45: "marcaSubmarca", C02_f_47: "anio", C02_f_48: "color", C02_f_49: "kilometraje", C02_f_50: "vin", C02_f_51: "numMotor", C02_folio_69: "folio", C02_vin_70: "expVin" },
+  "C-02": { C02_folio_33: "folio", C02_vin_34: "expVin", C02_f_43: "fecha", C02_f_45: "marcaSubmarca", C02_f_47: "anio", C02_f_48: "color", C02_f_49: "kilometraje", C02_f_50: "vin", C02_f_51: "numMotor", C02_folio_69: "folio", C02_vin_70: "expVin", C02_firma_71: "empresaCliquealo" },
   "C-03": { C03_folio_74: "folio", C03_vin_75: "expVin", C03_f_84: "fecha", C03_f_86: "marcaSubmarca", C03_f_88: "anio", C03_f_89: "color", C03_f_90: "kilometraje", C03_f_91: "vin", C03_f_92: "numMotor", C03_folio_100: "folio", C03_vin_101: "expVin" },
   "C-04": { C04_folio_115: "folio", C04_vin_116: "expVin", C04_f_125: "fecha", C04_f_127: "marcaSubmarca", C04_f_129: "anio", C04_f_130: "color", C04_f_131: "kilometraje", C04_f_132: "vin", C04_f_133: "numMotor", C04_folio_142: "folio", C04_vin_143: "expVin" },
 };

@@ -425,25 +425,14 @@ export function WizardDocumento({
                     description="Este folio ya tiene un archivo firmado o escaneado. El escaneo preservado es la evidencia vigente y sus datos no pueden alterarse."
                     warning
                   />
-                ) : data.estado === "COMPLETA" ? (
-                  <CenteredState
-                    icon={<CheckCircle2Icon className="mx-auto size-12 text-emerald-600" />}
-                    title="Documento completo"
-                    description="La validación final resolvió campos, condiciones, importes y cierres. El mismo contrato se comprobará nuevamente al emitir el PDF."
-                  >
-                    <Button className="mt-6" asChild>
-                      <a href={`/api/documentos/${data.documentoId}/formato`} download>
-                        <FileDownIcon className="size-4" />
-                        Descargar PDF final
-                      </a>
-                    </Button>
-                  </CenteredState>
                 ) : (
                   <div className="mx-auto max-w-6xl">
                     <div className="mb-4 flex items-end justify-between gap-4">
                       <div>
                         <p className="text-xs font-medium text-primary">
-                          Paso {sectionIndex + 1} de {visibleSections.length}
+                          {data.estado === "COMPLETA"
+                            ? "PDF completado · puedes corregirlo mientras el expediente siga abierto"
+                            : `Paso ${sectionIndex + 1} de ${visibleSections.length}`}
                         </p>
                         <h3 className="mt-1 text-xl font-semibold">{activeSection?.label}</h3>
                       </div>
@@ -486,11 +475,19 @@ export function WizardDocumento({
             <footer className="flex flex-wrap items-center gap-2 border-t bg-background px-5 py-3">
               <Button variant="ghost" onClick={onClose}>Cerrar</Button>
               <span className="flex-1" />
-              {data.estado !== "COMPLETA" && !data.bloqueada && !requiereConfirmacionGuia && (
+              {!data.bloqueada && !requiereConfirmacionGuia && (
                 <>
+                  {data.estado === "COMPLETA" && (
+                    <Button variant="outline" asChild>
+                      <a href={`/api/documentos/${data.documentoId}/formato`} download>
+                        <FileDownIcon className="size-4" />
+                        Descargar PDF
+                      </a>
+                    </Button>
+                  )}
                   <Button variant="outline" disabled={saving !== null} onClick={() => void submit("save")}>
                     {saving === "save" ? <LoaderCircleIcon className="size-4 animate-spin" /> : <SaveIcon className="size-4" />}
-                    Guardar borrador
+                    {data.estado === "COMPLETA" ? "Guardar cambios" : "Guardar borrador"}
                   </Button>
                   <Button
                     variant="outline"
@@ -505,12 +502,12 @@ export function WizardDocumento({
                       Guardar y continuar
                       <ChevronRightIcon className="size-4" />
                     </Button>
-                  ) : (
+                  ) : data.estado !== "COMPLETA" ? (
                     <Button disabled={saving !== null} onClick={() => void submit("complete")}>
                       {saving === "complete" ? <LoaderCircleIcon className="size-4 animate-spin" /> : <CheckCircle2Icon className="size-4" />}
                       Validar y completar
                     </Button>
-                  )}
+                  ) : null}
                 </>
               )}
             </footer>

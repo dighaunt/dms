@@ -5,6 +5,7 @@ import { es } from "date-fns/locale";
 import { BadgeCheckIcon } from "lucide-react";
 
 import { query } from "@/lib/db";
+import { getUsuarioSesion } from "@/lib/auth/usuario";
 import { obtenerExpediente } from "@/lib/db/consultas";
 import { separarMiles } from "@/lib/numeros";
 import {
@@ -21,6 +22,8 @@ import { LineaTiempoExpediente } from "./documentos";
 import { EmitirFolio } from "./emitir-folio";
 import { HistorialTimeline } from "./historial-timeline";
 import { UnidadDatos } from "./unidad-datos";
+import { CerrarExpediente } from "./cerrar-expediente";
+import { EtiquetaRastreo } from "./etiqueta-rastreo";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +38,7 @@ export default async function ExpedienteDetallePage({
 
   const exp = await obtenerExpediente(id);
   if (!exp) notFound();
+  const usuario = await getUsuarioSesion();
 
   // Datos complementarios de la unidad (editables; alimentan el prellenado).
   const unidad = await query<{
@@ -116,12 +120,18 @@ export default async function ExpedienteDetallePage({
             <h2 className="text-sm font-medium">
               Línea de tiempo del expediente
             </h2>
-            <EmitirFolio
-              expedienteId={exp.id}
-              numeroExpediente={exp.numero_expediente}
-              vin={exp.vin}
-              origen={exp.origen}
-            />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <EtiquetaRastreo expedienteId={exp.id} numeroExpediente={exp.numero_expediente} vin={exp.vin} />
+              <CerrarExpediente expedienteId={exp.id} cerrado={exp.cerrado} puedeCerrar={usuario?.nivel === "N3"} />
+              {!exp.cerrado && (
+                <EmitirFolio
+                  expedienteId={exp.id}
+                  numeroExpediente={exp.numero_expediente}
+                  vin={exp.vin}
+                  origen={exp.origen}
+                />
+              )}
+            </div>
           </div>
           <LineaTiempoExpediente
             expedienteId={exp.id}

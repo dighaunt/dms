@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   leerBody,
   parseId,
+  requerirExpedienteEditable,
   requerirUsuario,
   respuesta404,
   respuestaError,
@@ -29,11 +30,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { error: authError } = await requerirUsuario();
+  const { usuario, error: authError } = await requerirUsuario();
   if (authError) return authError;
 
   const id = parseId((await params).id);
   if (id === null) return respuesta404("Expediente no encontrado");
+  const cierreError = await requerirExpedienteEditable(id, usuario);
+  if (cierreError) return cierreError;
 
   const { data, error: bodyError } = await leerBody(request, bodySchema);
   if (bodyError) return bodyError;

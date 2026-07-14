@@ -591,6 +591,7 @@ export function LineaTiempoExpediente({
   const [vista, setVista] = useState<"linea" | "carpeta">("linea");
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set([etapaActual]));
   const [subirDoc, setSubirDoc] = useState<DocumentoDetalle | null>(null);
+  const [verEscaneos, setVerEscaneos] = useState<DocumentoDetalle | null>(null);
   const [cancelarDoc, setCancelarDoc] = useState<DocumentoDetalle | null>(null);
   const [pagoDoc, setPagoDoc] = useState<DocumentoDetalle | null>(null);
   const [declararTipo, setDeclararTipo] = useState<string | null>(null);
@@ -942,6 +943,7 @@ export function LineaTiempoExpediente({
                             emitiendo={emitiendo === req.tipo}
                             onEmitir={() => emitir(req.tipo)}
                             onSubir={setSubirDoc}
+                            onVerEscaneos={setVerEscaneos}
                             onCancelar={setCancelarDoc}
                             onPago={setPagoDoc}
                             onCapturar={setDocumentoEnCaptura}
@@ -1053,6 +1055,12 @@ export function LineaTiempoExpediente({
             setSubirDoc(null);
             router.refresh();
           }}
+        />
+      )}
+      {verEscaneos && (
+        <DialogEscaneosDocumento
+          doc={verEscaneos}
+          onClose={() => setVerEscaneos(null)}
         />
       )}
       {cancelarDoc && (
@@ -1400,6 +1408,7 @@ function FilaRequisito({
   emitiendo,
   onEmitir,
   onSubir,
+  onVerEscaneos,
   onCancelar,
   onPago,
   onCapturar,
@@ -1415,6 +1424,7 @@ function FilaRequisito({
   emitiendo: boolean;
   onEmitir: () => void;
   onSubir: (d: DocumentoDetalle) => void;
+  onVerEscaneos: (d: DocumentoDetalle) => void;
   onCancelar: (d: DocumentoDetalle) => void;
   onPago: (d: DocumentoDetalle) => void;
   onCapturar: (documentoId: number) => void;
@@ -1667,30 +1677,25 @@ function FilaRequisito({
                               !excepcion &&
                               !solicitudPendiente && (
                                 <AccionExplicada
-                                  etiqueta="Solicitar excepción (legacy)"
-                                  titulo={`Solicitar excepción de ${requisito.tipo} por legacy`}
-                                  descripcion="Para unidades adquiridas antes del sistema, sin el papel físico de este documento. La solicitud queda pendiente hasta que un administrador (N3) que no seas tú la apruebe o la rechace desde /modo-riesgo."
-                                  confirmar="Continuar"
+                                  etiqueta="Anular por pre-origen"
+                                  titulo={`Anular ${requisito.tipo} por pre-origen`}
+                                  descripcion="Para una unidad previa al sistema, cuando este formato nunca existió. La calavera no borra nada: deja una excepción auditada y evita que el flujo vuelva a exigir este documento. Un N3 distinto debe aprobarla."
+                                  confirmar="Solicitar anulación"
                                   variant="ghost"
                                   className="h-7 px-2 text-[11px] text-amber-700 hover:text-amber-800"
-                                  icono={<ShieldAlertIcon className="size-3" />}
+                                  icono={<SkullIcon className="size-3" />}
                                   onConfirmar={() => onDeclararExcepcion(requisito.tipo)}
                                 />
                               )}
                             {doc.version_maxima != null && (
                               <AccionExplicada
-                                etiqueta="Ver escaneo"
-                                titulo={`Consultar escaneo v${doc.version_maxima}`}
-                                descripcion="Abre en una pestaña nueva la versión más reciente resguardada. Esta consulta no modifica el documento ni crea otra versión."
-                                confirmar="Abrir escaneo"
+                                etiqueta={doc.version_maxima > 1 ? `Ver archivos (${doc.version_maxima})` : "Ver escaneo"}
+                                titulo={`Consultar archivos de ${doc.folio}`}
+                                descripcion="Abre la colección completa de evidencia del folio. Puedes consultar cada archivo o unir PDFs y fotografías en un solo PDF de lectura."
+                                confirmar="Ver archivos"
                                 variant="ghost"
                                 className="h-7 px-2 text-[11px]"
-                                onConfirmar={() => {
-                                  window.open(
-                                    `/api/documentos/${doc.id}/escaneos/${doc.version_maxima}`,
-                                    "_blank",
-                                  );
-                                }}
+                                onConfirmar={() => onVerEscaneos(doc)}
                               />
                             )}
                             {doc.tipo_codigo === "C-02" &&
@@ -1820,7 +1825,7 @@ function DialogSubirEscaneo({
         const presign = await postJson<{
           url?: string;
           rutaObjeto: string | null;
-          version: number;
+          archivoId: number | null;
           yaRegistrado?: boolean;
         }>(
           `/api/documentos/${doc.id}/escaneos/presign`,
@@ -1856,9 +1861,15 @@ function DialogSubirEscaneo({
           continue;
         }
 
-        const confirmado = await postJson<{ version: number; yaRegistrado?: boolean }>(
+        const confirmado = await postJson<{ archivoId: number; yaRegistrado?: boolean }>(
           `/api/documentos/${doc.id}/escaneos/confirmar`,
-          { sha256, rutaObjeto: presign.rutaObjeto, tamanoBytes: archivo.size },
+          {
+            nombreArchivo: archivo.name,
+            contentType: archivo.type,
+            sha256,
+            rutaObjeto: presign.rutaObjeto,
+            tamanoBytes: archivo.size,
+          },
         );
         if (!confirmado) {
           pendientes.push(archivo);
@@ -1984,6 +1995,80 @@ function DialogSubirEscaneo({
                 ? `Subir ${archivos.length} archivos`
                 : "Subir y registrar"}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DialogEscaneosDocumento({
+  doc,
+  onClose,
+}: {
+  doc: DocumentoDetalle;
+  onClose: () => void;
+}) {
+  const [archivos, setArchivos] = useState<Array<{
+    id: number;
+    nombreArchivo: string;
+    contentType: string;
+    tamanoBytes: number;
+    subidoEn: string;
+    subidoPorNombre: string;
+  }> | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    fetch(`/api/documentos/${doc.id}/escaneos`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (activo) setArchivos(Array.isArray(data) ? data : []);
+      })
+      .catch(() => activo && setArchivos([]));
+    return () => {
+      activo = false;
+    };
+  }, [doc.id]);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Archivos resguardados · {doc.folio}</DialogTitle>
+          <DialogDescription>
+            Cada archivo conserva su propia versión y evidencia. Consultarlos o compilarlos no modifica el expediente.
+          </DialogDescription>
+        </DialogHeader>
+        {archivos === null ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Cargando archivos…</p>
+        ) : (
+          <div className="max-h-72 space-y-2 overflow-y-auto">
+            {archivos.map((archivo, indice) => (
+              <div key={archivo.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{archivo.nombreArchivo}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Archivo {indice + 1} · {archivo.subidoPorNombre} · {(archivo.tamanoBytes / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={`/api/documentos/${doc.id}/escaneos/adjuntos/${archivo.id}`} target="_blank" rel="noreferrer">
+                    Abrir
+                  </a>
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <DialogFooter>
+          {(archivos?.length ?? 0) > 1 && (
+            <Button variant="outline" asChild>
+              <a href={`/api/documentos/${doc.id}/escaneos/compilado`} target="_blank" rel="noreferrer">
+                Descargar PDF conjunto
+              </a>
+            </Button>
+          )}
+          <Button onClick={onClose}>Cerrar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2165,12 +2250,20 @@ function DialogPago({
 }) {
   const [referencia, setReferencia] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [requiereComprobante, setRequiereComprobante] = useState(false);
 
   async function verificar() {
     setEnviando(true);
     try {
-      const res = await postJson(`/api/documentos/${doc.id}/pago`, { referencia });
-      if (!res) return;
+      const res = await postJsonDetallado(`/api/documentos/${doc.id}/pago`, { referencia });
+      if (!res.ok) {
+        if (res.status === 409 && /comprobante/i.test(res.error)) {
+          setRequiereComprobante(true);
+        } else {
+          toast.error(res.error);
+        }
+        return;
+      }
       toast.success(`Pago verificado para ${doc.folio}`);
       onDone();
     } finally {
@@ -2197,6 +2290,21 @@ function DialogPago({
             placeholder="SPEI 40012345678901234567"
           />
         </div>
+        {requiereComprobante && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            Primero resguarda el comprobante (SPEI, recibo o transferencia) en Anexos.
+            <Button
+              variant="link"
+              className="ml-1 h-auto px-0 text-amber-950"
+              onClick={() => {
+                onClose();
+                document.getElementById("anexos-expediente")?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            >
+              Ir a Anexos
+            </Button>
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={enviando}>
             Volver

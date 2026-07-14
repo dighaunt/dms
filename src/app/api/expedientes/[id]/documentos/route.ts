@@ -6,6 +6,7 @@ import {
   formatearFolio,
   leerBody,
   parseId,
+  requerirExpedienteEditable,
   requerirUsuario,
   respuesta404,
   respuestaError,
@@ -31,6 +32,8 @@ export async function POST(
 
   const existe = await query(`SELECT 1 FROM traza.expediente WHERE id = $1`, [id]);
   if (existe.rowCount === 0) return respuesta404("Expediente no encontrado");
+  const cierreError = await requerirExpedienteEditable(id, usuario);
+  if (cierreError) return cierreError;
 
   try {
     const doc = await query<{

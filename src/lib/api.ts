@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getUsuarioSesion, type UsuarioSesion } from "@/lib/auth/usuario";
+import { query } from "@/lib/db";
 import { TIPOS_LEGACY } from "@/lib/juego-documental";
 
 export { TIPOS_LEGACY };
@@ -116,4 +117,38 @@ export const ESTADOS_EXPEDIENTE = ["INCOMPLETO", "COMPLETO", "LISTO_PARA_VENTA"]
 export function parseId(valor: string): number | null {
   const n = Number(valor);
   return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/** El cierre conserva la consulta para todos, pero la modificación posterior
+ * queda reservada a N3. Las rutas de escritura llaman a este candado antes de
+ * crear, capturar, adjuntar, cancelar o cambiar estados. */
+export async function requerirExpedienteEditable(
+  expedienteId: number,
+  usuario: UsuarioSesion,
+): Promise<NextResponse | null> {
+  const cierre = await query<{ cerrado: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM traza.expediente_cierre WHERE expediente_id = $1
+     ) AS cerrado`,
+    [expedienteId],
+  );
+  if (cierre.rows[0]?.cerrado && usuario.nivel !== "N3") {
+    return NextResponse.json(
+      { error: "El expediente está cerrado. Solo un administrador N3 puede modificarlo." },
+      { status: 409 },
+    );
+  }
+  return null;
+}
+
+export async function requerirDocumentoEditable(
+  documentoId: number,
+  usuario: UsuarioSesion,
+): Promise<NextResponse | null> {
+  const documento = await query<{ expediente_id: number }>(
+    `SELECT expediente_id FROM traza.documento WHERE id = $1`,
+    [documentoId],
+  );
+  if ((documento.rowCount ?? 0) === 0) return respuesta404("Documento no encontrado");
+  return requerirExpedienteEditable(documento.rows[0].expediente_id, usuario);
 }

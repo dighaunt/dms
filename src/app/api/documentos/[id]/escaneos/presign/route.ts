@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   leerBody,
   parseId,
+  requerirDocumentoEditable,
   requerirUsuario,
   respuesta404,
   respuestaError,
@@ -27,16 +28,18 @@ const bodySchema = z.object({
   ),
 });
 
-// Genera un PUT prefirmado a R2 con key expedientes/{numero}/{folio}/v{n}.{ext}.
+// Genera un PUT prefirmado para un adjunto real dentro de la colección del folio.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { error: authError } = await requerirUsuario();
+  const { usuario, error: authError } = await requerirUsuario();
   if (authError) return authError;
 
   const id = parseId((await params).id);
   if (id === null) return respuesta404("Documento no encontrado");
+  const cierreError = await requerirDocumentoEditable(id, usuario);
+  if (cierreError) return cierreError;
 
   const { data, error: bodyError } = await leerBody(request, bodySchema);
   if (bodyError) return bodyError;
@@ -47,11 +50,11 @@ export async function POST(
       folio: string;
       numero_expediente: string;
       cancelado: boolean;
-      siguiente_version: number;
+      siguiente_archivo: number;
     }>(
       `SELECT vd.id, vd.folio, vd.numero_expediente, vd.cancelado,
-              COALESCE((SELECT max(a.version) FROM traza.archivo_escaneado a
-                         WHERE a.documento_id = vd.id), 0) + 1 AS siguiente_version
+              (SELECT count(*) FROM traza.documento_adjunto a
+                         WHERE a.documento_id = vd.id) + 1 AS siguiente_archivo
          FROM traza.v_documento vd
         WHERE vd.id = $1`,
       [id],
@@ -65,45 +68,27 @@ export async function POST(
       );
     }
 
-    // La misma evidencia no debe subir de nuevo ni crear un blob huérfano.
-    // Reintentar el mismo archivo para este folio es idempotente; usarlo para
-    // otro folio se rechaza con una explicación de trazabilidad.
+    // Reintentar el mismo archivo para este folio es idempotente y no crea
+    // otro blob. La unicidad es por documento, no global: un mismo soporte
+    // puede corresponder legítimamente a más de un acto documental.
     const existente = await query<{
-      documento_id: number;
-      version: number;
-      folio: string;
+      id: number;
     }>(
-      `SELECT a.documento_id, a.version, vd.folio
-         FROM traza.archivo_escaneado a
-         JOIN traza.v_documento vd ON vd.id = a.documento_id
-        WHERE a.sha256 = $1`,
-      [data.sha256],
+      `SELECT id FROM traza.documento_adjunto WHERE documento_id = $1 AND sha256 = $2`,
+      [id, data.sha256],
     );
     if ((existente.rowCount ?? 0) > 0) {
-      const archivo = existente.rows[0];
-      if (archivo.documento_id === d.id) {
-        return NextResponse.json({
-          yaRegistrado: true,
-          version: archivo.version,
-          rutaObjeto: null,
-        });
-      }
-      return NextResponse.json(
-        {
-          error: `Este archivo ya está resguardado en ${archivo.folio}. Cada folio debe conservar su propio documento firmado.`,
-        },
-        { status: 409 },
-      );
+      return NextResponse.json({ yaRegistrado: true, archivoId: existente.rows[0].id, rutaObjeto: null });
     }
 
     const extension = CONTENT_TYPES_PERMITIDOS[data.contentType];
-    const rutaObjeto = `expedientes/${d.numero_expediente}/${d.folio}/v${d.siguiente_version}.${extension}`;
+    const rutaObjeto = `expedientes/${d.numero_expediente}/${d.folio}/archivo-${d.siguiente_archivo}.${extension}`;
     const url = await presignPut(rutaObjeto, data.contentType, data.tamanoBytes);
 
     return NextResponse.json({
       url,
       rutaObjeto,
-      version: d.siguiente_version,
+      archivoId: null,
       venceEnSegundos: 600,
     });
   } catch (error) {

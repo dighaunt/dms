@@ -94,6 +94,7 @@ function valoresSistema(contexto: ContextoDocumento): Record<TokenSistema, strin
     fecha: fechaCorta(contexto.emitidoEn),
     fechaApertura: fechaCorta(contexto.abiertoEn),
     emisor: contexto.emisorNombre,
+    empresaCliquealo: RAZON_SOCIAL,
     compradorLote: RAZON_SOCIAL,
     f06Incompleto: contexto.estadoF06 === "INCOMPLETO" ? "SI" : "NO",
     f06Completo: contexto.estadoF06 === "COMPLETO" ? "SI" : "NO",
@@ -516,7 +517,6 @@ export async function obtenerCapturaDocumento(
       readOnly:
         field.source === "derived" ||
         (field.source === "system" && !vacio(value)) ||
-        stored.estado === "COMPLETA" ||
         contexto.escaneado,
       visible: !duplicateSystem && field.source !== "derived",
       baseRequired: field.required,
@@ -710,7 +710,8 @@ export async function guardarCapturaDocumento(
     if (field.source === "derived" && !vacio(values[field.name])) origins[field.name] = "derived";
   }
 
-  if (complete) {
+  const conservarCompleta = complete || stored.estado === "COMPLETA";
+  if (conservarCompleta) {
     values = prepararValoresFinales(template, values, origins);
     const problems = validarFormulario(template, values);
     if (problems.length > 0) return { ok: false, missing: problems };
@@ -742,7 +743,7 @@ export async function guardarCapturaDocumento(
          actualizado_en = now(),
          completado_por = EXCLUDED.completado_por,
          completado_en = EXCLUDED.completado_en`,
-      [id, complete ? "COMPLETA" : "BORRADOR", usuarioId, complete ? usuarioId : null],
+      [id, conservarCompleta ? "COMPLETA" : "BORRADOR", usuarioId, conservarCompleta ? usuarioId : null],
     );
     if (clearedFields.length > 0) {
       await client.query(

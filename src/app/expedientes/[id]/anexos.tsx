@@ -57,20 +57,23 @@ export function AnexosExpediente({
   const fichas = anexosDeOrigen(origen);
   const obligatorios = fichas.filter((f) => f.exigencia[origen] === "OBLIGATORIO");
   const cargadosObligatorios = obligatorios.filter((f) => porClave.has(f.clave)).length;
+  const pendientes = obligatorios.length - cargadosObligatorios;
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div id="anexos-expediente" className="flex scroll-mt-6 flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-medium">Anexos del expediente</h2>
         <span
           className={cn(
-            "text-xs tabular-nums",
-            cargadosObligatorios === obligatorios.length
+            "rounded-full border px-2.5 py-1 text-xs tabular-nums",
+            pendientes === 0
               ? "font-medium text-emerald-600"
-              : "text-muted-foreground",
+              : "animate-pulse border-amber-300 bg-amber-50 font-medium text-amber-800",
           )}
         >
-          {cargadosObligatorios} de {obligatorios.length} obligatorios
+          {pendientes === 0
+            ? `${cargadosObligatorios} de ${obligatorios.length} obligatorios`
+            : `Anexos pendientes · ${pendientes}`}
         </span>
       </div>
       <div className="rounded-lg border bg-background shadow-xs">

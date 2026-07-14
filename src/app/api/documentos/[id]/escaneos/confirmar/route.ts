@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   leerBody,
   parseId,
+  requerirDocumentoEditable,
   requerirUsuario,
   respuesta404,
   respuestaError,
@@ -11,12 +12,15 @@ import {
 import { withTransaction } from "@/lib/db";
 
 const bodySchema = z.object({
+  nombreArchivo: z.string().trim().min(1).max(255),
+  contentType: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]),
   sha256: z.string().regex(/^[0-9a-f]{64}$/, "sha256 hex en minúsculas"),
   rutaObjeto: z.string().trim().min(1).startsWith("expedientes/"),
   tamanoBytes: z.number().int().min(1),
 });
 
-// Registra el escaneo subido a R2. Reescaneo = nueva versión, nunca edición.
+// Registra un adjunto inmutable del documento. Un documento puede tener una
+// colección de PDFs y páginas/fotos sin convertirlas en falsos reescaneos.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -26,6 +30,8 @@ export async function POST(
 
   const id = parseId((await params).id);
   if (id === null) return respuesta404("Documento no encontrado");
+  const cierreError = await requerirDocumentoEditable(id, usuario);
+  if (cierreError) return cierreError;
 
   const { data, error: bodyError } = await leerBody(request, bodySchema);
   if (bodyError) return bodyError;
@@ -50,45 +56,28 @@ export async function POST(
       // Cubre reintentos y carreras entre pestañas aun si ambas llegaron a
       // pedir un URL antes de que una de ellas confirmara el mismo archivo.
       const existente = await client.query<{
-        documento_id: number;
-        version: number;
-        folio: string;
+        id: number;
       }>(
-        `SELECT a.documento_id, a.version, vd.folio
-           FROM traza.archivo_escaneado a
-           JOIN traza.v_documento vd ON vd.id = a.documento_id
-          WHERE a.sha256 = $1`,
-        [data.sha256],
+        `SELECT id FROM traza.documento_adjunto WHERE documento_id = $1 AND sha256 = $2`,
+        [id, data.sha256],
       );
       if ((existente.rowCount ?? 0) > 0) {
-        const archivo = existente.rows[0];
-        if (archivo.documento_id === doc.rows[0].id) {
-          return { version: archivo.version, yaRegistrado: true };
-        }
-        throw Object.assign(
-          new Error(
-            `Este archivo ya está resguardado en ${archivo.folio}. Cada folio debe conservar su propio documento firmado.`,
-          ),
-          { code: "P0001" },
-        );
+        return { archivoId: existente.rows[0].id, yaRegistrado: true };
       }
 
-      const insertado = await client.query<{ version: number }>(
-        `INSERT INTO traza.archivo_escaneado
-           (documento_id, version, sha256, ruta_objeto, tamano_bytes, subido_por)
-         SELECT $1,
-                COALESCE((SELECT max(version) FROM traza.archivo_escaneado
-                           WHERE documento_id = $1), 0) + 1,
-                $2, $3, $4, $5
-         RETURNING version`,
-        [id, data.sha256, data.rutaObjeto, data.tamanoBytes, usuario.id],
+      const insertado = await client.query<{ id: number }>(
+        `INSERT INTO traza.documento_adjunto
+           (documento_id, nombre_archivo, content_type, sha256, ruta_objeto, tamano_bytes, subido_por)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id`,
+        [id, data.nombreArchivo, data.contentType, data.sha256, data.rutaObjeto, data.tamanoBytes, usuario.id],
       );
-      return { version: insertado.rows[0].version, yaRegistrado: false };
+      return { archivoId: insertado.rows[0].id, yaRegistrado: false };
     });
 
     if (resultado === null) return respuesta404("Documento no encontrado");
     return NextResponse.json(
-      { documentoId: id, version: resultado.version, yaRegistrado: resultado.yaRegistrado },
+      { documentoId: id, archivoId: resultado.archivoId, yaRegistrado: resultado.yaRegistrado },
       { status: resultado.yaRegistrado ? 200 : 201 },
     );
   } catch (error) {

@@ -5,6 +5,7 @@ import {
   ESTADOS_EXPEDIENTE,
   leerBody,
   parseId,
+  requerirExpedienteEditable,
   requerirUsuario,
   respuesta404,
   respuestaError,
@@ -24,6 +25,8 @@ export async function POST(
 
   const id = parseId((await params).id);
   if (id === null) return respuesta404("Expediente no encontrado");
+  const cierreError = await requerirExpedienteEditable(id, usuario);
+  if (cierreError) return cierreError;
 
   const { data, error: bodyError } = await leerBody(request, bodySchema);
   if (bodyError) return bodyError;

@@ -66,6 +66,7 @@ export type DocumentoDetalle = {
   escaneado: boolean;
   version_maxima: number | null;
   pago_verificado: boolean;
+  pdf_completado: boolean;
   sustituido_por_folio: string | null;
   emitido_por_nombre: string;
   emitido_en: string;
@@ -85,6 +86,8 @@ type ExpedienteCabecera = {
   estado_unidad: string;
   estado_unidad_desde: string;
   estado_f06: string;
+  cerrado: boolean;
+  cerrado_en: string | null;
 };
 
 export type EventoHistorial = {
@@ -127,9 +130,9 @@ export type ExpedienteDetalle = ExpedienteCabecera & {
 };
 
 const CAMPOS_CABECERA =
-  "id,numero_expediente,vin,origen,marca,modelo,anio_modelo,color,abierto_en,abierto_por_nombre,estado_unidad,estado_unidad_desde,estado_f06";
+  "id,numero_expediente,vin,origen,marca,modelo,anio_modelo,color,abierto_en,abierto_por_nombre,estado_unidad,estado_unidad_desde,estado_f06,cerrado,cerrado_en";
 const CAMPOS_DOCUMENTO =
-  "id,folio,tipo_codigo,nombre_tipo,revision,cancelado,escaneado,version_maxima,pago_verificado,sustituido_por_folio,emitido_por_nombre,emitido_en";
+  "id,folio,tipo_codigo,nombre_tipo,revision,cancelado,escaneado,version_maxima,pago_verificado,pdf_completado,sustituido_por_folio,emitido_por_nombre,emitido_en";
 
 export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle | null> {
   const cabeceras = await leer<ExpedienteCabecera>(
@@ -139,7 +142,7 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
         `SELECT id, numero_expediente, vin, origen, marca, modelo, anio_modelo,
                 color, abierto_en::text AS abierto_en, abierto_por_nombre,
                 estado_unidad, estado_unidad_desde::text AS estado_unidad_desde,
-                estado_f06
+                estado_f06, cerrado, cerrado_en::text AS cerrado_en
            FROM public.expedientes
           WHERE id = $1`,
         [id],
@@ -166,7 +169,7 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
       async () => {
         const { rows } = await query<DocumentoDetalle>(
           `SELECT id, folio, tipo_codigo, nombre_tipo, revision, cancelado,
-                  escaneado, version_maxima, pago_verificado, sustituido_por_folio,
+                  escaneado, version_maxima, pago_verificado, pdf_completado, sustituido_por_folio,
                   emitido_por_nombre, emitido_en::text AS emitido_en
              FROM public.documentos
             WHERE expediente_id = $1

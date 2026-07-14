@@ -5,6 +5,7 @@ import {
   ESTADOS_UNIDAD,
   leerBody,
   requerirUsuario,
+  requerirExpedienteEditable,
   respuesta404,
   respuestaError,
 } from "@/lib/api";
@@ -29,8 +30,13 @@ export async function POST(
   if (bodyError) return bodyError;
 
   try {
-    const existe = await query(`SELECT 1 FROM traza.unidad WHERE vin = $1`, [vin]);
+    const existe = await query<{ expediente_id: number }>(
+      `SELECT e.id AS expediente_id FROM traza.unidad u JOIN traza.expediente e ON e.vin = u.vin WHERE u.vin = $1`,
+      [vin],
+    );
     if (existe.rowCount === 0) return respuesta404("Unidad no encontrada");
+    const cierreError = await requerirExpedienteEditable(existe.rows[0].expediente_id, usuario);
+    if (cierreError) return cierreError;
 
     await query(`SELECT traza.cambiar_estado_unidad($1, $2, $3)`, [
       vin,
