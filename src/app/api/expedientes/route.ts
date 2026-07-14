@@ -17,9 +17,9 @@ const bodySchema = z.object({
   marcaNombre: z.string().trim().min(1),
   modeloNombre: z.string().trim().min(1),
   anioModelo: z.number().int().min(1980).max(2100),
-  color: z.string().trim().min(1).optional(),
-  numMotor: z.string().trim().min(1).optional(),
-  kilometraje: z.number().int().min(0).optional(),
+  color: z.string().trim().min(1),
+  numMotor: z.string().trim().min(1),
+  kilometraje: z.number().int().min(0),
   origen: z.enum(["PROPIA", "CONSIGNADA"]),
 });
 

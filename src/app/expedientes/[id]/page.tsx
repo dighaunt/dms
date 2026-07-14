@@ -132,6 +132,7 @@ export default async function ExpedienteDetallePage({
             estadoF06={exp.estado_f06}
             transicionesValidas={exp.transiciones_validas}
             documentos={exp.documentos}
+            excepciones={exp.excepciones}
           />
         </div>
       </BlurFade>
@@ -148,6 +149,7 @@ export default async function ExpedienteDetallePage({
         <HistorialTimeline
           historialUnidad={exp.historial_unidad}
           historialF06={exp.historial_f06}
+          excepciones={exp.excepciones}
         />
       </BlurFade>
     </div>

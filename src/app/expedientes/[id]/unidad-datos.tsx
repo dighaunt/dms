@@ -20,9 +20,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-// Completa los datos de la unidad después de abierto el expediente (color,
-// n° de motor, kilometraje al ingreso). Estos campos alimentan el prellenado
-// de formatos y contratos: entre más completos, menos se llena a mano.
+// Corrige los datos de la unidad (color, n° de motor, kilometraje al
+// ingreso) capturados al abrir el expediente. Alimentan el prellenado de
+// formatos y contratos.
 export function UnidadDatos({
   vin,
   color,
@@ -40,8 +40,6 @@ export function UnidadDatos({
   const [motorV, setMotorV] = useState(numMotor ?? "");
   const [kmV, setKmV] = useState(kilometraje == null ? "" : String(kilometraje));
   const [guardando, setGuardando] = useState(false);
-
-  const incompleto = !color || !numMotor || kilometraje == null;
 
   async function guardar() {
     if (kmV !== "" && Number(kmV) > 9_999_999) {
@@ -69,7 +67,7 @@ export function UnidadDatos({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="h-6 gap-1.5 px-2 text-[11px]">
           <PencilLineIcon className="size-3" />
-          {incompleto ? "Completar datos de la unidad" : "Editar datos de la unidad"}
+          Editar datos de la unidad
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">

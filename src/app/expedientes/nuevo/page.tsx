@@ -48,17 +48,14 @@ const esquema = z.object({
   marcaNombre: z.string().trim().min(1, "Requerido"),
   modeloNombre: z.string().trim().min(1, "Requerido"),
   anioModelo: z.coerce.number<string | number>().int().min(1980, "Desde 1980").max(2100),
-  color: z.string().trim().optional(),
-  numMotor: z.string().trim().optional(),
+  color: z.string().trim().min(1, "Requerido"),
+  numMotor: z.string().trim().min(1, "Requerido"),
   kilometraje: z
     .string()
     .trim()
+    .min(1, "Requerido")
     .regex(/^\d*$/, "Solo números")
-    .refine(
-      (valor) => valor === "" || Number(valor) <= 9_999_999,
-      "Máximo 9,999,999 km",
-    )
-    .optional(),
+    .refine((valor) => Number(valor) <= 9_999_999, "Máximo 9,999,999 km"),
   origen: z.enum(["PROPIA", "CONSIGNADA"], { error: "Elige el origen" }),
 });
 
@@ -121,9 +118,7 @@ export default function NuevoExpedientePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...valores,
-          color: valores.color || undefined,
-          numMotor: valores.numMotor || undefined,
-          kilometraje: valores.kilometraje ? Number(valores.kilometraje) : undefined,
+          kilometraje: Number(valores.kilometraje),
         }),
       });
       const cuerpo = await res.json();
@@ -338,7 +333,7 @@ export default function NuevoExpedientePage() {
                           name="color"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Color (opcional)</FormLabel>
+                              <FormLabel>Color</FormLabel>
                               <FormControl>
                                 <Input {...field} placeholder="Gris plata" />
                               </FormControl>
@@ -351,7 +346,7 @@ export default function NuevoExpedientePage() {
                           name="numMotor"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>N° de motor (opcional)</FormLabel>
+                              <FormLabel>N° de motor</FormLabel>
                               <FormControl>
                                 <Input {...field} placeholder="HR16-123456" />
                               </FormControl>
@@ -364,7 +359,7 @@ export default function NuevoExpedientePage() {
                           name="kilometraje"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Kilometraje al ingreso (opcional)</FormLabel>
+                              <FormLabel>Kilometraje al ingreso</FormLabel>
                               <FormControl>
                                 <Input
                                   ref={field.ref}

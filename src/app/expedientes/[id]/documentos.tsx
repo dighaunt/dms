@@ -19,6 +19,7 @@ import {
   LandmarkIcon,
   ListChecksIcon,
   ScanLineIcon,
+  ShieldAlertIcon,
   ShoppingCartIcon,
   WalletCardsIcon,
 } from "lucide-react";
@@ -33,9 +34,14 @@ import {
   type ObjetivoCandado,
 } from "@/lib/candados-ui";
 import { postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
-import type { DocumentoDetalle } from "@/lib/db/consultas";
+import type { DocumentoDetalle, ExcepcionDocumental } from "@/lib/db/consultas";
 import { ETIQUETA_ESTADO_F06, ETIQUETA_ESTADO_UNIDAD } from "@/lib/estados";
-import { juegoEsperado, NOMBRE_TIPO, type RequisitoDocumento } from "@/lib/juego-documental";
+import {
+  juegoEsperado,
+  NOMBRE_TIPO,
+  TIPOS_LEGACY,
+  type RequisitoDocumento,
+} from "@/lib/juego-documental";
 import { cn } from "@/lib/utils";
 import { BotonCopiar } from "@/components/boton-copiar";
 import { Button } from "@/components/ui/button";
@@ -91,9 +97,10 @@ const ETAPA_DE_ESTADO: Record<string, string> = {
   BAJA: "VENTA",
 };
 
-type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "CANCELADO";
+type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "CANCELADO" | "EXCEPCION_LEGACY";
 
-function estadoDe(docs: DocumentoDetalle[]): EstadoRequisito {
+function estadoDe(docs: DocumentoDetalle[], tieneExcepcion = false): EstadoRequisito {
+  if (tieneExcepcion) return "EXCEPCION_LEGACY";
   const vigentes = docs.filter((d) => !d.cancelado);
   if (vigentes.some((d) => d.escaneado)) return "ESCANEADO";
   if (vigentes.length > 0) return "EMITIDO";
@@ -106,6 +113,7 @@ const ICONO_ESTADO: Record<EstadoRequisito, { icono: React.ComponentType<{ class
   EMITIDO: { icono: FileTextIcon, clase: "text-foreground" },
   ESCANEADO: { icono: FileCheck2Icon, clase: "text-emerald-600" },
   CANCELADO: { icono: FileX2Icon, clase: "text-red-500" },
+  EXCEPCION_LEGACY: { icono: ShieldAlertIcon, clase: "text-amber-600" },
 };
 
 const EXPLICACION_ESTADO: Record<EstadoRequisito, string> = {
@@ -113,6 +121,8 @@ const EXPLICACION_ESTADO: Record<EstadoRequisito, string> = {
   EMITIDO: "El folio ya existe y el PDF está disponible; falta cargar el documento firmado o escaneado.",
   ESCANEADO: "Existe al menos un escaneo resguardado. Cada nueva carga crea otra versión y conserva las anteriores.",
   CANCELADO: "El folio se conserva para auditoría, pero ya no admite operaciones. Puede emitirse un sustituto.",
+  EXCEPCION_LEGACY:
+    "Se declaró, en modo riesgo y con autorización de un administrador (N3), que este papel nunca existió por ser una unidad legacy previa al sistema. Queda visible en el historial para siempre.",
 };
 
 /**
@@ -130,6 +140,7 @@ export function LineaTiempoExpediente({
   estadoF06,
   transicionesValidas,
   documentos,
+  excepciones,
 }: {
   expedienteId: number;
   numeroExpediente: string;
@@ -139,16 +150,19 @@ export function LineaTiempoExpediente({
   estadoF06: string;
   transicionesValidas: string[];
   documentos: DocumentoDetalle[];
+  excepciones: ExcepcionDocumental[];
 }) {
   const router = useRouter();
   const etapas = juegoEsperado(origen);
   const etapaActual = ETAPA_DE_ESTADO[estadoUnidad] ?? "ADQUISICION";
   const indiceActual = etapas.findIndex((e) => e.codigo === etapaActual);
+  const excepcionPorTipo = new Map(excepciones.map((e) => [e.tipo_codigo, e]));
 
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set([etapaActual]));
   const [subirDoc, setSubirDoc] = useState<DocumentoDetalle | null>(null);
   const [cancelarDoc, setCancelarDoc] = useState<DocumentoDetalle | null>(null);
   const [pagoDoc, setPagoDoc] = useState<DocumentoDetalle | null>(null);
+  const [declararTipo, setDeclararTipo] = useState<string | null>(null);
   const [folioNuevo, setFolioNuevo] = useState<FolioEmitido | null>(null);
   const [documentoEnCaptura, setDocumentoEnCaptura] = useState<number | null>(null);
   const [emitiendo, setEmitiendo] = useState<string | null>(null);
@@ -274,8 +288,8 @@ export function LineaTiempoExpediente({
 
         const medibles = etapa.requisitos.filter((r) => r.exigencia !== "segun_aplique");
         const completos = medibles.filter((r) => {
-          const e = estadoDe(porTipo.get(r.tipo) ?? []);
-          return e === "EMITIDO" || e === "ESCANEADO";
+          const e = estadoDe(porTipo.get(r.tipo) ?? [], excepcionPorTipo.has(r.tipo));
+          return e === "EMITIDO" || e === "ESCANEADO" || e === "EXCEPCION_LEGACY";
         }).length;
         const etapaCompleta = medibles.length > 0 && completos === medibles.length;
         const transiciones = transicionesPorEtapa.get(etapa.codigo) ?? [];
@@ -316,7 +330,10 @@ export function LineaTiempoExpediente({
                 <AnimatePresence initial={false}>
                   {!abierta &&
                     etapa.requisitos.map((requisito, indice) => {
-                      const estadoHijo = estadoDe(porTipo.get(requisito.tipo) ?? []);
+                      const estadoHijo = estadoDe(
+                        porTipo.get(requisito.tipo) ?? [],
+                        excepcionPorTipo.has(requisito.tipo),
+                      );
                       const desplazamiento = (indice + 1) * 6;
 
                       return (
@@ -344,6 +361,8 @@ export function LineaTiempoExpediente({
                             estadoHijo === "ESCANEADO" &&
                               "border-emerald-200 bg-emerald-50/45",
                             estadoHijo === "EMITIDO" && "border-primary/20 bg-primary/[0.025]",
+                            estadoHijo === "EXCEPCION_LEGACY" &&
+                              "border-amber-200 bg-amber-50/45",
                           )}
                         />
                       );
@@ -434,6 +453,7 @@ export function LineaTiempoExpediente({
                             key={req.tipo}
                             requisito={req}
                             docs={porTipo.get(req.tipo) ?? []}
+                            excepcion={excepcionPorTipo.get(req.tipo) ?? null}
                             orden={indice}
                             emitiendo={emitiendo === req.tipo}
                             onEmitir={() => emitir(req.tipo)}
@@ -441,6 +461,7 @@ export function LineaTiempoExpediente({
                             onCancelar={setCancelarDoc}
                             onPago={setPagoDoc}
                             onCapturar={setDocumentoEnCaptura}
+                            onDeclararExcepcion={setDeclararTipo}
                             candado={
                               candado?.objetivo.tipo === "requisito" &&
                               candado.objetivo.codigo === req.tipo
@@ -567,6 +588,18 @@ export function LineaTiempoExpediente({
           onClose={() => setPagoDoc(null)}
           onDone={() => {
             setPagoDoc(null);
+            router.refresh();
+          }}
+        />
+      )}
+      {declararTipo && (
+        <DialogDeclararExcepcion
+          expedienteId={expedienteId}
+          tipoCodigo={declararTipo}
+          nombreTipo={NOMBRE_TIPO[declararTipo] ?? declararTipo}
+          onClose={() => setDeclararTipo(null)}
+          onDone={() => {
+            setDeclararTipo(null);
             router.refresh();
           }}
         />
@@ -731,6 +764,25 @@ function CalloutCandado({
   );
 }
 
+// Aviso permanente (no expira, no se cierra): deja constancia visible de qué
+// se declaró inexistente, quién lo pidió y qué N3 lo autorizó en modo riesgo.
+function CalloutExcepcionLegacy({ excepcion }: { excepcion: ExcepcionDocumental }) {
+  return (
+    <div className="mt-2 flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+      <ShieldAlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-600" />
+      <div className="min-w-0 flex-1 text-xs leading-relaxed">
+        <p className="font-semibold text-amber-800">Excepción legacy declarada</p>
+        <p className="mt-0.5 text-amber-800">{excepcion.motivo}</p>
+        <p className="mt-1 text-amber-700">
+          Solicitada por {excepcion.solicitado_por_nombre} el{" "}
+          {format(new Date(excepcion.solicitado_en), "d MMM yyyy", { locale: es })} · autorizada en
+          modo riesgo por {excepcion.autorizado_por_nombre}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const ESTADOS_F06 = ["INCOMPLETO", "COMPLETO", "LISTO_PARA_VENTA"] as const;
 
 function SelectorF06({
@@ -825,6 +877,7 @@ function SelectorF06({
 function FilaRequisito({
   requisito,
   docs,
+  excepcion,
   orden,
   emitiendo,
   onEmitir,
@@ -832,11 +885,13 @@ function FilaRequisito({
   onCancelar,
   onPago,
   onCapturar,
+  onDeclararExcepcion,
   candado,
   onCerrarCandado,
 }: {
   requisito: RequisitoDocumento;
   docs: DocumentoDetalle[];
+  excepcion: ExcepcionDocumental | null;
   orden: number;
   emitiendo: boolean;
   onEmitir: () => void;
@@ -844,11 +899,13 @@ function FilaRequisito({
   onCancelar: (d: DocumentoDetalle) => void;
   onPago: (d: DocumentoDetalle) => void;
   onCapturar: (documentoId: number) => void;
+  onDeclararExcepcion: (tipoCodigo: string) => void;
   candado: CandadoActivo | null;
   onCerrarCandado: () => void;
 }) {
-  const estado = estadoDe(docs);
+  const estado = estadoDe(docs, excepcion !== null);
   const { icono: Icono, clase } = ICONO_ESTADO[estado];
+  const esExcepcionable = (TIPOS_LEGACY as readonly string[]).includes(requisito.tipo);
   const [abierta, setAbierta] = useState(true);
   const expandida = abierta || candado !== null;
 
@@ -970,6 +1027,7 @@ function FilaRequisito({
                 estado === "EMITIDO" && "border-primary/20 text-primary",
                 estado === "PENDIENTE" && "text-muted-foreground",
                 estado === "CANCELADO" && "border-red-200 text-red-600",
+                estado === "EXCEPCION_LEGACY" && "border-amber-200 bg-amber-50 text-amber-700",
               )}
             />
             {(estado === "PENDIENTE" || estado === "CANCELADO") && (
@@ -1014,6 +1072,8 @@ function FilaRequisito({
                 {candado && (
                   <CalloutCandado candado={candado} onCerrar={onCerrarCandado} />
                 )}
+
+                {excepcion && <CalloutExcepcionLegacy excepcion={excepcion} />}
 
                 {docs.length > 0 ? (
                   <ul className="ml-4 mt-3 space-y-2 border-l border-dashed pl-4">
@@ -1066,7 +1126,7 @@ function FilaRequisito({
                             {!doc.cancelado && (
                               <AbrirWizardButton onOpen={() => onCapturar(doc.id)} />
                             )}
-                            {!doc.cancelado && (
+                            {!doc.cancelado && !excepcion && (
                               <AccionExplicada
                                 etiqueta="Subir escaneo"
                                 titulo={`Subir escaneo de ${doc.folio}`}
@@ -1076,6 +1136,18 @@ function FilaRequisito({
                                 className="h-7 px-2 text-[11px]"
                                 icono={<ScanLineIcon className="size-3" />}
                                 onConfirmar={() => onSubir(doc)}
+                              />
+                            )}
+                            {esExcepcionable && !doc.cancelado && !doc.escaneado && !excepcion && (
+                              <AccionExplicada
+                                etiqueta="Declarar inexistente"
+                                titulo={`Declarar ${requisito.tipo} inexistente por legacy`}
+                                descripcion="Para unidades adquiridas antes del sistema, sin el papel físico de este documento. Requiere un token de modo riesgo vigente, autorizado por un administrador (N3) distinto de quien declara — pídelo primero si aún no existe."
+                                confirmar="Continuar"
+                                variant="ghost"
+                                className="h-7 px-2 text-[11px] text-amber-700 hover:text-amber-800"
+                                icono={<ShieldAlertIcon className="size-3" />}
+                                onConfirmar={() => onDeclararExcepcion(requisito.tipo)}
                               />
                             )}
                             {doc.version_maxima != null && (
@@ -1370,6 +1442,89 @@ function DialogCancelar({
             disabled={motivo.trim().length === 0 || enviando}
           >
             {enviando ? "Cancelando…" : "Cancelar documento"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Paso 2 del procedimiento de excepción legacy. El candado real vive en
+// traza.declarar_excepcion_legacy: sin un token de modo riesgo vigente
+// emitido por un N3 distinto de quien declara, la API responde 409 y el
+// mensaje literal explica qué falta (postJson ya lo muestra en un toast).
+function DialogDeclararExcepcion({
+  expedienteId,
+  tipoCodigo,
+  nombreTipo,
+  onClose,
+  onDone,
+}: {
+  expedienteId: number;
+  tipoCodigo: string;
+  nombreTipo: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const motivoValido = motivo.trim().length >= 40;
+
+  async function declarar() {
+    setEnviando(true);
+    try {
+      const res = await postJson<{ excepcionId: number }>(
+        `/api/expedientes/${expedienteId}/excepciones`,
+        { tipoCodigo, motivo },
+      );
+      if (!res) return;
+      toast.success(`${nombreTipo} (${tipoCodigo}) declarado inexistente por excepción legacy`);
+      onDone();
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Declarar inexistente · {tipoCodigo}</DialogTitle>
+          <DialogDescription>
+            Para unidades legacy (adquiridas antes de existir el sistema) sin el
+            papel físico de {nombreTipo}. Necesitas un token de modo riesgo
+            vigente para este expediente y este tipo, autorizado por un
+            administrador (N3) que no seas tú mismo — pídeselo antes de
+            continuar si aún no existe.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label htmlFor="motivo-excepcion">Motivo</Label>
+          <Textarea
+            id="motivo-excepcion"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Unidad adquirida en 2017, antes de existir el sistema; no hay checklist físico de inspección que escanear…"
+          />
+          <p
+            className={cn(
+              "text-xs",
+              motivoValido ? "text-muted-foreground" : "text-amber-700",
+            )}
+          >
+            {motivo.trim().length}/40 caracteres mínimo
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={enviando}>
+            Volver
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={declarar}
+            disabled={!motivoValido || enviando}
+          >
+            {enviando ? "Declarando…" : "Declarar inexistente"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,8 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CircleDashedIcon,
   EyeIcon,
   FileCheck2Icon,
@@ -48,6 +52,7 @@ export function AnexosExpediente({
   anexos: AnexoCargado[];
 }) {
   const [subiendo, setSubiendo] = useState<FichaAnexo | null>(null);
+  const [viendo, setViendo] = useState<FichaAnexo | null>(null);
   const porClave = new Map(anexos.map((a) => [a.clave, a]));
   const fichas = anexosDeOrigen(origen);
   const obligatorios = fichas.filter((f) => f.exigencia[origen] === "OBLIGATORIO");
@@ -117,16 +122,10 @@ export function AnexosExpediente({
                     variant="ghost"
                     size="sm"
                     className="h-7 px-2 text-xs"
-                    onClick={() =>
-                      window.open(
-                        `/api/expedientes/${expedienteId}/anexos/${ficha.clave}/${cargado.version_maxima}`,
-                        "_blank",
-                      )
-                    }
+                    onClick={() => setViendo(ficha)}
                   >
                     <EyeIcon className="size-3.5" />
-                    Consultar
-                    {cargado.version_maxima > 1 ? ` v${cargado.version_maxima}` : ""}
+                    Ver{cargado.version_maxima > 1 ? ` (${cargado.version_maxima})` : ""}
                   </Button>
                 )}
                 <Button
@@ -136,7 +135,7 @@ export function AnexosExpediente({
                   onClick={() => setSubiendo(ficha)}
                 >
                   <ScanLineIcon className="size-3.5" />
-                  {cargado ? "Reemplazar" : "Subir escaneo"}
+                  {cargado ? "Agregar documento" : "Subir escaneo"}
                 </Button>
               </li>
             );
@@ -151,7 +150,150 @@ export function AnexosExpediente({
           onClose={() => setSubiendo(null)}
         />
       )}
+      {viendo && (
+        <DialogGaleriaAnexo
+          expedienteId={expedienteId}
+          ficha={viendo}
+          onClose={() => setViendo(null)}
+        />
+      )}
     </div>
+  );
+}
+
+type VersionAnexo = {
+  version: number;
+  contentType: string;
+  tamanoBytes: number;
+  subidoEn: string;
+  subidoPorNombre: string;
+};
+
+// Wizard/galería: cada clave es una COLECCIÓN de archivos (facturas
+// consecutivas, cadena de endosos, varios comprobantes de pago…), no un
+// slot con reemplazo — navega "Documento X de N" sobre todas las versiones.
+function DialogGaleriaAnexo({
+  expedienteId,
+  ficha,
+  onClose,
+}: {
+  expedienteId: number;
+  ficha: FichaAnexo;
+  onClose: () => void;
+}) {
+  const [versiones, setVersiones] = useState<VersionAnexo[] | null>(null);
+  const [indice, setIndice] = useState(0);
+
+  useEffect(() => {
+    let cancelado = false;
+    fetch(`/api/expedientes/${expedienteId}/anexos/${ficha.clave}`)
+      .then((res) => res.json())
+      .then((data: VersionAnexo[]) => {
+        if (!cancelado) setVersiones(data);
+      })
+      .catch(() => {
+        if (!cancelado) setVersiones([]);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [expedienteId, ficha.clave]);
+
+  const actual = versiones?.[indice];
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{ficha.nombre}</DialogTitle>
+          <DialogDescription>{ficha.descripcion}</DialogDescription>
+        </DialogHeader>
+
+        {versiones === null ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">Cargando…</p>
+        ) : versiones.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Sin archivos cargados todavía.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {versiones.length > 1 && (
+              <div className="flex items-center justify-center gap-1.5">
+                {versiones.map((v, i) => (
+                  <button
+                    key={v.version}
+                    type="button"
+                    onClick={() => setIndice(i)}
+                    aria-label={`Documento ${i + 1} de ${versiones.length}`}
+                    className={cn(
+                      "size-2 rounded-full transition-colors",
+                      i === indice ? "bg-primary" : "bg-muted hover:bg-muted-foreground/30",
+                    )}
+                  />
+                ))}
+              </div>
+            )}
+            {actual && (
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <p className="text-sm font-medium">
+                  Documento {indice + 1} de {versiones.length}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    v{actual.version}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {actual.subidoPorNombre} ·{" "}
+                  {format(new Date(actual.subidoEn), "d MMM yyyy", { locale: es })} ·{" "}
+                  {(actual.tamanoBytes / 1024 / 1024).toFixed(2)} MB
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() =>
+                    window.open(
+                      `/api/expedientes/${expedienteId}/anexos/${ficha.clave}/${actual.version}`,
+                      "_blank",
+                    )
+                  }
+                >
+                  <EyeIcon className="size-3.5" />
+                  Abrir
+                </Button>
+              </div>
+            )}
+            {versiones.length > 1 && (
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={indice === 0}
+                  onClick={() => setIndice((i) => i - 1)}
+                >
+                  <ChevronLeftIcon className="size-3.5" />
+                  Anterior
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={indice === versiones.length - 1}
+                  onClick={() => setIndice((i) => i + 1)}
+                >
+                  Siguiente
+                  <ChevronRightIcon className="size-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -224,8 +366,8 @@ function DialogSubirAnexo({
         <DialogHeader>
           <DialogTitle>Subir anexo · {ficha.nombre}</DialogTitle>
           <DialogDescription>
-            {ficha.descripcion} Re-subir crea una versión nueva; nunca se edita
-            la anterior.
+            {ficha.descripcion} Cada archivo se agrega a la colección; los
+            anteriores se conservan y no se reemplazan.
             {ficha.sensible &&
               " Documento delicado: la consulta lleva marca de agua, el archivo se resguarda íntegro."}
           </DialogDescription>

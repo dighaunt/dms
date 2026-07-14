@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpenIcon, CirclePlusIcon, FolderOpenIcon, UsersIcon } from "lucide-react";
+import {
+  BookOpenIcon,
+  CirclePlusIcon,
+  FolderOpenIcon,
+  ShieldAlertIcon,
+  UsersIcon,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -21,6 +27,7 @@ const OPERACION: Item[] = [
 
 const ADMINISTRACION: Item[] = [
   { href: "/usuarios", etiqueta: "Usuarios", icono: UsersIcon },
+  { href: "/modo-riesgo", etiqueta: "Modo riesgo", icono: ShieldAlertIcon },
 ];
 
 function Seccion({ titulo, items }: { titulo: string; items: Item[] }) {

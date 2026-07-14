@@ -165,6 +165,19 @@
   background: oklch(0.95 0.05 160);
   border-color: oklch(0.7 0.15 160);
 }
+.traza-timeline .vis-item.traza-punto-excepcion .vis-item-content {
+  background: oklch(0.93 0.09 75);
+  border: 1px solid oklch(0.65 0.14 75);
+  border-radius: 999px;
+  color: oklch(0.35 0.1 75);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+}
+.traza-timeline .vis-item.traza-punto-excepcion .vis-dot {
+  border-color: oklch(0.65 0.14 75);
+  background: oklch(0.93 0.09 75);
+}
 .traza-timeline .vis-labelset .vis-label,
 .traza-timeline .vis-time-axis .vis-text {
   color: var(--muted-foreground);

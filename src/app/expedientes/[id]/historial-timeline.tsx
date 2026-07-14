@@ -5,7 +5,7 @@ import { DataSet } from "vis-data";
 import { Timeline, type TimelineOptions } from "vis-timeline/standalone";
 import "vis-timeline/styles/vis-timeline-graph2d.css";
 
-import type { EventoHistorial } from "@/lib/db/consultas";
+import type { EventoHistorial, ExcepcionDocumental } from "@/lib/db/consultas";
 import { ETIQUETA_ESTADO_F06, ETIQUETA_ESTADO_UNIDAD } from "@/lib/estados";
 
 const ESTADOS_FINALES = new Set(["ENTREGADA", "DEVUELTA_CONSIGNANTE", "BAJA"]);
@@ -39,12 +39,32 @@ function aRangos(
   });
 }
 
+// Cada excepción es un hecho puntual (no un rango entre dos estados): se
+// dibuja como PUNTO sobre su propia pista, con estilo distinto para que
+// nunca se confunda con una transición real del ciclo de vida.
+function aPuntos(excepciones: ExcepcionDocumental[]) {
+  return excepciones.map((e, i) => {
+    const cuando = new Date(e.solicitado_en);
+    return {
+      id: `excepcion-${i}`,
+      group: "excepciones",
+      content: `Excepción legacy · ${e.tipo_codigo}`,
+      title: `${e.motivo} — solicitada por ${e.solicitado_por_nombre}, autorizada en modo riesgo por ${e.autorizado_por_nombre} · ${cuando.toLocaleString("es-MX")}`,
+      start: cuando,
+      type: "point" as const,
+      className: "traza-punto-excepcion",
+    };
+  });
+}
+
 export function HistorialTimeline({
   historialUnidad,
   historialF06,
+  excepciones,
 }: {
   historialUnidad: EventoHistorial[];
   historialF06: EventoHistorial[];
+  excepciones: ExcepcionDocumental[];
 }) {
   const contenedorRef = useRef<HTMLDivElement>(null);
 
@@ -55,10 +75,12 @@ export function HistorialTimeline({
     const items = new DataSet([
       ...aRangos(historialUnidad, "unidad", ETIQUETA_ESTADO_UNIDAD),
       ...aRangos(historialF06, "f06", ETIQUETA_ESTADO_F06),
+      ...aPuntos(excepciones),
     ]);
     const grupos = new DataSet([
       { id: "unidad", content: "Unidad" },
       { id: "f06", content: "F-06" },
+      ...(excepciones.length > 0 ? [{ id: "excepciones", content: "Excepciones" }] : []),
     ]);
 
     const opciones: TimelineOptions = {
@@ -74,7 +96,7 @@ export function HistorialTimeline({
     const timeline = new Timeline(contenedor, items, grupos, opciones);
     timeline.fit();
     return () => timeline.destroy();
-  }, [historialUnidad, historialF06]);
+  }, [historialUnidad, historialF06, excepciones]);
 
   if (historialUnidad.length === 0) return null;
 

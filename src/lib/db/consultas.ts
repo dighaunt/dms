@@ -99,12 +99,22 @@ export type AnexoResumen = {
   subido_por_nombre: string;
 };
 
+export type ExcepcionDocumental = {
+  tipo_codigo: string;
+  motivo: string;
+  solicitado_en: string;
+  solicitado_por_nombre: string;
+  autorizado_en: string;
+  autorizado_por_nombre: string;
+};
+
 export type ExpedienteDetalle = ExpedienteCabecera & {
   transiciones_validas: string[];
   documentos: DocumentoDetalle[];
   historial_unidad: EventoHistorial[];
   historial_f06: EventoHistorial[];
   anexos: AnexoResumen[];
+  excepciones: ExcepcionDocumental[];
 };
 
 const CAMPOS_CABECERA =
@@ -131,7 +141,7 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
   const exp = cabeceras[0];
   if (!exp) return null;
 
-  const [transiciones, documentos, historialUnidad, historialF06, anexos] = await Promise.all([
+  const [transiciones, documentos, historialUnidad, historialF06, anexos, excepciones] = await Promise.all([
     leer<{ hacia: string }>(
       `transiciones?select=hacia&vin=eq.${exp.vin}&order=orden.asc`,
       async () => {
@@ -195,6 +205,20 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
         return rows;
       },
     ),
+    leer<ExcepcionDocumental>(
+      `excepciones_documentales?select=tipo_codigo,motivo,solicitado_en,solicitado_por_nombre,autorizado_en,autorizado_por_nombre&expediente_id=eq.${id}`,
+      async () => {
+        const { rows } = await query<ExcepcionDocumental>(
+          `SELECT tipo_codigo, motivo, solicitado_en::text AS solicitado_en,
+                  solicitado_por_nombre, autorizado_en::text AS autorizado_en,
+                  autorizado_por_nombre
+             FROM public.excepciones_documentales
+            WHERE expediente_id = $1`,
+          [id],
+        );
+        return rows;
+      },
+    ),
   ]);
 
   return {
@@ -204,5 +228,6 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
     historial_unidad: historialUnidad,
     historial_f06: historialF06,
     anexos,
+    excepciones,
   };
 }

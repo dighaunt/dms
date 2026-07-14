@@ -1,6 +1,11 @@
 // Juego documental esperado por etapa (M-01), según el origen de la unidad.
 // Es la guía visual del expediente: el candado real vive en las funciones de BD.
 
+/** Únicos tipos "excepcionables" por modo riesgo: paquete día 0 de un
+ * expediente legacy. Nunca F-06 en adelante ni contratos/actas de venta.
+ * Espejo del CHECK en migrations/012_excepcion_legacy.sql. */
+export const TIPOS_LEGACY = ["C-03", "C-04", "F-01", "F-02", "F-03", "F-04", "F-05"] as const;
+
 export const NOMBRE_TIPO: Record<string, string> = {
   "F-01": "Ingreso / compra directa de unidad",
   "F-02": "Acuerdo de consignación",

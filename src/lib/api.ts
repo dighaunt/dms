@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getUsuarioSesion, type UsuarioSesion } from "@/lib/auth/usuario";
+import { TIPOS_LEGACY } from "@/lib/juego-documental";
+
+export { TIPOS_LEGACY };
 
 /**
  * Errores de negocio (RAISE EXCEPTION en las funciones de BD) → 409 con el
@@ -78,18 +81,15 @@ export async function requerirUsuario(): Promise<
 }
 
 /** Exige sesión de administrador global (nivel N3). */
-export async function requerirN3(): Promise<
-  { usuario: UsuarioSesion; error: null } | { usuario: null; error: NextResponse }
-> {
+export async function requerirN3(
+  mensaje = "Solo un administrador global (N3) puede administrar usuarios",
+): Promise<{ usuario: UsuarioSesion; error: null } | { usuario: null; error: NextResponse }> {
   const { usuario, error } = await requerirUsuario();
   if (error) return { usuario: null, error };
   if (usuario.nivel !== "N3") {
     return {
       usuario: null,
-      error: NextResponse.json(
-        { error: "Solo un administrador global (N3) puede administrar usuarios" },
-        { status: 403 },
-      ),
+      error: NextResponse.json({ error: mensaje }, { status: 403 }),
     };
   }
   return { usuario, error: null };
