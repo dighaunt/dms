@@ -143,6 +143,7 @@ export default async function ExpedienteDetallePage({
             transicionesValidas={exp.transiciones_validas}
             documentos={exp.documentos}
             excepciones={exp.excepciones}
+            anulacionesExcepcionales={exp.anulacionesExcepcionales}
             solicitudesPendientes={exp.solicitudesPendientes}
           />
         </div>

@@ -44,6 +44,7 @@ import { postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
 import type {
   DocumentoDetalle,
   ExcepcionDocumental,
+  AnulacionDocumentalExcepcional,
   SolicitudRiesgoPendiente,
 } from "@/lib/db/consultas";
 import { ETIQUETA_ESTADO_F06, ETIQUETA_ESTADO_UNIDAD } from "@/lib/estados";
@@ -112,6 +113,10 @@ const ETAPA_DE_ESTADO: Record<string, string> = {
 };
 
 type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "ANULADO";
+
+type AnulacionDocumental =
+  | (ExcepcionDocumental & { clase: "LEGACY" })
+  | (AnulacionDocumentalExcepcional & { clase: "EXCEPCIONAL" });
 
 function estadoDe(docs: DocumentoDetalle[], tieneExcepcion = false): EstadoRequisito {
   if (tieneExcepcion) return "ANULADO";
@@ -233,7 +238,7 @@ function VistaCarpeta({
 }: {
   etapas: ReturnType<typeof juegoEsperado>;
   porTipo: Map<string, DocumentoDetalle[]>;
-  excepcionPorTipo: Map<string, ExcepcionDocumental>;
+  excepcionPorTipo: Map<string, AnulacionDocumental>;
   solicitudPendientePorTipo: Map<string, SolicitudRiesgoPendiente>;
   indiceActual: number;
 }) {
@@ -357,7 +362,7 @@ function CarpetaMadre({
   madre: RequisitoDocumento;
   hijos: { requisito: RequisitoDocumento; etiqueta: string }[];
   porTipo: Map<string, DocumentoDetalle[]>;
-  excepcionPorTipo: Map<string, ExcepcionDocumental>;
+  excepcionPorTipo: Map<string, AnulacionDocumental>;
   solicitudPendientePorTipo: Map<string, SolicitudRiesgoPendiente>;
   etapaAlcanzada: boolean;
   abierto: string | null;
@@ -413,7 +418,7 @@ function PestanaCarpeta({
 }: {
   requisito: RequisitoDocumento;
   docs: DocumentoDetalle[];
-  excepcion: ExcepcionDocumental | null;
+  excepcion: AnulacionDocumental | null;
   solicitudPendiente: SolicitudRiesgoPendiente | null;
   etapaAlcanzada: boolean;
   abierta: boolean;
@@ -468,7 +473,7 @@ function ContenidoCarpeta({
 }: {
   requisito: RequisitoDocumento;
   docs: DocumentoDetalle[];
-  excepcion: ExcepcionDocumental | null;
+  excepcion: AnulacionDocumental | null;
   solicitudPendiente: SolicitudRiesgoPendiente | null;
   etapaAlcanzada: boolean;
   onCerrar: () => void;
@@ -563,6 +568,7 @@ export function LineaTiempoExpediente({
   transicionesValidas,
   documentos,
   excepciones,
+  anulacionesExcepcionales,
   solicitudesPendientes,
 }: {
   expedienteId: number;
@@ -574,13 +580,21 @@ export function LineaTiempoExpediente({
   transicionesValidas: string[];
   documentos: DocumentoDetalle[];
   excepciones: ExcepcionDocumental[];
+  anulacionesExcepcionales: AnulacionDocumentalExcepcional[];
   solicitudesPendientes: SolicitudRiesgoPendiente[];
 }) {
   const router = useRouter();
   const etapas = juegoEsperado(origen);
   const etapaActual = ETAPA_DE_ESTADO[estadoUnidad] ?? "ADQUISICION";
   const indiceActual = etapas.findIndex((e) => e.codigo === etapaActual);
-  const excepcionPorTipo = new Map(excepciones.map((e) => [e.tipo_codigo, e]));
+  const excepcionPorTipo = new Map<string, AnulacionDocumental>([
+    ...excepciones.map(
+      (e): [string, AnulacionDocumental] => [e.tipo_codigo, { ...e, clase: "LEGACY" }],
+    ),
+    ...anulacionesExcepcionales.map(
+      (a): [string, AnulacionDocumental] => [a.tipo_codigo, { ...a, clase: "EXCEPCIONAL" }],
+    ),
+  ]);
   const solicitudPendientePorTipo = new Map(
     solicitudesPendientes.map((s) => [s.tipo_codigo, s]),
   );
@@ -1251,19 +1265,32 @@ function CalloutCandado({
   );
 }
 
-// Aviso permanente (no expira, no se cierra): deja constancia visible de qué
-// se declaró inexistente, quién lo pidió y qué N3 lo autorizó en modo riesgo.
-function CalloutExcepcionLegacy({ excepcion }: { excepcion: ExcepcionDocumental }) {
+// Aviso permanente (no expira, no se cierra): deja constancia de la
+// anulación, su fundamento y quién dejó la decisión en trazabilidad.
+function CalloutAnulacion({ anulacion }: { anulacion: AnulacionDocumental }) {
+  const esLegacy = anulacion.clase === "LEGACY";
   return (
     <div className="mt-2 flex items-start gap-2.5 rounded-lg border border-zinc-900 bg-zinc-100 px-3 py-2.5">
       <SkullIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-zinc-950" />
       <div className="min-w-0 flex-1 text-xs leading-relaxed">
-        <p className="font-semibold text-zinc-950">Anulado por origen pre-sistema</p>
-        <p className="mt-0.5 text-zinc-800">{excepcion.motivo}</p>
+        <p className="font-semibold text-zinc-950">
+          {esLegacy ? "Anulado por origen pre-sistema" : "Anulado excepcionalmente"}
+        </p>
+        <p className="mt-0.5 text-zinc-800">{anulacion.motivo}</p>
         <p className="mt-1 text-zinc-700">
-          Solicitada por {excepcion.solicitado_por_nombre} el{" "}
-          {format(new Date(excepcion.solicitado_en), "d MMM yyyy", { locale: es })} · autorizada en
-          modo riesgo por {excepcion.autorizado_por_nombre}
+          {esLegacy ? (
+            <>
+              Solicitada por {anulacion.solicitado_por_nombre} el{" "}
+              {format(new Date(anulacion.solicitado_en), "d MMM yyyy", { locale: es })} · autorizada en
+              modo riesgo por {anulacion.autorizado_por_nombre}
+            </>
+          ) : (
+            <>
+              Anulada por {anulacion.anulado_por_nombre} el{" "}
+              {format(new Date(anulacion.anulado_en), "d MMM yyyy", { locale: es })} como decisión
+              excepcional N3.
+            </>
+          )}
         </p>
       </div>
     </div>
@@ -1413,7 +1440,7 @@ function FilaRequisito({
 }: {
   requisito: RequisitoDocumento;
   docs: DocumentoDetalle[];
-  excepcion: ExcepcionDocumental | null;
+  excepcion: AnulacionDocumental | null;
   solicitudPendiente: SolicitudRiesgoPendiente | null;
   orden: number;
   emitiendo: boolean;
@@ -1596,7 +1623,7 @@ function FilaRequisito({
                   <CalloutCandado candado={candado} onCerrar={onCerrarCandado} />
                 )}
 
-                {excepcion && <CalloutExcepcionLegacy excepcion={excepcion} />}
+                {excepcion && <CalloutAnulacion anulacion={excepcion} />}
 
                 {!excepcion && solicitudPendiente && (
                   <CalloutSolicitudPendiente solicitud={solicitudPendiente} />

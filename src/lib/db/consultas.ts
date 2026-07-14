@@ -111,6 +111,13 @@ export type ExcepcionDocumental = {
   autorizado_por_nombre: string;
 };
 
+export type AnulacionDocumentalExcepcional = {
+  tipo_codigo: string;
+  motivo: string;
+  anulado_en: string;
+  anulado_por_nombre: string;
+};
+
 export type SolicitudRiesgoPendiente = {
   id: number;
   tipo_codigo: string;
@@ -126,6 +133,7 @@ export type ExpedienteDetalle = ExpedienteCabecera & {
   historial_f06: EventoHistorial[];
   anexos: AnexoResumen[];
   excepciones: ExcepcionDocumental[];
+  anulacionesExcepcionales: AnulacionDocumentalExcepcional[];
   solicitudesPendientes: SolicitudRiesgoPendiente[];
 };
 
@@ -153,7 +161,7 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
   const exp = cabeceras[0];
   if (!exp) return null;
 
-  const [transiciones, documentos, historialUnidad, historialF06, anexos, excepciones, solicitudesPendientes] = await Promise.all([
+  const [transiciones, documentos, historialUnidad, historialF06, anexos, excepciones, anulacionesExcepcionales, solicitudesPendientes] = await Promise.all([
     leer<{ hacia: string }>(
       `transiciones?select=hacia&vin=eq.${exp.vin}&order=orden.asc`,
       async () => {
@@ -231,6 +239,18 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
         return rows;
       },
     ),
+    leer<AnulacionDocumentalExcepcional>(
+      `anulaciones_documentales_excepcionales?select=tipo_codigo,motivo,anulado_en,anulado_por_nombre&expediente_id=eq.${id}`,
+      async () => {
+        const { rows } = await query<AnulacionDocumentalExcepcional>(
+          `SELECT tipo_codigo, motivo, anulado_en::text AS anulado_en, anulado_por_nombre
+             FROM public.anulaciones_documentales_excepcionales
+            WHERE expediente_id = $1`,
+          [id],
+        );
+        return rows;
+      },
+    ),
     leer<SolicitudRiesgoPendiente>(
       `solicitudes_riesgo?select=id,tipo_codigo,motivo,solicitado_en,solicitado_por_nombre&expediente_id=eq.${id}&decision_id=is.null`,
       async () => {
@@ -254,6 +274,7 @@ export async function obtenerExpediente(id: number): Promise<ExpedienteDetalle |
     historial_f06: historialF06,
     anexos,
     excepciones,
+    anulacionesExcepcionales,
     solicitudesPendientes,
   };
 }
