@@ -123,6 +123,7 @@ export function WizardDocumento({
   const [values, setValues] = useState<Record<string, string>>({});
   const [sectionIndex, setSectionIndex] = useState(0);
   const [saving, setSaving] = useState<"save" | "complete" | null>(null);
+  const [confirmandoGuia, setConfirmandoGuia] = useState(false);
   const [issues, setIssues] = useState<Map<string, string>>(new Map());
   const [optionalActive, setOptionalActive] = useState<Set<string>>(new Set());
 
@@ -181,6 +182,9 @@ export function WizardDocumento({
     );
   }, [data]);
   const activeSection = visibleSections[sectionIndex];
+  const requiereConfirmacionGuia = Boolean(
+    data && data.estado === "BORRADOR" && !data.bloqueada && !data.guiaConfirmada,
+  );
   const activeFields = (data?.fields ?? []).filter(
     (field) =>
       field.visible &&
@@ -308,6 +312,28 @@ export function WizardDocumento({
     }
   }
 
+  async function confirmarGuia() {
+    if (!data) return;
+    setConfirmandoGuia(true);
+    try {
+      const response = await fetch(`/api/documentos/${data.documentoId}/guia-confirmacion`, {
+        method: "POST",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `Error ${response.status}`);
+      setData((current) => current ? { ...current, guiaConfirmada: true } : current);
+      toast.success("Guía confirmada", {
+        description: "Tu confirmación quedó registrada antes de iniciar la captura.",
+      });
+    } catch (error) {
+      toast.error("No se pudo registrar la confirmación", {
+        description: String(error instanceof Error ? error.message : error),
+      });
+    } finally {
+      setConfirmandoGuia(false);
+    }
+  }
+
   return (
     <Dialog open={documentoId != null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
@@ -385,7 +411,14 @@ export function WizardDocumento({
               </aside>
 
               <main className="min-h-0 overflow-y-auto bg-muted/10 p-4 sm:p-6">
-                {data.bloqueada && data.estado !== "COMPLETA" ? (
+                {requiereConfirmacionGuia ? (
+                  <ConfirmacionGuia
+                    key={data.documentoId}
+                    tipo={data.tipo}
+                    confirmando={confirmandoGuia}
+                    onConfirmar={() => void confirmarGuia()}
+                  />
+                ) : data.bloqueada && data.estado !== "COMPLETA" ? (
                   <CenteredState
                     icon={<AlertTriangleIcon className="mx-auto size-11 text-amber-600" />}
                     title="Captura cerrada por escaneo"
@@ -418,8 +451,6 @@ export function WizardDocumento({
                         Página {activePage} del PDF · <span className="text-red-500">*</span> obligatorio
                       </span>
                     </div>
-
-                    <GuiaOperativaResumen tipo={data.tipo} />
 
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {activeItems.map((item) =>
@@ -455,7 +486,7 @@ export function WizardDocumento({
             <footer className="flex flex-wrap items-center gap-2 border-t bg-background px-5 py-3">
               <Button variant="ghost" onClick={onClose}>Cerrar</Button>
               <span className="flex-1" />
-              {data.estado !== "COMPLETA" && !data.bloqueada && (
+              {data.estado !== "COMPLETA" && !data.bloqueada && !requiereConfirmacionGuia && (
                 <>
                   <Button variant="outline" disabled={saving !== null} onClick={() => void submit("save")}>
                     {saving === "save" ? <LoaderCircleIcon className="size-4 animate-spin" /> : <SaveIcon className="size-4" />}
@@ -487,6 +518,47 @@ export function WizardDocumento({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ConfirmacionGuia({
+  tipo,
+  confirmando,
+  onConfirmar,
+}: {
+  tipo: string;
+  confirmando: boolean;
+  onConfirmar: () => void;
+}) {
+  const [aceptada, setAceptada] = useState(false);
+
+  return (
+    <div className="mx-auto max-w-4xl py-2">
+      <div className="rounded-2xl border bg-background p-5 shadow-sm sm:p-6">
+        <h3 className="text-lg font-semibold">Confirma la guía antes de capturar</h3>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          Esta constancia se registra con tu usuario y fecha para este formato. Si falta un requisito o hay una alerta, detén la captura y escala el caso.
+        </p>
+        <GuiaOperativaResumen tipo={tipo} />
+        <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-sm leading-relaxed transition-colors hover:bg-muted/40">
+          <input
+            type="checkbox"
+            checked={aceptada}
+            onChange={(event) => setAceptada(event.target.checked)}
+            className="mt-0.5 size-4 shrink-0 accent-primary"
+          />
+          <span>
+            Confirmo que revisé la guía M-01 Rev. 3.0 de este formato y que no iniciaré la captura si falta un requisito o la guía exige escalar.
+          </span>
+        </label>
+        <div className="mt-4 flex justify-end">
+          <Button disabled={!aceptada || confirmando} onClick={onConfirmar}>
+            {confirmando && <LoaderCircleIcon className="size-4 animate-spin" />}
+            Confirmar y comenzar captura
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -26,6 +26,7 @@ export type CapturaDocumento = {
   revision: string;
   estado: "BORRADOR" | "COMPLETA";
   bloqueada: boolean;
+  guiaConfirmada: boolean;
   sections: Array<{ id: string; label: string }>;
   fields: CampoCaptura[];
   rules: ReglaFormulario[];

@@ -465,11 +465,24 @@ function resolverValores(
   return { values: derived, origins };
 }
 
-export async function obtenerCapturaDocumento(id: number): Promise<CapturaDocumento | null> {
+export async function obtenerCapturaDocumento(
+  id: number,
+  usuarioId: number,
+): Promise<CapturaDocumento | null> {
   const contexto = await obtenerContextoDocumento(id);
   if (!contexto) return null;
   const template = obtenerPlantillaFormulario(contexto.tipo);
   const stored = await cargarValores(contexto);
+  const guia = await query<{ confirmada: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+         FROM traza.documento_guia_confirmacion
+        WHERE documento_id = $1
+          AND confirmado_por = $2
+          AND guia_revision = 'M-01 Rev. 3.0'
+     ) AS confirmada`,
+    [id, usuarioId],
+  );
   const { values, origins } = resolverValores(contexto, template, stored);
   const required = camposRequeridos(template, values);
   const seenSystem = new Set<TokenSistema>();
@@ -510,6 +523,7 @@ export async function obtenerCapturaDocumento(id: number): Promise<CapturaDocume
     revision: contexto.revision,
     estado: stored.estado,
     bloqueada: contexto.escaneado,
+    guiaConfirmada: guia.rows[0]?.confirmada ?? false,
     sections: template.sections,
     fields,
     rules: template.rules,
@@ -521,6 +535,22 @@ export async function obtenerCapturaDocumento(id: number): Promise<CapturaDocume
       warnings,
     },
   };
+}
+
+export async function confirmarGuiaDocumento(id: number, usuarioId: number): Promise<boolean> {
+  const documento = await query<{ id: string }>(
+    `SELECT id FROM traza.documento WHERE id = $1`,
+    [id],
+  );
+  if (documento.rowCount === 0) return false;
+
+  await query(
+    `INSERT INTO traza.documento_guia_confirmacion (documento_id, guia_revision, confirmado_por)
+     VALUES ($1, 'M-01 Rev. 3.0', $2)
+     ON CONFLICT (documento_id, guia_revision, confirmado_por) DO NOTHING`,
+    [id, usuarioId],
+  );
+  return true;
 }
 
 async function upsertDocumentoValores(
@@ -616,6 +646,16 @@ export async function guardarCapturaDocumento(
   const contexto = await obtenerContextoDocumento(id);
   if (!contexto) return null;
   if (contexto.escaneado) throw new Error("El documento ya fue escaneado y su captura es inmutable");
+  const guia = await query<{ confirmada: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM traza.documento_guia_confirmacion
+        WHERE documento_id = $1 AND confirmado_por = $2 AND guia_revision = 'M-01 Rev. 3.0'
+     ) AS confirmada`,
+    [id, usuarioId],
+  );
+  if (!guia.rows[0]?.confirmada) {
+    throw new Error("Confirma la guía operativa M-01 antes de iniciar la captura");
+  }
   const template = obtenerPlantillaFormulario(contexto.tipo);
   const byName = new Map(template.fields.map((field) => [field.name, field]));
   const provided: Record<string, string> = {};
@@ -703,7 +743,7 @@ export async function guardarCapturaDocumento(
     await upsertDocumentoValores(client, id, usuarioId, template, values, origins);
   });
 
-  const captura = await obtenerCapturaDocumento(id);
+  const captura = await obtenerCapturaDocumento(id, usuarioId);
   if (!captura) return null;
   return { ok: true, captura };
 }
