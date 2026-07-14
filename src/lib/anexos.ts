@@ -129,3 +129,6 @@ export const ETIQUETA_EXIGENCIA: Record<ExigenciaAnexo, string> = {
   OPCIONAL: "Opcional",
   SEGUN_APLIQUE: "Según aplique",
 };
+
+/** Comunica el anexo elegido desde una etapa con su entrada en el checklist. */
+export const EVENTO_ENFOCAR_ANEXO = "dms:enfocar-anexo";

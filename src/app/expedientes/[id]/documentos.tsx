@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import { CircleCheckIcon } from "@/components/animate-ui/icons/circle-check";
 import { LockKeyholeIcon } from "@/components/animate-ui/icons/lock-keyhole";
 import { GuiaOperativaResumen } from "@/components/guia-operativa-formato";
-import { anexosDeOrigen, ETIQUETA_EXIGENCIA } from "@/lib/anexos";
+import { anexosDeOrigen, EVENTO_ENFOCAR_ANEXO, ETIQUETA_EXIGENCIA } from "@/lib/anexos";
 import {
   animoDeCandado,
   idDeObjetivo,
@@ -138,7 +138,10 @@ function AnexosDeEtapa({ etapa, origen, anexos }: { etapa: string; origen: "PROP
       {fichas.map((ficha) => {
         const cargado = porClave.get(ficha.clave);
         const exigencia = ficha.exigencia[origen]!;
-        return <button key={ficha.clave} type="button" onClick={() => document.getElementById(`anexo-${ficha.clave}`)?.scrollIntoView({ behavior: "smooth", block: "center" })} className={cn("flex items-start gap-2 rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:border-primary/40", cargado ? "border-emerald-200" : exigencia === "OBLIGATORIO" ? "border-amber-200" : "border-border")}>
+        return <button key={ficha.clave} type="button" onClick={() => {
+          window.dispatchEvent(new CustomEvent(EVENTO_ENFOCAR_ANEXO, { detail: { clave: ficha.clave } }));
+          document.getElementById(`anexo-${ficha.clave}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }} className={cn("flex items-start gap-2 rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:border-primary/40", cargado ? "border-emerald-200" : exigencia === "OBLIGATORIO" ? "border-amber-200" : "border-border")}>
           {cargado ? <FileCheck2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" /> : <CircleDashedIcon className={cn("mt-0.5 size-4 shrink-0", exigencia === "OBLIGATORIO" ? "text-amber-500" : "text-muted-foreground")} />}
           <span className="min-w-0"><span className="block text-xs font-medium">{ficha.nombre}</span><span className="block text-[11px] text-muted-foreground">{cargado ? `Cargado · ${cargado.version_maxima} archivo${cargado.version_maxima === 1 ? "" : "s"}` : ETIQUETA_EXIGENCIA[exigencia]}</span></span>
         </button>;

@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import {
   anexosDeOrigen,
+  EVENTO_ENFOCAR_ANEXO,
   ETIQUETA_EXIGENCIA,
   type FichaAnexo,
 } from "@/lib/anexos";
@@ -54,11 +55,29 @@ export function AnexosExpediente({
 }) {
   const [subiendo, setSubiendo] = useState<FichaAnexo | null>(null);
   const [viendo, setViendo] = useState<FichaAnexo | null>(null);
+  const [anexoEnfocado, setAnexoEnfocado] = useState<string | null>(null);
+  const focoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const porClave = new Map(anexos.map((a) => [a.clave, a]));
   const fichas = anexosDeOrigen(origen);
   const obligatorios = fichas.filter((f) => f.exigencia[origen] === "OBLIGATORIO");
   const cargadosObligatorios = obligatorios.filter((f) => porClave.has(f.clave)).length;
   const pendientes = obligatorios.length - cargadosObligatorios;
+
+  useEffect(() => {
+    function enfocar(evento: Event) {
+      const clave = (evento as CustomEvent<{ clave?: string }>).detail?.clave;
+      if (!clave) return;
+      if (focoTimer.current) clearTimeout(focoTimer.current);
+      setAnexoEnfocado(clave);
+      focoTimer.current = setTimeout(() => setAnexoEnfocado(null), 3200);
+    }
+
+    window.addEventListener(EVENTO_ENFOCAR_ANEXO, enfocar);
+    return () => {
+      window.removeEventListener(EVENTO_ENFOCAR_ANEXO, enfocar);
+      if (focoTimer.current) clearTimeout(focoTimer.current);
+    };
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -86,7 +105,10 @@ export function AnexosExpediente({
               <li
                 key={ficha.clave}
                 id={`anexo-${ficha.clave}`}
-                className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3"
+                className={cn(
+                  "flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-[background-color,box-shadow,transform] duration-300",
+                  anexoEnfocado === ficha.clave && "relative z-10 rounded-lg bg-primary/5 shadow-[0_0_0_4px_hsl(var(--primary)/0.14)]",
+                )}
               >
                 {cargado ? (
                   <FileCheck2Icon className="size-4 shrink-0 text-emerald-600" />
