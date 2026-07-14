@@ -142,6 +142,7 @@ export default async function ExpedienteDetallePage({
             estadoF06={exp.estado_f06}
             transicionesValidas={exp.transiciones_validas}
             documentos={exp.documentos}
+            anexos={exp.anexos}
             excepciones={exp.excepciones}
             anulacionesExcepcionales={exp.anulacionesExcepcionales}
             puedeAnularExcepcionalmente={usuario?.nivel === "N3"}

@@ -84,6 +84,7 @@ export function AnexosExpediente({
             return (
               <li
                 key={ficha.clave}
+                id={`anexo-${ficha.clave}`}
                 className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3"
               >
                 {cargado ? (
