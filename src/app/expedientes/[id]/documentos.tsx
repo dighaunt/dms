@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { uploadPresigned } from "@vercel/blob/client";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { AnimatePresence, motion } from "motion/react";
@@ -1897,10 +1898,10 @@ function DialogSubirEscaneo({
         const sha256 = await sha256Hex(buffer);
 
         const presign = await postJson<{
-          url?: string;
           rutaObjeto: string | null;
           archivoId: number | null;
           yaRegistrado?: boolean;
+          contentType?: string;
         }>(
           `/api/documentos/${doc.id}/escaneos/presign`,
           {
@@ -1918,19 +1919,30 @@ function DialogSubirEscaneo({
           yaRegistrados += 1;
           continue;
         }
-        if (!presign.url || !presign.rutaObjeto) {
+        if (!presign.rutaObjeto || !presign.contentType) {
           toast.error(`${archivo.name}: no fue posible preparar la carga.`);
           pendientes.push(archivo);
           continue;
         }
 
-        const put = await fetch(presign.url, {
-          method: "PUT",
-          headers: { "Content-Type": archivo.type },
-          body: archivo,
-        });
-        if (!put.ok) {
-          toast.error(`${archivo.name}: la subida al almacén falló (${put.status})`);
+        try {
+          await uploadPresigned(presign.rutaObjeto, archivo, {
+            access: "private",
+            contentType: presign.contentType,
+            handleUploadUrl: `/api/documentos/${doc.id}/escaneos/presign`,
+            clientPayload: JSON.stringify({
+              nombreArchivo: archivo.name,
+              tamanoBytes: archivo.size,
+              sha256,
+              contentType: archivo.type,
+            }),
+          });
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? `${archivo.name}: no se pudo subir al almacén (${error.message})`
+              : `${archivo.name}: no se pudo subir al almacén`,
+          );
           pendientes.push(archivo);
           continue;
         }

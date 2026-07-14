@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { uploadPresigned } from "@vercel/blob/client";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -338,7 +339,7 @@ function DialogSubirAnexo({
       const buffer = await archivo.arrayBuffer();
       const sha256 = await sha256Hex(buffer);
 
-      const presign = await postJson<{ url: string; rutaObjeto: string; contentType: string }>(
+      const presign = await postJson<{ rutaObjeto: string; contentType: string }>(
         `/api/expedientes/${expedienteId}/anexos/presign`,
         {
           clave: ficha.clave,
@@ -349,13 +350,20 @@ function DialogSubirAnexo({
       );
       if (!presign) return;
 
-      const put = await fetch(presign.url, {
-        method: "PUT",
-        headers: { "Content-Type": presign.contentType },
-        body: archivo,
-      });
-      if (!put.ok) {
-        toast.error(`La subida al almacén falló (${put.status})`);
+      try {
+        await uploadPresigned(presign.rutaObjeto, archivo, {
+          access: "private",
+          contentType: presign.contentType,
+          handleUploadUrl: `/api/expedientes/${expedienteId}/anexos/presign`,
+          clientPayload: JSON.stringify({
+            clave: ficha.clave,
+            nombreArchivo: archivo.name,
+            tamanoBytes: archivo.size,
+            contentType: archivo.type,
+          }),
+        });
+      } catch (error) {
+        toast.error(error instanceof Error ? `No se pudo subir al almacén: ${error.message}` : "No se pudo subir al almacén");
         return;
       }
 
