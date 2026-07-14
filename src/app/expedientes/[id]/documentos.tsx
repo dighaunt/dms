@@ -28,6 +28,7 @@ import {
   ShoppingCartIcon,
   SkullIcon,
   WalletCardsIcon,
+  XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -87,6 +88,8 @@ import { DialogFolioGenerado, type FolioEmitido } from "./folio-generado";
 import { WizardDocumento } from "./wizard-documento";
 
 const TIPOS_ACEPTADOS = "application/pdf,image/jpeg,image/png,image/webp";
+const MIMES_ACEPTADOS = new Set(TIPOS_ACEPTADOS.split(","));
+const MAX_BYTES_ESCANEO = 25 * 1024 * 1024;
 
 const ICONO_ETAPA: Record<string, React.ComponentType<{ className?: string }>> = {
   ADQUISICION: ShoppingCartIcon,
@@ -1778,48 +1781,91 @@ function DialogSubirEscaneo({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [archivo, setArchivo] = useState<File | null>(null);
+  const [archivos, setArchivos] = useState<File[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
+  const [progreso, setProgreso] = useState<{ actual: number; total: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  function agregarArchivos(nuevos: FileList | File[]) {
+    const seleccion = Array.from(nuevos);
+    if (seleccion.length === 0) return;
+    const validos = seleccion.filter((archivo) => {
+      if (!MIMES_ACEPTADOS.has(archivo.type)) {
+        toast.error(`${archivo.name}: solo se admiten PDF, JPG, PNG o WEBP.`);
+        return false;
+      }
+      if (archivo.size > MAX_BYTES_ESCANEO) {
+        toast.error(`${archivo.name}: supera el límite de 25 MB.`);
+        return false;
+      }
+      return true;
+    });
+    if (validos.length > 0) setArchivos((anteriores) => [...anteriores, ...validos]);
+  }
+
   async function subir() {
-    if (!archivo) return;
+    if (archivos.length === 0) return;
     setSubiendo(true);
+    setProgreso({ actual: 0, total: archivos.length });
+    const pendientes: File[] = [];
+    let registrados = 0;
     try {
-      const buffer = await archivo.arrayBuffer();
-      const sha256 = await sha256Hex(buffer);
+      for (const [indice, archivo] of archivos.entries()) {
+        setProgreso({ actual: indice + 1, total: archivos.length });
+        const buffer = await archivo.arrayBuffer();
+        const sha256 = await sha256Hex(buffer);
 
-      const presign = await postJson<{ url: string; rutaObjeto: string }>(
-        `/api/documentos/${doc.id}/escaneos/presign`,
-        {
-          nombreArchivo: archivo.name,
-          tamanoBytes: archivo.size,
-          contentType: archivo.type,
-        },
-      );
-      if (!presign) return;
+        const presign = await postJson<{ url: string; rutaObjeto: string }>(
+          `/api/documentos/${doc.id}/escaneos/presign`,
+          {
+            nombreArchivo: archivo.name,
+            tamanoBytes: archivo.size,
+            contentType: archivo.type,
+          },
+        );
+        if (!presign) {
+          pendientes.push(archivo);
+          continue;
+        }
 
-      const put = await fetch(presign.url, {
-        method: "PUT",
-        headers: { "Content-Type": archivo.type },
-        body: archivo,
-      });
-      if (!put.ok) {
-        toast.error(`La subida a R2 falló (${put.status})`);
-        return;
+        const put = await fetch(presign.url, {
+          method: "PUT",
+          headers: { "Content-Type": archivo.type },
+          body: archivo,
+        });
+        if (!put.ok) {
+          toast.error(`${archivo.name}: la subida al almacén falló (${put.status})`);
+          pendientes.push(archivo);
+          continue;
+        }
+
+        const confirmado = await postJson<{ version: number }>(
+          `/api/documentos/${doc.id}/escaneos/confirmar`,
+          { sha256, rutaObjeto: presign.rutaObjeto, tamanoBytes: archivo.size },
+        );
+        if (!confirmado) {
+          pendientes.push(archivo);
+          continue;
+        }
+        registrados += 1;
       }
 
-      const confirmado = await postJson<{ version: number }>(
-        `/api/documentos/${doc.id}/escaneos/confirmar`,
-        { sha256, rutaObjeto: presign.rutaObjeto, tamanoBytes: archivo.size },
-      );
-      if (!confirmado) return;
-
-      toast.success(`Escaneo v${confirmado.version} registrado para ${doc.folio}`);
-      onDone();
+      if (registrados > 0) {
+        toast.success(
+          registrados === 1
+            ? `Archivo registrado para ${doc.folio}`
+            : `${registrados} archivos registrados para ${doc.folio}`,
+        );
+      }
+      if (pendientes.length === 0) {
+        onDone();
+      } else {
+        setArchivos(pendientes);
+      }
     } finally {
       setSubiendo(false);
+      setProgreso(null);
     }
   }
 
@@ -1829,8 +1875,8 @@ function DialogSubirEscaneo({
         <DialogHeader>
           <DialogTitle>Subir escaneo · {doc.folio}</DialogTitle>
           <DialogDescription>
-            Documento firmado en papel, escaneado. Un reescaneo crea una versión
-            nueva; nunca se edita la anterior.
+            Adjunta uno o varios archivos del documento firmado. Cada PDF o imagen
+            queda resguardado de forma independiente y no reemplaza los anteriores.
           </DialogDescription>
         </DialogHeader>
 
@@ -1845,45 +1891,74 @@ function DialogSubirEscaneo({
           onDrop={(e) => {
             e.preventDefault();
             setArrastrando(false);
-            const f = e.dataTransfer.files[0];
-            if (f) setArchivo(f);
+            agregarArchivos(e.dataTransfer.files);
           }}
           className={cn(
-            "flex h-32 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-sm text-muted-foreground transition-colors",
+            "flex min-h-32 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-4 text-sm text-muted-foreground transition-colors",
             arrastrando && "border-foreground bg-muted",
           )}
         >
-          {archivo ? (
+          {archivos.length > 0 ? (
             <>
               <FileCheck2Icon className="mb-1 size-7 text-emerald-600" />
-              <span className="font-medium text-foreground">{archivo.name}</span>
-              <span className="text-xs">
-                {(archivo.size / 1024 / 1024).toFixed(2)} MB
+              <span className="font-medium text-foreground">
+                {archivos.length === 1 ? archivos[0].name : `${archivos.length} archivos seleccionados`}
               </span>
+              <span className="text-xs">Haz clic o arrastra más archivos para agregarlos</span>
             </>
           ) : (
             <>
               <ScanLineIcon className="mb-1 size-7 text-primary" />
-              <span>Arrastra el PDF o imagen aquí</span>
-              <span className="text-xs">o haz clic para elegir (máx. 25 MB)</span>
+              <span>Arrastra PDFs o imágenes aquí</span>
+              <span className="text-xs">o haz clic para elegir varios (PDF/JPG/PNG/WEBP, máx. 25 MB c/u)</span>
             </>
           )}
         </button>
+        {archivos.length > 0 && (
+          <ul className="max-h-32 space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2 text-xs">
+            {archivos.map((archivo, indice) => (
+              <li key={`${archivo.name}-${archivo.size}-${indice}`} className="flex items-center justify-between gap-3">
+                <span className="truncate text-foreground">{archivo.name}</span>
+                <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                  {(archivo.size / 1024 / 1024).toFixed(2)} MB
+                  <button
+                    type="button"
+                    aria-label={`Quitar ${archivo.name}`}
+                    className="rounded p-0.5 hover:bg-muted hover:text-foreground"
+                    onClick={() =>
+                      setArchivos((anteriores) => anteriores.filter((_, i) => i !== indice))
+                    }
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <input
           ref={inputRef}
           type="file"
           accept={TIPOS_ACEPTADOS}
+          multiple
           className="hidden"
-          onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            agregarArchivos(e.target.files ?? []);
+            e.currentTarget.value = "";
+          }}
         />
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={subiendo}>
             Cancelar
           </Button>
-          <Button onClick={subir} disabled={!archivo || subiendo}>
+          <Button onClick={subir} disabled={archivos.length === 0 || subiendo}>
             {!subiendo && <ScanLineIcon className="size-4" />}
-            {subiendo ? "Subiendo…" : "Subir y registrar"}
+            {subiendo && progreso
+              ? `Subiendo ${progreso.actual} de ${progreso.total}…`
+              : archivos.length > 1
+                ? `Subir ${archivos.length} archivos`
+                : "Subir y registrar"}
           </Button>
         </DialogFooter>
       </DialogContent>
