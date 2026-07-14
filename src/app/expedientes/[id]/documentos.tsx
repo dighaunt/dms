@@ -112,15 +112,6 @@ const ETAPA_DE_ESTADO: Record<string, string> = {
   BAJA: "VENTA",
 };
 
-const ETIQUETA_ACCION_SIGUIENTE: Record<string, string> = {
-  EN_INSPECCION: "Iniciar inspección",
-  EXPEDIENTE_INCOMPLETO: "Pasar a expediente incompleto",
-  LISTO_PARA_VENTA: "Marcar listo para venta",
-  APARTADA: "Marcar como apartada",
-  VENDIDA_PEND_ENTREGA: "Marcar como vendida",
-  ENTREGADA: "Marcar como entregada",
-};
-
 type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "CANCELADO" | "EXCEPCION_LEGACY";
 
 function estadoDe(docs: DocumentoDetalle[], tieneExcepcion = false): EstadoRequisito {
@@ -672,10 +663,6 @@ export function LineaTiempoExpediente({
     if (etapa) transicionesPorEtapa.set(etapa, [...(transicionesPorEtapa.get(etapa) ?? []), hacia]);
     else otrasTransiciones.push(hacia);
   }
-  const siguienteTransicion = transicionesValidas.find(
-    (estado) => estado !== "BAJA" && estado !== "DEVUELTA_CONSIGNANTE",
-  );
-
   function alternar(codigo: string) {
     setAbiertas((prev) => {
       const s = new Set(prev);
@@ -724,32 +711,6 @@ export function LineaTiempoExpediente({
 
   return (
     <div>
-      {siguienteTransicion && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.035] px-4 py-3">
-          <div>
-            <p className="text-xs font-medium text-primary">Siguiente paso operativo</p>
-            <p className="text-sm text-muted-foreground">
-              La unidad está en {ETIQUETA_ESTADO_UNIDAD[estadoUnidad] ?? estadoUnidad}.
-            </p>
-          </div>
-          <AccionExplicada
-            etiqueta={
-              avanzando === siguienteTransicion
-                ? "Actualizando…"
-                : (ETIQUETA_ACCION_SIGUIENTE[siguienteTransicion] ??
-                  `Avanzar a ${ETIQUETA_ESTADO_UNIDAD[siguienteTransicion] ?? siguienteTransicion}`)
-            }
-            titulo={
-              ETIQUETA_ACCION_SIGUIENTE[siguienteTransicion] ??
-              `Avanzar a ${ETIQUETA_ESTADO_UNIDAD[siguienteTransicion] ?? siguienteTransicion}`
-            }
-            descripcion="Actualiza el estado operativo de la unidad. Antes de confirmar, el sistema validará los documentos y controles obligatorios del manual."
-            confirmar="Confirmar avance"
-            disabled={avanzando !== null}
-            onConfirmar={() => avanzar(siguienteTransicion)}
-          />
-        </div>
-      )}
       <div className="mb-4 flex justify-end">
         <div className="inline-flex rounded-full border bg-background p-0.5 text-xs shadow-xs">
           <button
