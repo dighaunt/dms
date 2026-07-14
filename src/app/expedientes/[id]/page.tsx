@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { BadgeCheckIcon } from "lucide-react";
+import { BadgeCheckIcon, CircleAlertIcon } from "lucide-react";
 
 import { query } from "@/lib/db";
 import { getUsuarioSesion } from "@/lib/auth/usuario";
@@ -24,6 +24,7 @@ import { HistorialTimeline } from "./historial-timeline";
 import { UnidadDatos } from "./unidad-datos";
 import { CerrarExpediente } from "./cerrar-expediente";
 import { EtiquetaRastreo } from "./etiqueta-rastreo";
+import { anexosDeOrigen } from "@/lib/anexos";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,9 @@ export default async function ExpedienteDetallePage({
   };
 
   const iniciales = exp.marca.slice(0, 2).toUpperCase();
+  const anexosPendientes = anexosDeOrigen(exp.origen)
+    .filter((f) => f.exigencia[exp.origen] === "OBLIGATORIO")
+    .filter((f) => !exp.anexos.some((a) => a.clave === f.clave)).length;
 
   return (
     <div className="space-y-6">
@@ -99,6 +103,12 @@ export default async function ExpedienteDetallePage({
                 etiqueta={ETIQUETA_ESTADO_UNIDAD[exp.estado_unidad] ?? exp.estado_unidad}
                 punto={PUNTO_ESTADO_UNIDAD[exp.estado_unidad] ?? "bg-zinc-400"}
               />
+              {anexosPendientes > 0 && (
+                <Link href="#anexos-expediente" className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900 shadow-xs transition-colors hover:bg-amber-100">
+                  <CircleAlertIcon className="size-3.5 animate-pulse" />
+                  {anexosPendientes} actividad{anexosPendientes === 1 ? "" : "es"} pendiente{anexosPendientes === 1 ? "" : "s"}
+                </Link>
+              )}
               <EstadoBadge
                 etiqueta={`F-06: ${ETIQUETA_ESTADO_F06[exp.estado_f06] ?? exp.estado_f06}`}
                 punto={PUNTO_ESTADO_F06[exp.estado_f06] ?? "bg-zinc-400"}

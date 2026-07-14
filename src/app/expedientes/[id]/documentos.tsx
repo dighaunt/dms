@@ -475,6 +475,12 @@ function PestanaCarpeta({
         aria-hidden="true"
         className={cn("absolute -top-2 left-2.5 h-2 w-7 rounded-t-md border-2 border-b-0", clase)}
       />
+      {color === "amarillo" && !abierta && (
+        <>
+          <span aria-hidden="true" className="pointer-events-none absolute -inset-1.5 animate-pulse rounded-lg rounded-tl-none bg-amber-300/20 blur-sm" />
+          <span aria-hidden="true" className="pointer-events-none absolute -left-0.5 -top-3 h-3 w-8 animate-pulse rounded-t-md border-2 border-b-0 border-amber-400/70" />
+        </>
+      )}
       {solicitudSinResolver && (
         <span
           aria-hidden="true"
