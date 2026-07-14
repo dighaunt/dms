@@ -7,6 +7,7 @@ import {
   CheckCircle2Icon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ClipboardListIcon,
   CircleDashedIcon,
   ClockIcon,
   DatabaseIcon,
@@ -40,6 +41,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { etiquetaAlternativa } from "@/lib/formularios/etiquetas";
 import type { CampoCaptura, CapturaDocumento } from "@/lib/formularios/tipos";
+import { guiaOperativaPara, type GuiaOperativa } from "@/lib/guia-operativa";
 import { cn } from "@/lib/utils";
 
 type ChoiceGroup = CapturaDocumento["choiceGroups"][number];
@@ -321,10 +323,15 @@ export function WizardDocumento({
         ) : (
           <div className="grid h-full min-h-0 grid-rows-[auto_1fr_auto]">
             <DialogHeader className="border-b px-6 py-4 pr-14">
-              <DialogTitle>Completar {data.folio}</DialogTitle>
-              <DialogDescription>
-                {data.tipo} · revisión {data.revision} · los datos se reutilizan durante el ciclo de vida del expediente
-              </DialogDescription>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <DialogTitle>Completar {data.folio}</DialogTitle>
+                  <DialogDescription>
+                    {data.tipo} · revisión {data.revision} · los datos se reutilizan durante el ciclo de vida del expediente
+                  </DialogDescription>
+                </div>
+                <GuiaOperativaPopover tipo={data.tipo} />
+              </div>
             </DialogHeader>
 
             <div className="grid min-h-0 md:grid-cols-[270px_1fr]">
@@ -413,6 +420,8 @@ export function WizardDocumento({
                       </span>
                     </div>
 
+                    <GuiaOperativaInicio tipo={data.tipo} />
+
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {activeItems.map((item) =>
                         item.kind === "group" ? (
@@ -479,6 +488,101 @@ export function WizardDocumento({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function GuiaOperativaInicio({ tipo }: { tipo: string }) {
+  const guia = guiaOperativaPara(tipo);
+
+  return (
+    <section className="mb-5 rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <ClipboardListIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+          <div>
+            <h4 className="text-sm font-semibold">Antes de capturar · {guia.etapa}</h4>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Reúne esto antes de pedir datos o imprimir. Fuente: M-01 Rev. 3.0.
+            </p>
+          </div>
+        </div>
+        <GuiaOperativaPopover tipo={tipo} compact />
+      </div>
+
+      <ul className="mt-3 grid gap-2 text-sm leading-relaxed md:grid-cols-2">
+        {guia.solicita.map((item) => (
+          <li key={item} className="flex gap-2">
+            <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+
+      {guia.alerta && (
+        <p className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium leading-relaxed text-amber-950">
+          Atención: {guia.alerta}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function GuiaOperativaPopover({ tipo, compact = false }: { tipo: string; compact?: boolean }) {
+  const guia = guiaOperativaPara(tipo);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className={cn(compact && "h-7 px-2 text-[11px]")}>
+          <ClipboardListIcon className="size-3.5" />
+          {compact ? "Copias y entrega" : "Guía operativa"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[min(92vw,34rem)] max-h-[70vh] overflow-y-auto p-4">
+        <div className="flex items-start gap-2">
+          <ClipboardListIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+          <div>
+            <p className="text-sm font-semibold">{tipo} · {guia.etapa}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              Qué pedir, qué resguardar y qué entregar antes de cerrar este formato.
+            </p>
+          </div>
+        </div>
+        <ContenidoGuia guia={guia} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ContenidoGuia({ guia }: { guia: GuiaOperativa }) {
+  return (
+    <div className="mt-4 space-y-4 text-sm leading-relaxed">
+      <GuiaLista titulo="Solicita antes de capturar" items={guia.solicita} />
+      <GuiaLista titulo="Al cerrar, entrega y resguarda" items={guia.cierra} />
+      <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        Siempre: llena con la contraparte presente y el original a la vista; anula lo que no aplique, confronta VIN/importes y escanea el tanto del expediente el mismo día.
+      </div>
+      {guia.alerta && (
+        <div className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium text-amber-950">
+          Atención: {guia.alerta}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GuiaLista({ titulo, items }: { titulo: string; items: string[] }) {
+  return (
+    <section>
+      <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</h5>
+      <ul className="mt-2 space-y-2">
+        {items.map((item) => (
+          <li key={item} className="flex gap-2">
+            <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
