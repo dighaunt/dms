@@ -453,7 +453,7 @@ function PestanaCarpeta({
           className="absolute -inset-0.5 animate-pulse rounded-lg ring-2 ring-amber-400/80"
         />
       )}
-      <Icono className="size-3.5" />
+      <Icono className={cn(color === "muerto" ? "size-5" : "size-3.5")} />
       <span className="font-mono text-[11px] font-semibold">{requisito.tipo}</span>
     </button>
   );
@@ -569,6 +569,7 @@ export function LineaTiempoExpediente({
   documentos,
   excepciones,
   anulacionesExcepcionales,
+  puedeAnularExcepcionalmente,
   solicitudesPendientes,
 }: {
   expedienteId: number;
@@ -581,6 +582,7 @@ export function LineaTiempoExpediente({
   documentos: DocumentoDetalle[];
   excepciones: ExcepcionDocumental[];
   anulacionesExcepcionales: AnulacionDocumentalExcepcional[];
+  puedeAnularExcepcionalmente: boolean;
   solicitudesPendientes: SolicitudRiesgoPendiente[];
 }) {
   const router = useRouter();
@@ -606,6 +608,7 @@ export function LineaTiempoExpediente({
   const [cancelarDoc, setCancelarDoc] = useState<DocumentoDetalle | null>(null);
   const [pagoDoc, setPagoDoc] = useState<DocumentoDetalle | null>(null);
   const [declararTipo, setDeclararTipo] = useState<string | null>(null);
+  const [anularExcepcionalTipo, setAnularExcepcionalTipo] = useState<string | null>(null);
   const [folioNuevo, setFolioNuevo] = useState<FolioEmitido | null>(null);
   const [documentoEnCaptura, setDocumentoEnCaptura] = useState<number | null>(null);
   const [emitiendo, setEmitiendo] = useState<string | null>(null);
@@ -957,6 +960,8 @@ export function LineaTiempoExpediente({
                             onPago={setPagoDoc}
                             onCapturar={setDocumentoEnCaptura}
                             onDeclararExcepcion={setDeclararTipo}
+                            puedeAnularExcepcionalmente={puedeAnularExcepcionalmente}
+                            onAnularExcepcionalmente={setAnularExcepcionalTipo}
                             candado={
                               candado?.objetivo.tipo === "requisito" &&
                               candado.objetivo.codigo === req.tipo
@@ -1104,6 +1109,9 @@ export function LineaTiempoExpediente({
             router.refresh();
           }}
         />
+      )}
+      {anularExcepcionalTipo && (
+        <DialogAnularExcepcionalmente expedienteId={expedienteId} tipoCodigo={anularExcepcionalTipo} nombreTipo={NOMBRE_TIPO[anularExcepcionalTipo] ?? anularExcepcionalTipo} onClose={() => setAnularExcepcionalTipo(null)} onDone={() => { setAnularExcepcionalTipo(null); router.refresh(); }} />
       )}
     </div>
   );
@@ -1271,7 +1279,7 @@ function CalloutAnulacion({ anulacion }: { anulacion: AnulacionDocumental }) {
   const esLegacy = anulacion.clase === "LEGACY";
   return (
     <div className="mt-2 flex items-start gap-2.5 rounded-lg border border-zinc-900 bg-zinc-100 px-3 py-2.5">
-      <SkullIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-zinc-950" />
+      <SkullIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-zinc-950" />
       <div className="min-w-0 flex-1 text-xs leading-relaxed">
         <p className="font-semibold text-zinc-950">
           {esLegacy ? "Anulado por origen pre-sistema" : "Anulado excepcionalmente"}
@@ -1435,6 +1443,8 @@ function FilaRequisito({
   onPago,
   onCapturar,
   onDeclararExcepcion,
+  puedeAnularExcepcionalmente,
+  onAnularExcepcionalmente,
   candado,
   onCerrarCandado,
 }: {
@@ -1451,6 +1461,8 @@ function FilaRequisito({
   onPago: (d: DocumentoDetalle) => void;
   onCapturar: (documentoId: number) => void;
   onDeclararExcepcion: (tipoCodigo: string) => void;
+  puedeAnularExcepcionalmente: boolean;
+  onAnularExcepcionalmente: (tipoCodigo: string) => void;
   candado: CandadoActivo | null;
   onCerrarCandado: () => void;
 }) {
@@ -1552,7 +1564,7 @@ function FilaRequisito({
                 estado === "ANULADO" && "border-zinc-900 bg-zinc-100",
               )}
             >
-              <Icono className={cn("size-4", clase)} />
+              <Icono className={cn(estado === "ANULADO" ? "size-6" : "size-4", clase)} />
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -1591,6 +1603,9 @@ function FilaRequisito({
                 disabled={emitiendo}
                 onConfirmar={onEmitir}
               />
+            )}
+            {puedeAnularExcepcionalmente && !excepcion && (
+              <AccionExplicada etiqueta="Anular excepcionalmente" titulo={`Anular ${requisito.tipo} excepcionalmente`} descripcion="Decisión unilateral N3, inmutable y auditada. Este requisito dejará de estar habilitado y podrá respaldar el cierre del expediente cuando corresponda." confirmar="Revisar anulación" variant="ghost" className="h-8 px-3 text-xs text-zinc-800 hover:text-zinc-950" icono={<SkullIcon className="size-3" />} onConfirmar={() => onAnularExcepcionalmente(requisito.tipo)} />
             )}
             <Button
               type="button"
@@ -1783,7 +1798,7 @@ function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
       {estado === "ESCANEADO" && doc.version_maxima != null && doc.version_maxima > 1 && (
         <span className="text-emerald-600">v{doc.version_maxima}</span>
       )}
-      {estado === "ANULADO" && <SkullIcon aria-hidden="true" className="size-3 text-zinc-950" />}
+      {estado === "ANULADO" && <SkullIcon aria-hidden="true" className="size-4 text-zinc-950" />}
       {doc.tipo_codigo === "C-02" && doc.pago_verificado && !doc.cancelado && (
         <span className="inline-flex items-center gap-0.5 text-emerald-600">
           · pago
@@ -2259,6 +2274,22 @@ function DialogSolicitarExcepcion({
       </DialogContent>
     </Dialog>
   );
+}
+
+function DialogAnularExcepcionalmente({ expedienteId, tipoCodigo, nombreTipo, onClose, onDone }: { expedienteId: number; tipoCodigo: string; nombreTipo: string; onClose: () => void; onDone: () => void }) {
+  const [motivo, setMotivo] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const valido = motivo.trim().length >= 40;
+  async function anular() {
+    setEnviando(true);
+    try {
+      const res = await postJsonDetallado(`/api/expedientes/${expedienteId}/anulaciones-excepcionales`, { tipoCodigo, motivo });
+      if (!res.ok) return toast.error(res.error);
+      toast.success(`${tipoCodigo} quedó anulado excepcionalmente`);
+      onDone();
+    } finally { setEnviando(false); }
+  }
+  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent><DialogHeader><DialogTitle>Anular excepcionalmente · {tipoCodigo}</DialogTitle><DialogDescription>Decisión unilateral N3 para {nombreTipo}. Queda inmutable en la base de datos, con tu motivo y fecha; el requisito no volverá a habilitarse.</DialogDescription></DialogHeader><div className="grid gap-2"><Label htmlFor="motivo-anulacion">Motivo de la decisión</Label><Textarea id="motivo-anulacion" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Explica por qué este requisito no aplica y por qué la anulación excepcional está justificada…" /><p className={cn("text-xs", valido ? "text-muted-foreground" : "text-amber-700")}>{motivo.trim().length}/40 caracteres mínimo</p></div><DialogFooter><Button variant="outline" disabled={enviando} onClick={onClose}>Volver</Button><Button variant="destructive" disabled={!valido || enviando} onClick={anular}>{enviando ? "Anulando…" : "Confirmar anulación"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function DialogPago({

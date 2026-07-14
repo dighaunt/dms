@@ -144,6 +144,7 @@ export default async function ExpedienteDetallePage({
             documentos={exp.documentos}
             excepciones={exp.excepciones}
             anulacionesExcepcionales={exp.anulacionesExcepcionales}
+            puedeAnularExcepcionalmente={usuario?.nivel === "N3"}
             solicitudesPendientes={exp.solicitudesPendientes}
           />
         </div>
