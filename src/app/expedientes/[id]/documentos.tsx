@@ -1809,22 +1809,38 @@ function DialogSubirEscaneo({
     setSubiendo(true);
     setProgreso({ actual: 0, total: archivos.length });
     const pendientes: File[] = [];
-    let registrados = 0;
+    let nuevos = 0;
+    let yaRegistrados = 0;
     try {
       for (const [indice, archivo] of archivos.entries()) {
         setProgreso({ actual: indice + 1, total: archivos.length });
         const buffer = await archivo.arrayBuffer();
         const sha256 = await sha256Hex(buffer);
 
-        const presign = await postJson<{ url: string; rutaObjeto: string }>(
+        const presign = await postJson<{
+          url?: string;
+          rutaObjeto: string | null;
+          version: number;
+          yaRegistrado?: boolean;
+        }>(
           `/api/documentos/${doc.id}/escaneos/presign`,
           {
             nombreArchivo: archivo.name,
             tamanoBytes: archivo.size,
+            sha256,
             contentType: archivo.type,
           },
         );
         if (!presign) {
+          pendientes.push(archivo);
+          continue;
+        }
+        if (presign.yaRegistrado) {
+          yaRegistrados += 1;
+          continue;
+        }
+        if (!presign.url || !presign.rutaObjeto) {
+          toast.error(`${archivo.name}: no fue posible preparar la carga.`);
           pendientes.push(archivo);
           continue;
         }
@@ -1840,7 +1856,7 @@ function DialogSubirEscaneo({
           continue;
         }
 
-        const confirmado = await postJson<{ version: number }>(
+        const confirmado = await postJson<{ version: number; yaRegistrado?: boolean }>(
           `/api/documentos/${doc.id}/escaneos/confirmar`,
           { sha256, rutaObjeto: presign.rutaObjeto, tamanoBytes: archivo.size },
         );
@@ -1848,14 +1864,22 @@ function DialogSubirEscaneo({
           pendientes.push(archivo);
           continue;
         }
-        registrados += 1;
+        if (confirmado.yaRegistrado) yaRegistrados += 1;
+        else nuevos += 1;
       }
 
-      if (registrados > 0) {
+      if (nuevos > 0) {
         toast.success(
-          registrados === 1
+          nuevos === 1
             ? `Archivo registrado para ${doc.folio}`
-            : `${registrados} archivos registrados para ${doc.folio}`,
+            : `${nuevos} archivos registrados para ${doc.folio}`,
+        );
+      }
+      if (yaRegistrados > 0) {
+        toast.info(
+          yaRegistrados === 1
+            ? "El archivo ya estaba resguardado en este folio."
+            : `${yaRegistrados} archivos ya estaban resguardados en este folio.`,
         );
       }
       if (pendientes.length === 0) {

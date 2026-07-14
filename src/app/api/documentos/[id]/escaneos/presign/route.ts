@@ -20,6 +20,7 @@ const MAX_BYTES = 25 * 1024 * 1024; // 25 MB por escaneo
 const bodySchema = z.object({
   nombreArchivo: z.string().trim().min(1),
   tamanoBytes: z.number().int().min(1).max(MAX_BYTES),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/, "sha256 hex en minúsculas"),
   contentType: z.enum(
     Object.keys(CONTENT_TYPES_PERMITIDOS) as [ContentTypePermitido, ...ContentTypePermitido[]],
     { error: "Solo PDF o imagen (jpeg/png/webp)" },
@@ -42,12 +43,13 @@ export async function POST(
 
   try {
     const doc = await query<{
+      id: number;
       folio: string;
       numero_expediente: string;
       cancelado: boolean;
       siguiente_version: number;
     }>(
-      `SELECT vd.folio, vd.numero_expediente, vd.cancelado,
+      `SELECT vd.id, vd.folio, vd.numero_expediente, vd.cancelado,
               COALESCE((SELECT max(a.version) FROM traza.archivo_escaneado a
                          WHERE a.documento_id = vd.id), 0) + 1 AS siguiente_version
          FROM traza.v_documento vd
@@ -59,6 +61,37 @@ export async function POST(
     if (d.cancelado) {
       return NextResponse.json(
         { error: "Documento CANCELADO: se conserva pero no admite nuevos escaneos" },
+        { status: 409 },
+      );
+    }
+
+    // La misma evidencia no debe subir de nuevo ni crear un blob huérfano.
+    // Reintentar el mismo archivo para este folio es idempotente; usarlo para
+    // otro folio se rechaza con una explicación de trazabilidad.
+    const existente = await query<{
+      documento_id: number;
+      version: number;
+      folio: string;
+    }>(
+      `SELECT a.documento_id, a.version, vd.folio
+         FROM traza.archivo_escaneado a
+         JOIN traza.v_documento vd ON vd.id = a.documento_id
+        WHERE a.sha256 = $1`,
+      [data.sha256],
+    );
+    if ((existente.rowCount ?? 0) > 0) {
+      const archivo = existente.rows[0];
+      if (archivo.documento_id === d.id) {
+        return NextResponse.json({
+          yaRegistrado: true,
+          version: archivo.version,
+          rutaObjeto: null,
+        });
+      }
+      return NextResponse.json(
+        {
+          error: `Este archivo ya está resguardado en ${archivo.folio}. Cada folio debe conservar su propio documento firmado.`,
+        },
         { status: 409 },
       );
     }
