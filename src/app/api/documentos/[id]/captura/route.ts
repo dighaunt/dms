@@ -64,7 +64,7 @@ export async function PATCH(
     return NextResponse.json(result.captura);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (/inválid|excede|wizard|validación|guía|confirma/i.test(message)) {
+    if (/inválid|excede|m[aá]ximo|wizard|validación|guía|confirma/i.test(message)) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
     if (/escaneado|inmutable|captura quedó cerrada/i.test(message)) {

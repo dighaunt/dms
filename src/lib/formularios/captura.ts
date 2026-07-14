@@ -149,24 +149,36 @@ function derivar(template: PlantillaFormulario, input: Record<string, string>): 
 
 function normalizeValue(field: CampoFormulario, raw: string): string {
   const value = raw.trim();
-  const maxLength = longitudMaximaCampo(field);
-  if (value.length > maxLength) {
-    throw new Error(`El campo ${field.label} admite máximo ${maxLength} caracteres`);
-  }
   if (value === "") return "";
 
-  if (["radio", "select", "boolean"].includes(field.inputType)) {
-    if (!field.options.includes(value)) {
-      throw new Error(`Opción inválida para ${field.label}`);
-    }
-  }
-  if (field.inputType === "number" && value !== "NO APLICA") {
+  // Valores de cierre que el sistema inserta por una regla del formulario.
+  // No son una captura numérica ni deben evaluarse contra el ancho del widget.
+  if (["NO APLICA", "SIN OBSERVACIONES"].includes(value)) return value;
+
+  const maxLength = longitudMaximaCampo(field);
+  if (field.inputType === "number") {
+    // PostgreSQL entrega numeric como "365.00". Validar ese texto contra el
+    // ancho del PDF hacía fallar un valor válido al reabrir el borrador.
     const normalized = value.replace(/,/g, "");
     const number = Number(normalized);
     if (!Number.isFinite(number) || number < 0) {
       throw new Error(`Número inválido para ${field.label}`);
     }
-    return String(number);
+    const canonical = String(number);
+    if (canonical.length > maxLength) {
+      throw new Error(`El campo ${field.label} admite máximo ${maxLength} caracteres`);
+    }
+    return canonical;
+  }
+
+  if (value.length > maxLength) {
+    throw new Error(`El campo ${field.label} admite máximo ${maxLength} caracteres`);
+  }
+
+  if (["radio", "select", "boolean"].includes(field.inputType)) {
+    if (!field.options.includes(value)) {
+      throw new Error(`Opción inválida para ${field.label}`);
+    }
   }
   if (field.inputType === "date" && value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error(`Fecha inválida para ${field.label}`);
