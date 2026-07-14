@@ -159,7 +159,7 @@ const ICONO_ESTADO: Record<EstadoRequisito, { icono: React.ComponentType<{ class
   PENDIENTE: { icono: CircleDashedIcon, clase: "text-muted-foreground/60" },
   EMITIDO: { icono: FileTextIcon, clase: "text-foreground" },
   ESCANEADO: { icono: FileCheck2Icon, clase: "text-emerald-600" },
-  ANULADO: { icono: SkullIcon, clase: "text-zinc-950" },
+  ANULADO: { icono: SkullIcon, clase: "text-white" },
 };
 
 const EXPLICACION_ESTADO: Record<EstadoRequisito, string> = {
@@ -208,7 +208,7 @@ const ESTILO_CARPETA: Record<
     etiqueta: "Aún no es su ciclo",
   },
   muerto: {
-    clase: "border-zinc-900 bg-zinc-100 text-zinc-950",
+    clase: "border-zinc-950 bg-zinc-950 text-white",
     icono: SkullIcon,
     etiqueta: "Anulado",
   },
@@ -894,7 +894,7 @@ export function LineaTiempoExpediente({
                             estadoHijo === "ESCANEADO" &&
                               "border-emerald-200 bg-emerald-50/45",
                             estadoHijo === "EMITIDO" && "border-primary/20 bg-primary/[0.025]",
-                            estadoHijo === "ANULADO" && "border-zinc-900 bg-zinc-100",
+                            estadoHijo === "ANULADO" && "border-zinc-950 bg-zinc-950",
                           )}
                         />
                       );
@@ -1598,7 +1598,7 @@ function FilaRequisito({
               className={cn(
                 "flex size-9 shrink-0 items-center justify-center rounded-xl border bg-background shadow-xs",
                 estado === "ESCANEADO" && "border-emerald-200 bg-emerald-50",
-                estado === "ANULADO" && "border-zinc-900 bg-zinc-100",
+                estado === "ANULADO" && "border-zinc-950 bg-zinc-950",
               )}
             >
               <Icono className={cn(estado === "ANULADO" ? "size-6" : "size-4", clase)} />
@@ -1626,7 +1626,7 @@ function FilaRequisito({
                 estado === "ESCANEADO" && "border-emerald-200 text-emerald-700",
                 estado === "EMITIDO" && "border-primary/20 text-primary",
                 estado === "PENDIENTE" && "text-muted-foreground",
-                estado === "ANULADO" && "border-zinc-900 bg-zinc-100 text-zinc-950",
+                estado === "ANULADO" && "border-zinc-950 bg-zinc-950 text-white",
               )}
             />
             {estado === "PENDIENTE" && (
@@ -1827,7 +1827,7 @@ function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
       estado={estado}
       className={cn(
         "px-2 py-px font-medium normal-case tracking-normal",
-        estado === "ANULADO" && "border-zinc-900 bg-zinc-100 text-zinc-950",
+        estado === "ANULADO" && "border-zinc-950 bg-zinc-950 text-white",
         estado === "ESCANEADO" && "border-emerald-200 bg-emerald-50 text-emerald-700",
         estado === "EMITIDO" && "bg-background text-foreground",
       )}
@@ -1835,7 +1835,7 @@ function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
       {estado === "ESCANEADO" && doc.version_maxima != null && doc.version_maxima > 1 && (
         <span className="text-emerald-600">v{doc.version_maxima}</span>
       )}
-      {estado === "ANULADO" && <SkullIcon aria-hidden="true" className="size-4 text-zinc-950" />}
+      {estado === "ANULADO" && <SkullIcon aria-hidden="true" className="size-4 text-white" />}
       {doc.tipo_codigo === "C-02" && doc.pago_verificado && !doc.cancelado && (
         <span className="inline-flex items-center gap-0.5 text-emerald-600">
           · pago
