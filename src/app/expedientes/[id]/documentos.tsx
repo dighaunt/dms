@@ -8,19 +8,23 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   CheckIcon,
   ChevronDownIcon,
+  CircleAlertIcon,
   CircleDashedIcon,
   ClipboardCheckIcon,
   FileCheck2Icon,
   FileTextIcon,
   FileX2Icon,
+  FolderIcon,
   FolderOpenIcon,
   HandshakeIcon,
   InfoIcon,
   LandmarkIcon,
   ListChecksIcon,
+  ListIcon,
   ScanLineIcon,
   ShieldAlertIcon,
   ShoppingCartIcon,
+  SkullIcon,
   WalletCardsIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -125,6 +129,165 @@ const EXPLICACION_ESTADO: Record<EstadoRequisito, string> = {
     "Se declaró, en modo riesgo y con autorización de un administrador (N3), que este papel nunca existió por ser una unidad legacy previa al sistema. Queda visible en el historial para siempre.",
 };
 
+type ColorCarpeta = "verde" | "amarillo" | "gris" | "muerto";
+
+// Semáforo de la vista de carpeta: verde completo, amarillo le falta algo
+// AHORA (ya debería existir), gris todavía no le toca (etapa futura o
+// "según aplique" sin folio), muerto = pérdida real (cancelado sin
+// sustituto vigente) o excepción legacy declarada.
+function colorCarpetaDe(
+  estado: EstadoRequisito,
+  requisito: RequisitoDocumento,
+  etapaAlcanzada: boolean,
+): ColorCarpeta {
+  if (estado === "EXCEPCION_LEGACY" || estado === "CANCELADO") return "muerto";
+  if (estado === "ESCANEADO") return "verde";
+  if (estado === "EMITIDO") return "amarillo";
+  if (!etapaAlcanzada || requisito.exigencia === "segun_aplique") return "gris";
+  return "amarillo";
+}
+
+const ESTILO_CARPETA: Record<
+  ColorCarpeta,
+  { clase: string; icono: React.ComponentType<{ className?: string }>; etiqueta: string }
+> = {
+  verde: {
+    clase: "border-emerald-300 bg-emerald-50 text-emerald-700",
+    icono: CheckIcon,
+    etiqueta: "Completo",
+  },
+  amarillo: {
+    clase: "border-amber-300 bg-amber-50 text-amber-700",
+    icono: CircleAlertIcon,
+    etiqueta: "Le falta",
+  },
+  gris: {
+    clase: "border-border bg-muted/40 text-muted-foreground",
+    icono: CircleDashedIcon,
+    etiqueta: "Aún no es su ciclo",
+  },
+  muerto: {
+    clase: "border-zinc-400 bg-zinc-200/70 text-zinc-600",
+    icono: SkullIcon,
+    etiqueta: "Pérdida / legacy",
+  },
+};
+
+// Como si abrieras la carpeta física: una pestaña por documento que
+// DEBERÍA existir ahí, coloreada por lo que realmente hay. El candado real
+// sigue viviendo en BD — esto es solo la lectura visual del expediente.
+function VistaCarpeta({
+  etapas,
+  porTipo,
+  excepcionPorTipo,
+  indiceActual,
+}: {
+  etapas: ReturnType<typeof juegoEsperado>;
+  porTipo: Map<string, DocumentoDetalle[]>;
+  excepcionPorTipo: Map<string, ExcepcionDocumental>;
+  indiceActual: number;
+}) {
+  return (
+    <div className="mb-6 rounded-2xl border bg-gradient-to-b from-muted/30 to-background p-5">
+      <p className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <FolderOpenIcon className="size-3.5" />
+        Cada pestaña es un documento que debería existir en esta carpeta.
+      </p>
+      <div className="space-y-5">
+        {etapas.map((etapa, i) => (
+          <div key={etapa.codigo}>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+              {etapa.etiqueta}
+            </p>
+            <div className="flex flex-wrap gap-2.5">
+              {etapa.requisitos.map((requisito) => (
+                <PestanaCarpeta
+                  key={requisito.tipo}
+                  requisito={requisito}
+                  docs={porTipo.get(requisito.tipo) ?? []}
+                  excepcion={excepcionPorTipo.get(requisito.tipo) ?? null}
+                  etapaAlcanzada={i <= indiceActual}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 flex flex-wrap gap-4 border-t pt-4 text-[11px] text-muted-foreground">
+        {(Object.keys(ESTILO_CARPETA) as ColorCarpeta[]).map((color) => {
+          const { icono: Icono, etiqueta, clase } = ESTILO_CARPETA[color];
+          return (
+            <span key={color} className="flex items-center gap-1.5">
+              <span className={cn("flex size-4 items-center justify-center rounded-full border", clase)}>
+                <Icono className="size-2.5" />
+              </span>
+              {etiqueta}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PestanaCarpeta({
+  requisito,
+  docs,
+  excepcion,
+  etapaAlcanzada,
+}: {
+  requisito: RequisitoDocumento;
+  docs: DocumentoDetalle[];
+  excepcion: ExcepcionDocumental | null;
+  etapaAlcanzada: boolean;
+}) {
+  const estado = estadoDe(docs, excepcion !== null);
+  const color = colorCarpetaDe(estado, requisito, etapaAlcanzada);
+  const { clase, icono: Icono, etiqueta } = ESTILO_CARPETA[color];
+
+  const detalle = excepcion
+    ? `Excepción legacy: ${excepcion.motivo}`
+    : estado === "CANCELADO"
+      ? "Cancelado sin sustituto vigente: pérdida registrada en el expediente."
+      : requisito.proposito;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "relative flex min-w-[104px] flex-col items-start gap-1.5 rounded-lg rounded-tl-none border-2 px-3 py-2.5 text-left shadow-sm transition-transform hover:-translate-y-0.5",
+            clase,
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className={cn("absolute -top-2 left-2.5 h-2 w-7 rounded-t-md border-2 border-b-0", clase)}
+          />
+          <Icono className="size-3.5" />
+          <span className="font-mono text-[11px] font-semibold">{requisito.tipo}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-72">
+        <PopoverHeader>
+          <PopoverTitle>
+            {NOMBRE_TIPO[requisito.tipo] ?? requisito.tipo}
+            <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
+              {requisito.tipo}
+            </span>
+          </PopoverTitle>
+          <PopoverDescription className="leading-relaxed">{detalle}</PopoverDescription>
+        </PopoverHeader>
+        <p className={cn("mt-3 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium", clase)}>
+          <Icono className="size-3" />
+          {etiqueta}
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
  * Línea de tiempo del expediente: documentos y ciclo de vida UNIDOS.
  * Cada etapa es un folder desplegable con lo que contiene y lo que falta;
@@ -158,6 +321,7 @@ export function LineaTiempoExpediente({
   const indiceActual = etapas.findIndex((e) => e.codigo === etapaActual);
   const excepcionPorTipo = new Map(excepciones.map((e) => [e.tipo_codigo, e]));
 
+  const [vista, setVista] = useState<"linea" | "carpeta">("linea");
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set([etapaActual]));
   const [subirDoc, setSubirDoc] = useState<DocumentoDetalle | null>(null);
   const [cancelarDoc, setCancelarDoc] = useState<DocumentoDetalle | null>(null);
@@ -280,7 +444,48 @@ export function LineaTiempoExpediente({
 
   return (
     <div>
-      {etapas.map((etapa, i) => {
+      <div className="mb-4 flex justify-end">
+        <div className="inline-flex rounded-full border bg-background p-0.5 text-xs shadow-xs">
+          <button
+            type="button"
+            onClick={() => setVista("linea")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors",
+              vista === "linea"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <ListIcon className="size-3.5" />
+            Línea de tiempo
+          </button>
+          <button
+            type="button"
+            onClick={() => setVista("carpeta")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors",
+              vista === "carpeta"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <FolderIcon className="size-3.5" />
+            Carpeta
+          </button>
+        </div>
+      </div>
+
+      {vista === "carpeta" && (
+        <VistaCarpeta
+          etapas={etapas}
+          porTipo={porTipo}
+          excepcionPorTipo={excepcionPorTipo}
+          indiceActual={indiceActual}
+        />
+      )}
+
+      {vista === "linea" &&
+      etapas.map((etapa, i) => {
         const IconoEtapa = ICONO_ETAPA[etapa.codigo] ?? FolderOpenIcon;
         const abierta = abiertas.has(etapa.codigo);
         const esActual = etapa.codigo === etapaActual;
