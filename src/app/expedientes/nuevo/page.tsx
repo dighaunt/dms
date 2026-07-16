@@ -22,7 +22,8 @@ import { separarMiles, soloDigitos } from "@/lib/numeros";
 import {
   LONGITUD_MAXIMA_DATO_UNIDAD,
   MAXIMO_KILOMETRAJE_UNIDAD,
-  MAXIMO_REFRENDOS_ANIO,
+  MAXIMO_ANIO_REFRENDO,
+  MINIMO_ANIO_REFRENDO,
 } from "@/lib/unidad";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BotonCopiar } from "@/components/boton-copiar";
@@ -71,7 +72,10 @@ const esquema = z.object({
   numeroFacturaVigente: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
   numeroConstanciaRepuve: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
   numeroTarjetaCirculacion: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
-  refrendosAnio: z.coerce.number<string | number>().int().min(0).max(MAXIMO_REFRENDOS_ANIO),
+  refrendosAnio: z.coerce.number<string | number>()
+    .int()
+    .min(MINIMO_ANIO_REFRENDO, `Desde ${MINIMO_ANIO_REFRENDO}`)
+    .max(MAXIMO_ANIO_REFRENDO, `Hasta ${MAXIMO_ANIO_REFRENDO}`),
   origen: z.enum(["PROPIA", "CONSIGNADA"], { error: "Elige el origen" }),
 });
 
@@ -134,7 +138,7 @@ export default function NuevoExpedientePage() {
       numeroFacturaVigente: "",
       numeroConstanciaRepuve: "NO APLICA",
       numeroTarjetaCirculacion: "NO APLICA",
-      refrendosAnio: 0,
+      refrendosAnio: "",
       origen: undefined,
     },
   });
@@ -503,8 +507,9 @@ export default function NuevoExpedientePage() {
                             name="refrendosAnio"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Refrendos al año</FormLabel>
-                                <FormControl><Input {...field} type="number" min={0} max={MAXIMO_REFRENDOS_ANIO} /></FormControl>
+                                <FormLabel>Año del último refrendo</FormLabel>
+                                <FormControl><Input {...field} type="number" min={MINIMO_ANIO_REFRENDO} max={MAXIMO_ANIO_REFRENDO} placeholder="2026" /></FormControl>
+                                <FormDescription>Tal como consta en la documentación de la unidad.</FormDescription>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -603,7 +608,7 @@ export default function NuevoExpedientePage() {
                           ["Factura vigente", valores.numeroFacturaVigente || "—"],
                           ["Constancia REPUVE", valores.numeroConstanciaRepuve || "—"],
                           ["Tarjeta de circulación", valores.numeroTarjetaCirculacion || "—"],
-                          ["Refrendos al año", String(valores.refrendosAnio ?? "—")],
+                          ["Año del último refrendo", String(valores.refrendosAnio ?? "—")],
                           ["Origen", valores.origen === "PROPIA" ? "Propia (C-03)" : "Consignada (C-04)"],
                         ].map(([k, v]) => (
                           <div key={k as string} className="flex justify-between gap-4 px-4 py-2.5 text-sm">

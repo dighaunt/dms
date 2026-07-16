@@ -10,7 +10,8 @@ import { separarMiles, soloDigitos } from "@/lib/numeros";
 import {
   LONGITUD_MAXIMA_DATO_UNIDAD,
   MAXIMO_KILOMETRAJE_UNIDAD,
-  MAXIMO_REFRENDOS_ANIO,
+  MAXIMO_ANIO_REFRENDO,
+  MINIMO_ANIO_REFRENDO,
 } from "@/lib/unidad";
 import { Button } from "@/components/ui/button";
 import {
@@ -90,8 +91,11 @@ export function UnidadDatos({
       toast.error(`El kilometraje máximo es ${separarMiles(MAXIMO_KILOMETRAJE_UNIDAD)} km`);
       return;
     }
-    if (refrendosV !== "" && Number(refrendosV) > MAXIMO_REFRENDOS_ANIO) {
-      toast.error(`Los refrendos al año no pueden exceder ${MAXIMO_REFRENDOS_ANIO}`);
+    if (
+      refrendosV !== "" &&
+      (Number(refrendosV) < MINIMO_ANIO_REFRENDO || Number(refrendosV) > MAXIMO_ANIO_REFRENDO)
+    ) {
+      toast.error(`El año del último refrendo debe estar entre ${MINIMO_ANIO_REFRENDO} y ${MAXIMO_ANIO_REFRENDO}`);
       return;
     }
     setGuardando(true);
@@ -232,13 +236,13 @@ export function UnidadDatos({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="unidad-refrendos">Refrendos al año</Label>
+            <Label htmlFor="unidad-refrendos">Año del último refrendo</Label>
             <Input
               id="unidad-refrendos"
               inputMode="numeric"
               value={refrendosV}
               onChange={(e) => setRefrendosV(soloDigitos(e.target.value))}
-              placeholder="0"
+              placeholder="2026"
             />
           </div>
         </div>

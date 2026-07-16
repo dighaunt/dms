@@ -11,7 +11,8 @@ import { withTransaction } from "@/lib/db";
 import {
   LONGITUD_MAXIMA_DATO_UNIDAD,
   MAXIMO_KILOMETRAJE_UNIDAD,
-  MAXIMO_REFRENDOS_ANIO,
+  MAXIMO_ANIO_REFRENDO,
+  MINIMO_ANIO_REFRENDO,
 } from "@/lib/unidad";
 
 const textoUnidad = z.string().trim().min(1).max(LONGITUD_MAXIMA_DATO_UNIDAD);
@@ -33,7 +34,7 @@ const bodySchema = z.object({
   numeroFacturaVigente: textoUnidad,
   numeroConstanciaRepuve: textoUnidad,
   numeroTarjetaCirculacion: textoUnidad,
-  refrendosAnio: z.number().int().min(0).max(MAXIMO_REFRENDOS_ANIO),
+  refrendosAnio: z.number().int().min(MINIMO_ANIO_REFRENDO).max(MAXIMO_ANIO_REFRENDO),
   origen: z.enum(["PROPIA", "CONSIGNADA"]),
 });
 
