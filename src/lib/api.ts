@@ -9,32 +9,76 @@ import { TIPOS_LEGACY } from "@/lib/juego-documental";
 
 export { TIPOS_LEGACY };
 
+type ErrorBaseDatos = {
+  code?: string;
+  message?: string;
+};
+
 /**
- * Errores de negocio (RAISE EXCEPTION en las funciones de BD) → 409 con el
- * mensaje literal: son las reglas del manual explicadas y la UI las muestra
- * tal cual. Validación → 400. Nunca 500 silencioso.
+ * Las reglas de negocio se redactan en las funciones SQL y pueden viajar a
+ * la UI. Los errores de infraestructura y los detalles de PostgreSQL no: no
+ * ayudan a la persona operadora y pueden revelar el esquema interno.
  */
+function mensajeReglaDeNegocio(error: ErrorBaseDatos): string {
+  const mensaje = error.message?.trim();
+  if (
+    mensaje &&
+    mensaje.length <= 500 &&
+    !/\b(?:postgres(?:ql)?|sqlstate|constraint|duplicate key|syntax error|relation|column|stack|query failed|error:|failed)\b/i.test(mensaje) &&
+    /(?:[áéíóúñ]|\b(?:el|la|los|las|un|una|no|para|porque|de|del|en|con|se|debe|puede|requiere|expediente|documento|datos|correo|contraseña|sesión|usuario|archivo|operación)\b)/i.test(mensaje)
+  ) {
+    return mensaje;
+  }
+  return "La operación no se puede realizar porque no cumple las reglas del expediente.";
+}
+
+/** Traduce excepciones de la persistencia a respuestas seguras para la UI. */
 export function respuestaError(error: unknown): NextResponse {
-  const pgError = error as { code?: string; message?: string; detail?: string };
+  const pgError = error as ErrorBaseDatos;
+  if (
+    pgError.code?.startsWith("08") ||
+    ["53300", "57P01", "57P02", "57P03"].includes(pgError.code ?? "")
+  ) {
+    console.error("Servicio de base de datos no disponible:", error);
+    return NextResponse.json(
+      {
+        error:
+          "El servicio de datos no está disponible temporalmente. Intenta de nuevo y, si continúa, avisa al administrador.",
+      },
+      { status: 503 },
+    );
+  }
   switch (pgError.code) {
     case "P0001": // raise_exception: candados del manual
-      return NextResponse.json({ error: pgError.message }, { status: 409 });
+      return NextResponse.json({ error: mensajeReglaDeNegocio(pgError) }, { status: 409 });
     case "23505": // unique_violation (VIN duplicado, pago repetido, etc.)
       return NextResponse.json(
-        { error: "Registro duplicado", detalle: pgError.detail ?? pgError.message },
+        { error: "No se guardó porque ya existe un registro con esos datos." },
+        { status: 409 },
+      );
+    case "40001": // serialization_failure
+    case "40P01": // deadlock_detected
+      return NextResponse.json(
+        { error: "La operación coincidió con otro cambio. Intenta guardarla de nuevo." },
         { status: 409 },
       );
     case "23503": // foreign_key_violation
     case "23514": // check_violation
+    case "23502": // not_null_violation
     case "22P02": // invalid_text_representation
+    case "22001": // string_data_right_truncation
+    case "22003": // numeric_value_out_of_range
       return NextResponse.json(
-        { error: "Datos inválidos", detalle: pgError.detail ?? pgError.message },
+        { error: "Revisa los datos capturados: falta un dato obligatorio o alguno no es válido." },
         { status: 400 },
       );
     default:
       console.error("Error no manejado en API:", error);
       return NextResponse.json(
-        { error: "Error interno", detalle: pgError.message ?? String(error) },
+        {
+          error:
+            "No fue posible completar la operación por un problema temporal del servidor. Intenta de nuevo y, si continúa, avisa al administrador.",
+        },
         { status: 500 },
       );
   }
@@ -64,7 +108,10 @@ export async function leerBody<Schema extends z.ZodType>(
   } catch {
     return {
       data: null,
-      error: NextResponse.json({ error: "Body JSON inválido" }, { status: 400 }),
+      error: NextResponse.json(
+        { error: "El formato de la solicitud no es válido. Revisa los datos e inténtalo de nuevo." },
+        { status: 400 },
+      ),
     };
   }
   const parsed = schema.safeParse(crudo);
@@ -76,9 +123,13 @@ export async function leerBody<Schema extends z.ZodType>(
 export async function requerirUsuario(): Promise<
   { usuario: UsuarioSesion; error: null } | { usuario: null; error: NextResponse }
 > {
-  const usuario = await getUsuarioSesion();
-  if (!usuario) return { usuario: null, error: respuesta401() };
-  return { usuario, error: null };
+  try {
+    const usuario = await getUsuarioSesion();
+    if (!usuario) return { usuario: null, error: respuesta401() };
+    return { usuario, error: null };
+  } catch (error) {
+    return { usuario: null, error: respuestaError(error) };
+  }
 }
 
 /** Exige sesión de administrador global (nivel N3). */
@@ -126,29 +177,37 @@ export async function requerirExpedienteEditable(
   expedienteId: number,
   usuario: UsuarioSesion,
 ): Promise<NextResponse | null> {
-  const cierre = await query<{ cerrado: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM traza.expediente_cierre WHERE expediente_id = $1
-     ) AS cerrado`,
-    [expedienteId],
-  );
-  if (cierre.rows[0]?.cerrado && usuario.nivel !== "N3") {
-    return NextResponse.json(
-      { error: "El expediente está cerrado. Solo un administrador N3 puede modificarlo." },
-      { status: 409 },
+  try {
+    const cierre = await query<{ cerrado: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM traza.expediente_cierre WHERE expediente_id = $1
+       ) AS cerrado`,
+      [expedienteId],
     );
+    if (cierre.rows[0]?.cerrado && usuario.nivel !== "N3") {
+      return NextResponse.json(
+        { error: "El expediente está cerrado. Solo un administrador N3 puede modificarlo." },
+        { status: 409 },
+      );
+    }
+    return null;
+  } catch (error) {
+    return respuestaError(error);
   }
-  return null;
 }
 
 export async function requerirDocumentoEditable(
   documentoId: number,
   usuario: UsuarioSesion,
 ): Promise<NextResponse | null> {
-  const documento = await query<{ expediente_id: number }>(
-    `SELECT expediente_id FROM traza.documento WHERE id = $1`,
-    [documentoId],
-  );
-  if ((documento.rowCount ?? 0) === 0) return respuesta404("Documento no encontrado");
-  return requerirExpedienteEditable(documento.rows[0].expediente_id, usuario);
+  try {
+    const documento = await query<{ expediente_id: number }>(
+      `SELECT expediente_id FROM traza.documento WHERE id = $1`,
+      [documentoId],
+    );
+    if ((documento.rowCount ?? 0) === 0) return respuesta404("Documento no encontrado");
+    return requerirExpedienteEditable(documento.rows[0].expediente_id, usuario);
+  } catch (error) {
+    return respuestaError(error);
+  }
 }

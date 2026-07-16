@@ -348,6 +348,18 @@ const COLUMNA_SUELTA =
 const FILA_CON_CONCEPTO =
   /^(.{3,70}?)\s+[-—]\s+(PRESENTE|ORIG|ESTADO|SIN ADEUDO|CON ADEUDO|MONTO)/;
 
+// Los 471 campos de texto del AcroForm oficial tienen /MaxLen 100. El ancho
+// del widget no es un límite de datos: Acrobat ajusta la fuente automáticamente
+// (su apariencia usa tamaño 0).
+const LONGITUD_MAXIMA_TEXTO_PDF = 100;
+
+// Contrato de almacenamiento de traza.{expediente_dato,documento_campo_valor}.
+// numeric(18,2) admite hasta 16 enteros y 2 decimales; kilometraje_ingreso
+// es integer de PostgreSQL, no un texto limitado por el ancho del PDF.
+export const DIGITOS_ENTEROS_MAXIMOS_NUMERO = 16;
+export const DECIMALES_MAXIMOS_NUMERO = 2;
+export const MAXIMO_KILOMETRAJE = 2_147_483_647;
+
 function etiquetasConContextoDeFila(fields: CampoGenerado[]): Map<string, string> {
   const result = new Map<string, string>();
   let concepto: string | null = null;
@@ -387,6 +399,17 @@ function buildTemplate(template: PlantillaGenerada): PlantillaFormulario {
     const otherDetail =
       raw.acroType === "Tx" && isOtherDetail(raw.name, rawLabel.replace(/\([^)]*\)/g, ""));
     const override = OVERRIDES[template.code]?.[raw.name] ?? {};
+    const inputType = raw.acroType === "Tx"
+      ? /\bHORA\b/i.test(rawLabel)
+        ? "time"
+        : /TELÉFONO|TELEFONO/i.test(rawLabel)
+          ? "tel"
+          : /CORREO/i.test(rawLabel)
+            ? "email"
+            : /FECHA/i.test(rawLabel) && !/FIRMA|OBSERV/i.test(rawLabel)
+              ? "date"
+              : raw.inputType
+      : raw.inputType;
     const field: CampoFormulario = {
       ...raw,
       label: rawLabel,
@@ -394,17 +417,7 @@ function buildTemplate(template: PlantillaGenerada): PlantillaFormulario {
       systemToken,
       derivedFrom,
       reuseKey: systemToken || derivedFrom ? undefined : reuseKey(template.code, rawLabel),
-      inputType: raw.acroType === "Tx"
-        ? /\bHORA\b/i.test(rawLabel)
-          ? "time"
-          : /TELÉFONO|TELEFONO/i.test(rawLabel)
-            ? "tel"
-            : /CORREO/i.test(rawLabel)
-              ? "email"
-              : /FECHA/i.test(rawLabel) && !/FIRMA|OBSERV/i.test(rawLabel)
-                ? "date"
-                : raw.inputType
-        : raw.inputType,
+      inputType,
       required:
         systemToken || derivedFrom || otherDetail || isObservations || conditionalByLabel
           ? false
@@ -418,7 +431,7 @@ function buildTemplate(template: PlantillaGenerada): PlantillaFormulario {
             : undefined,
       closeWithHyphens:
         raw.acroType === "Tx" &&
-        !["date", "number"].includes(raw.inputType) &&
+        !["date", "number", "email", "tel", "time"].includes(inputType) &&
         !systemToken,
       ...override,
     };
@@ -619,24 +632,21 @@ export function camposRequeridos(
   return required;
 }
 
-/** Límite compatible con el ancho real del widget y con sus reglas semánticas. */
+/** Límite de captura: usa contratos semánticos; el PDF nunca limita por ancho visual. */
 export function longitudMaximaCampo(field: CampoFormulario): number {
   if (["boolean", "radio", "select"].includes(field.inputType)) {
     return Math.max(2, ...field.options.map((option) => option.length));
   }
+  if (field.inputType === "email") return LONGITUD_MAXIMA_TEXTO_PDF;
   if (field.inputType === "tel") return 10;
   if (field.inputType === "date") return 10;
   if (field.inputType === "time") return 5;
+  if (field.systemToken === "kilometraje") return String(MAXIMO_KILOMETRAJE).length;
+  if (field.inputType === "number") {
+    return DIGITOS_ENTEROS_MAXIMOS_NUMERO + DECIMALES_MAXIMOS_NUMERO + 1;
+  }
   if (field.reuseKey?.endsWith(".rfc") || /\bRFC\b/i.test(field.label)) return 13;
   if (field.reuseKey?.endsWith(".curp") || /\bCURP\b/i.test(field.label)) return 18;
 
-  const rect = field.widgets[0]?.rect;
-  const width = rect ? rect[2] - rect[0] : 240;
-  const height = rect ? rect[3] - rect[1] : 14;
-  const charactersPerLine = Math.max(8, Math.min(90, Math.floor(width / 4.6)));
-  if (field.inputType === "textarea") {
-    const lines = Math.max(2, Math.floor(height / 10));
-    return Math.min(4_000, charactersPerLine * lines);
-  }
-  return Math.max(4, charactersPerLine - (field.closeWithHyphens ? 4 : 0));
+  return LONGITUD_MAXIMA_TEXTO_PDF;
 }

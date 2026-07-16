@@ -42,7 +42,7 @@ import {
   objetivoDeCandado,
   type ObjetivoCandado,
 } from "@/lib/candados-ui";
-import { postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
+import { mensajeErrorSinRespuesta, postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
 import type {
   DocumentoDetalle,
   ExcepcionDocumental,
@@ -1854,7 +1854,7 @@ function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
   );
 }
 
-// Dropzone → presign → PUT a R2 → sha256 (Web Crypto) → confirmar.
+// Dropzone → URL prefirmada de Vercel Blob → sha256 (Web Crypto) → confirmar.
 function DialogSubirEscaneo({
   doc,
   onClose,
@@ -1940,12 +1940,10 @@ function DialogSubirEscaneo({
               contentType: archivo.type,
             }),
           });
-        } catch (error) {
-          toast.error(
-            error instanceof Error
-              ? `${archivo.name}: no se pudo subir al almacén (${error.message})`
-              : `${archivo.name}: no se pudo subir al almacén`,
-          );
+        } catch {
+          toast.error(`No se pudo subir «${archivo.name}»`, {
+            description: mensajeErrorSinRespuesta(),
+          });
           pendientes.push(archivo);
           continue;
         }

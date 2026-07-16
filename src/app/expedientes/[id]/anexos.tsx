@@ -22,7 +22,7 @@ import {
   ETIQUETA_EXIGENCIA,
   type FichaAnexo,
 } from "@/lib/anexos";
-import { postJson, sha256Hex } from "@/lib/cliente-api";
+import { mensajeErrorSinRespuesta, postJson, sha256Hex } from "@/lib/cliente-api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -384,8 +384,8 @@ function DialogSubirAnexo({
             contentType: archivo.type,
           }),
         });
-      } catch (error) {
-        toast.error(error instanceof Error ? `No se pudo subir al almacén: ${error.message}` : "No se pudo subir al almacén");
+      } catch {
+        toast.error("No se pudo subir el anexo", { description: mensajeErrorSinRespuesta() });
         return;
       }
 

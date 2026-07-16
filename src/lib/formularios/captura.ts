@@ -9,7 +9,10 @@ import { monedaEnLetras, separarMiles } from "@/lib/numeros";
 import {
   aplicarReglas,
   camposRequeridos,
+  DECIMALES_MAXIMOS_NUMERO,
+  DIGITOS_ENTEROS_MAXIMOS_NUMERO,
   longitudMaximaCampo,
+  MAXIMO_KILOMETRAJE,
   obtenerPlantillaFormulario,
   type CampoFormulario,
   type PlantillaFormulario,
@@ -156,22 +159,27 @@ function normalizeValue(field: CampoFormulario, raw: string): string {
   // No son una captura numérica ni deben evaluarse contra el ancho del widget.
   if (["NO APLICA", "SIN OBSERVACIONES"].includes(value)) return value;
 
-  const maxLength = longitudMaximaCampo(field);
   if (field.inputType === "number") {
-    // PostgreSQL entrega numeric como "365.00". Validar ese texto contra el
-    // ancho del PDF hacía fallar un valor válido al reabrir el borrador.
     const normalized = value.replace(/,/g, "");
-    const number = Number(normalized);
-    if (!Number.isFinite(number) || number < 0) {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(normalized);
+    if (!match || (match[2]?.length ?? 0) > DECIMALES_MAXIMOS_NUMERO) {
       throw new Error(`Número inválido para ${field.label}`);
     }
-    const canonical = String(number);
-    if (canonical.length > maxLength) {
-      throw new Error(`El campo ${field.label} admite máximo ${maxLength} caracteres`);
+    const integer = match[1].replace(/^0+(?=\d)/, "");
+    if (integer.length > DIGITOS_ENTEROS_MAXIMOS_NUMERO) {
+      throw new Error(
+        `El campo ${field.label} admite hasta ${DIGITOS_ENTEROS_MAXIMOS_NUMERO} dígitos enteros`,
+      );
     }
-    return canonical;
+    if (field.systemToken === "kilometraje") {
+      if (match[2] || BigInt(integer) > BigInt(MAXIMO_KILOMETRAJE)) {
+        throw new Error(`El kilometraje debe ser un entero entre 0 y ${MAXIMO_KILOMETRAJE}`);
+      }
+    }
+    return match[2] ? `${integer}.${match[2]}` : integer;
   }
 
+  const maxLength = longitudMaximaCampo(field);
   if (value.length > maxLength) {
     throw new Error(`El campo ${field.label} admite máximo ${maxLength} caracteres`);
   }
@@ -334,8 +342,8 @@ function tipoDb(field: CampoFormulario, value: string): TipoDb {
   return "TEXTO";
 }
 
-function columnasValor(tipo: TipoDb, value: string): [string | null, number | null, string | null, boolean | null] {
-  if (tipo === "NUMERO") return [null, Number(value.replace(/,/g, "")), null, null];
+function columnasValor(tipo: TipoDb, value: string): [string | null, string | null, string | null, boolean | null] {
+  if (tipo === "NUMERO") return [null, value.replace(/,/g, ""), null, null];
   if (tipo === "FECHA") return [null, null, value, null];
   if (tipo === "BOOLEANO") return [null, null, null, value === "SI"];
   return [value, null, null, null];

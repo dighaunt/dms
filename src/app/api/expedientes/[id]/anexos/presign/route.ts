@@ -95,7 +95,10 @@ export async function POST(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+    return NextResponse.json(
+      { error: "La solicitud de carga no tiene un formato válido." },
+      { status: 400 },
+    );
   }
 
   const evento = eventoSubidaSchema.safeParse(body);

@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { mensajeErrorRespuesta, mensajeErrorSinRespuesta } from "@/lib/cliente-api";
 import { etiquetaAlternativa } from "@/lib/formularios/etiquetas";
 import type { CampoCaptura, CapturaDocumento } from "@/lib/formularios/tipos";
 import { cn } from "@/lib/utils";
@@ -132,11 +133,18 @@ export function WizardDocumento({
     const controller = new AbortController();
     fetch(`/api/documentos/${documentoId}/captura`, { signal: controller.signal })
       .then(async (response) => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error ?? `Error ${response.status}`);
+        const body = await response.json().catch(() => undefined);
+        if (!response.ok) {
+          toast.error("No se pudo abrir el formulario", {
+            description: mensajeErrorRespuesta(response.status, body),
+          });
+          onClose();
+          return null;
+        }
         return body as CapturaDocumento;
       })
       .then((captura) => {
+        if (!captura) return;
         const initial = valorInicial(captura);
         setData(captura);
         setValues(initial);
@@ -146,7 +154,7 @@ export function WizardDocumento({
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        toast.error("No se pudo abrir el wizard", { description: String(error.message ?? error) });
+        toast.error("No se pudo abrir el formulario", { description: mensajeErrorSinRespuesta() });
         onClose();
       });
     return () => controller.abort();
@@ -290,7 +298,7 @@ export function WizardDocumento({
           );
           if (firstSection >= 0) setSectionIndex(firstSection);
         }
-        toast.error(body.error ?? `Error ${response.status}`);
+        toast.error(mensajeErrorRespuesta(response.status, body));
         return;
       }
       const captura = body as CapturaDocumento;
@@ -307,6 +315,8 @@ export function WizardDocumento({
       } else {
         toast.success("Borrador guardado");
       }
+    } catch {
+      toast.error("No se pudo guardar el formulario", { description: mensajeErrorSinRespuesta() });
     } finally {
       setSaving(null);
     }
@@ -320,14 +330,19 @@ export function WizardDocumento({
         method: "POST",
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? `Error ${response.status}`);
+      if (!response.ok) {
+        toast.error("No se pudo registrar la confirmación", {
+          description: mensajeErrorRespuesta(response.status, body),
+        });
+        return;
+      }
       setData((current) => current ? { ...current, guiaConfirmada: true } : current);
       toast.success("Guía confirmada", {
         description: "Tu confirmación quedó registrada antes de iniciar la captura.",
       });
-    } catch (error) {
+    } catch {
       toast.error("No se pudo registrar la confirmación", {
-        description: String(error instanceof Error ? error.message : error),
+        description: mensajeErrorSinRespuesta(),
       });
     } finally {
       setConfirmandoGuia(false);
@@ -809,11 +824,11 @@ function FieldInput({
         : "text";
   const semanticKey = `${field.label} ${field.name}`;
   const normalize = (raw: string) => {
-    if (field.inputType === "tel") return raw.replace(/\D/g, "").slice(0, 10);
+    if (field.inputType === "tel") return raw.replace(/\D/g, "");
     if (/\b(?:RFC|CURP)\b/i.test(semanticKey)) {
-      return raw.toLocaleUpperCase("es-MX").slice(0, field.maxLength);
+      return raw.toLocaleUpperCase("es-MX");
     }
-    return raw.slice(0, field.maxLength);
+    return raw;
   };
   return (
     <Input

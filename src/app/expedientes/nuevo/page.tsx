@@ -16,6 +16,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { mensajeErrorRespuesta, mensajeErrorSinRespuesta } from "@/lib/cliente-api";
 import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { separarMiles, soloDigitos } from "@/lib/numeros";
 import { BlurFade } from "@/components/ui/blur-fade";
@@ -113,22 +114,24 @@ export default function NuevoExpedientePage() {
   async function abrirExpediente(valores: z.output<typeof esquema>) {
     setEnviando(true);
     try {
-      const res = await fetch("/api/expedientes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...valores,
-          kilometraje: Number(valores.kilometraje),
-        }),
-      });
-      const cuerpo = await res.json();
-      if (!res.ok) {
-        toast.error(cuerpo.error ?? "No se pudo abrir el expediente", {
-          description: cuerpo.detalle,
+      try {
+        const res = await fetch("/api/expedientes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...valores,
+            kilometraje: Number(valores.kilometraje),
+          }),
         });
-        return;
+        const cuerpo: unknown = await res.json().catch(() => undefined);
+        if (!res.ok) {
+          toast.error(mensajeErrorRespuesta(res.status, cuerpo));
+          return;
+        }
+        setResultado(cuerpo as Resultado);
+      } catch {
+        toast.error(mensajeErrorSinRespuesta());
       }
-      setResultado(cuerpo);
     } finally {
       setEnviando(false);
     }

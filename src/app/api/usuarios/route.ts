@@ -12,6 +12,17 @@ const bodySchema = z.object({
   nivel: z.enum(["N1", "N2", "N3"]),
 });
 
+function mensajeAltaUsuario(error: unknown): string {
+  const codigo =
+    error && typeof error === "object" && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  if (typeof codigo === "string" && /(?:already|duplicate|exists)/i.test(codigo)) {
+    return "Ya existe una cuenta con ese correo electrónico.";
+  }
+  return "No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.";
+}
+
 // Alta de usuario por el administrador: crea la cuenta en Neon Auth (vía la
 // admin API del auth server, autenticada con la sesión N3) y registra el
 // nivel en traza.usuario. El registro público sigue deshabilitado.
@@ -30,7 +41,7 @@ export async function POST(request: Request) {
     });
     if (creado.error) {
       return NextResponse.json(
-        { error: creado.error.message ?? "Neon Auth rechazó el alta" },
+        { error: mensajeAltaUsuario(creado.error) },
         { status: 409 },
       );
     }
