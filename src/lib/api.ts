@@ -86,7 +86,11 @@ export function respuestaError(error: unknown): NextResponse {
 
 export function respuesta400(error: z.ZodError): NextResponse {
   return NextResponse.json(
-    { error: "Validación fallida", detalles: error.issues },
+    {
+      error:
+        "Revisa los datos capturados: falta un dato obligatorio o alguno no tiene el formato permitido.",
+      detalles: error.issues,
+    },
     { status: 400 },
   );
 }

@@ -19,6 +19,11 @@ import { cn } from "@/lib/utils";
 import { mensajeErrorRespuesta, mensajeErrorSinRespuesta } from "@/lib/cliente-api";
 import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { separarMiles, soloDigitos } from "@/lib/numeros";
+import {
+  LONGITUD_MAXIMA_DATO_UNIDAD,
+  MAXIMO_KILOMETRAJE_UNIDAD,
+  MAXIMO_REFRENDOS_ANIO,
+} from "@/lib/unidad";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BotonCopiar } from "@/components/boton-copiar";
 import { Button } from "@/components/ui/button";
@@ -46,17 +51,27 @@ const esquema = z.object({
         .length(17, "El VIN tiene exactamente 17 caracteres")
         .regex(VIN_REGEX, "Solo mayúsculas y dígitos; I, O y Q no existen en un VIN"),
     ),
-  marcaNombre: z.string().trim().min(1, "Requerido"),
-  modeloNombre: z.string().trim().min(1, "Requerido"),
+  marcaNombre: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
+  modeloNombre: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
   anioModelo: z.coerce.number<string | number>().int().min(1980, "Desde 1980").max(2100),
-  color: z.string().trim().min(1, "Requerido"),
-  numMotor: z.string().trim().min(1, "Requerido"),
+  color: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
+  numMotor: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
   kilometraje: z
     .string()
     .trim()
     .min(1, "Requerido")
     .regex(/^\d*$/, "Solo números")
-    .refine((valor) => Number(valor) <= 9_999_999, "Máximo 9,999,999 km"),
+    .refine(
+      (valor) => Number(valor) <= MAXIMO_KILOMETRAJE_UNIDAD,
+      `Máximo ${separarMiles(MAXIMO_KILOMETRAJE_UNIDAD)} km`,
+    ),
+  versionTipo: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
+  placas: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
+  entidadEmisora: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
+  numeroFacturaVigente: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
+  numeroConstanciaRepuve: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
+  numeroTarjetaCirculacion: z.string().trim().min(1, "Requerido").max(LONGITUD_MAXIMA_DATO_UNIDAD),
+  refrendosAnio: z.coerce.number<string | number>().int().min(0).max(MAXIMO_REFRENDOS_ANIO),
   origen: z.enum(["PROPIA", "CONSIGNADA"], { error: "Elige el origen" }),
 });
 
@@ -72,7 +87,21 @@ const { useStepper, steps } = defineStepper([
 
 const CAMPOS_POR_PASO: Record<string, (keyof Valores)[]> = {
   vin: ["vin"],
-  unidad: ["marcaNombre", "modeloNombre", "anioModelo", "color", "numMotor", "kilometraje"],
+  unidad: [
+    "marcaNombre",
+    "modeloNombre",
+    "anioModelo",
+    "color",
+    "numMotor",
+    "kilometraje",
+    "versionTipo",
+    "placas",
+    "entidadEmisora",
+    "numeroFacturaVigente",
+    "numeroConstanciaRepuve",
+    "numeroTarjetaCirculacion",
+    "refrendosAnio",
+  ],
   origen: ["origen"],
   confirmar: [],
 };
@@ -99,6 +128,13 @@ export default function NuevoExpedientePage() {
       color: "",
       numMotor: "",
       kilometraje: "",
+      versionTipo: "",
+      placas: "",
+      entidadEmisora: "",
+      numeroFacturaVigente: "",
+      numeroConstanciaRepuve: "NO APLICA",
+      numeroTarjetaCirculacion: "NO APLICA",
+      refrendosAnio: 0,
       origen: undefined,
     },
   });
@@ -288,7 +324,7 @@ export default function NuevoExpedientePage() {
                           Datos de la unidad
                         </h1>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Tal como aparecen en la factura.
+                          Tal como aparecen en la factura y tarjeta de circulación. Se guardan una vez y completan automáticamente los contratos.
                         </p>
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -299,7 +335,7 @@ export default function NuevoExpedientePage() {
                             <FormItem>
                               <FormLabel>Marca</FormLabel>
                               <FormControl>
-                                <Input {...field} placeholder="Nissan" autoFocus />
+                                <Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="Nissan" autoFocus />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -312,7 +348,7 @@ export default function NuevoExpedientePage() {
                             <FormItem>
                               <FormLabel>Modelo</FormLabel>
                               <FormControl>
-                                <Input {...field} placeholder="Versa" />
+                                <Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="Versa" />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -338,7 +374,7 @@ export default function NuevoExpedientePage() {
                             <FormItem>
                               <FormLabel>Color</FormLabel>
                               <FormControl>
-                                <Input {...field} placeholder="Gris plata" />
+                                <Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="Gris plata" />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -351,7 +387,7 @@ export default function NuevoExpedientePage() {
                             <FormItem>
                               <FormLabel>N° de motor</FormLabel>
                               <FormControl>
-                                <Input {...field} placeholder="HR16-123456" />
+                                <Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="HR16-123456" />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -383,6 +419,97 @@ export default function NuevoExpedientePage() {
                             </FormItem>
                           )}
                         />
+                      </div>
+                      <div className="space-y-4 border-t pt-4">
+                        <div>
+                          <h2 className="text-sm font-semibold">Datos para contratos</h2>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            No tendrás que capturarlos de nuevo al emitir C-01, C-02, C-03 o C-04.
+                          </p>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <FormField
+                            control={form.control}
+                            name="versionTipo"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Versión / tipo</FormLabel>
+                                <FormControl><Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="Advance CVT" /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="placas"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Placas</FormLabel>
+                                <FormControl>
+                                  <Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} onChange={(e) => field.onChange(e.target.value.toUpperCase())} placeholder="ABC-123-D" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="entidadEmisora"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Entidad emisora</FormLabel>
+                                <FormControl><Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="Jalisco" /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="numeroFacturaVigente"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>N° de factura vigente</FormLabel>
+                                <FormControl><Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="A-12345" /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="numeroConstanciaRepuve"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>N° de constancia REPUVE</FormLabel>
+                                <FormControl><Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="NO APLICA" /></FormControl>
+                                <FormDescription>Escribe «NO APLICA» si no se cuenta con ella.</FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="numeroTarjetaCirculacion"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>N° de tarjeta de circulación</FormLabel>
+                                <FormControl><Input {...field} maxLength={LONGITUD_MAXIMA_DATO_UNIDAD} placeholder="NO APLICA" /></FormControl>
+                                <FormDescription>Escribe «NO APLICA» cuando no corresponda.</FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="refrendosAnio"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Refrendos al año</FormLabel>
+                                <FormControl><Input {...field} type="number" min={0} max={MAXIMO_REFRENDOS_ANIO} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
                       </div>
                     </div>
                   ),
@@ -470,6 +597,13 @@ export default function NuevoExpedientePage() {
                           ["Color", valores.color || "—"],
                           ["N° de motor", valores.numMotor || "—"],
                           ["Kilometraje", valores.kilometraje ? `${separarMiles(valores.kilometraje)} km` : "—"],
+                          ["Versión / tipo", valores.versionTipo || "—"],
+                          ["Placas", valores.placas || "—"],
+                          ["Entidad emisora", valores.entidadEmisora || "—"],
+                          ["Factura vigente", valores.numeroFacturaVigente || "—"],
+                          ["Constancia REPUVE", valores.numeroConstanciaRepuve || "—"],
+                          ["Tarjeta de circulación", valores.numeroTarjetaCirculacion || "—"],
+                          ["Refrendos al año", String(valores.refrendosAnio ?? "—")],
                           ["Origen", valores.origen === "PROPIA" ? "Propia (C-03)" : "Consignada (C-04)"],
                         ].map(([k, v]) => (
                           <div key={k as string} className="flex justify-between gap-4 px-4 py-2.5 text-sm">

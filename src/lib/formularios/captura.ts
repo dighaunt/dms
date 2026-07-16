@@ -20,7 +20,7 @@ import {
 } from "./catalogo";
 import type { CampoCaptura, CapturaDocumento } from "./tipos";
 
-const RAZON_SOCIAL = "COMERCIALIZADORA AUTOMOTRIZ CLIQUEALO DE MÉXICO S.R.L. DE C.V.";
+const RAZON_SOCIAL = "COMERCIALIZADORA AUTOMOTRIZ CLIQUEALO DE MÉXICO, S. DE R.L. DE C.V.";
 
 export type ContextoDocumento = {
   documentoId: number;
@@ -37,9 +37,16 @@ export type ContextoDocumento = {
   marca: string;
   modelo: string;
   anioModelo: number;
+  versionTipo: string | null;
   color: string | null;
   numMotor: string | null;
   kilometrajeIngreso: number | null;
+  placas: string | null;
+  entidadEmisora: string | null;
+  numeroFacturaVigente: string | null;
+  numeroConstanciaRepuve: string | null;
+  numeroTarjetaCirculacion: string | null;
+  refrendosAnio: number | null;
   estadoF06: "INCOMPLETO" | "COMPLETO" | "LISTO_PARA_VENTA";
   escaneado: boolean;
 };
@@ -90,10 +97,17 @@ function valoresSistema(contexto: ContextoDocumento): Record<TokenSistema, strin
     marcaSubmarca: `${contexto.marca} ${contexto.modelo}`,
     marcaSubmarcaAnio: `${contexto.marca} ${contexto.modelo} / ${contexto.anioModelo}`,
     anio: String(contexto.anioModelo),
+    versionTipo: contexto.versionTipo ?? "",
     color: contexto.color ?? "",
     numMotor: contexto.numMotor ?? "",
     kilometraje:
       contexto.kilometrajeIngreso == null ? "" : separarMiles(contexto.kilometrajeIngreso),
+    placas: contexto.placas ?? "",
+    entidadEmisora: contexto.entidadEmisora ?? "",
+    numeroFacturaVigente: contexto.numeroFacturaVigente ?? "",
+    numeroConstanciaRepuve: contexto.numeroConstanciaRepuve ?? "",
+    numeroTarjetaCirculacion: contexto.numeroTarjetaCirculacion ?? "",
+    refrendosAnio: contexto.refrendosAnio == null ? "" : String(contexto.refrendosAnio),
     fecha: fechaCorta(contexto.emitidoEn),
     fechaApertura: fechaCorta(contexto.abiertoEn),
     emisor: contexto.emisorNombre,
@@ -365,9 +379,16 @@ export async function obtenerContextoDocumento(id: number): Promise<ContextoDocu
     marca: string;
     modelo: string;
     anio_modelo: number;
+    version_tipo: string | null;
     color: string | null;
     num_motor: string | null;
     kilometraje_ingreso: number | null;
+    placas: string | null;
+    entidad_emisora: string | null;
+    numero_factura_vigente: string | null;
+    numero_constancia_repuve: string | null;
+    numero_tarjeta_circulacion: string | null;
+    refrendos_anio: number | null;
     estado_f06: "INCOMPLETO" | "COMPLETO" | "LISTO_PARA_VENTA";
     escaneado: boolean;
   }>(
@@ -375,7 +396,9 @@ export async function obtenerContextoDocumento(id: number): Promise<ContextoDocu
             d.anio, d.consecutivo, d.emitido_en, us.nombre AS emisor_nombre,
             e.anio::text || '-' || lpad(e.consecutivo::text, 3, '0') AS numero_expediente,
             e.abierto_en, e.vin, ma.nombre AS marca, mo.nombre AS modelo,
-            un.anio_modelo, un.color, un.num_motor, un.kilometraje_ingreso,
+            un.anio_modelo, un.version_tipo, un.color, un.num_motor, un.kilometraje_ingreso,
+            un.placas, un.entidad_emisora, un.numero_factura_vigente,
+            un.numero_constancia_repuve, un.numero_tarjeta_circulacion, un.refrendos_anio,
             COALESCE((SELECT h.estado FROM traza.expediente_estado_hist h
                        WHERE h.expediente_id = e.id
                        ORDER BY h.ocurrido_en DESC LIMIT 1), 'INCOMPLETO') AS estado_f06,
@@ -406,9 +429,16 @@ export async function obtenerContextoDocumento(id: number): Promise<ContextoDocu
     marca: row.marca,
     modelo: row.modelo,
     anioModelo: row.anio_modelo,
+    versionTipo: row.version_tipo,
     color: row.color,
     numMotor: row.num_motor,
     kilometrajeIngreso: row.kilometraje_ingreso,
+    placas: row.placas,
+    entidadEmisora: row.entidad_emisora,
+    numeroFacturaVigente: row.numero_factura_vigente,
+    numeroConstanciaRepuve: row.numero_constancia_repuve,
+    numeroTarjetaCirculacion: row.numero_tarjeta_circulacion,
+    refrendosAnio: row.refrendos_anio,
     estadoF06: row.estado_f06,
     escaneado: row.escaneado,
   };
@@ -726,18 +756,47 @@ export async function guardarCapturaDocumento(
   }
 
   await withTransaction(async (client) => {
-    if (masterUpdates.color != null || masterUpdates.numMotor != null || masterUpdates.kilometraje != null) {
+    if (
+      masterUpdates.color != null ||
+      masterUpdates.numMotor != null ||
+      masterUpdates.kilometraje != null ||
+      masterUpdates.versionTipo != null ||
+      masterUpdates.placas != null ||
+      masterUpdates.entidadEmisora != null ||
+      masterUpdates.numeroFacturaVigente != null ||
+      masterUpdates.numeroConstanciaRepuve != null ||
+      masterUpdates.numeroTarjetaCirculacion != null ||
+      masterUpdates.refrendosAnio != null
+    ) {
       await client.query(
         `UPDATE traza.unidad SET
            color = COALESCE(color, $2),
            num_motor = COALESCE(num_motor, $3),
-           kilometraje_ingreso = COALESCE(kilometraje_ingreso, $4)
+           kilometraje_ingreso = COALESCE(kilometraje_ingreso, $4),
+           version_tipo = COALESCE(version_tipo, $5),
+           placas = COALESCE(placas, $6),
+           entidad_emisora = COALESCE(entidad_emisora, $7),
+           numero_factura_vigente = COALESCE(numero_factura_vigente, $8),
+           numero_constancia_repuve = COALESCE(numero_constancia_repuve, $9),
+           numero_tarjeta_circulacion = COALESCE(numero_tarjeta_circulacion, $10),
+           refrendos_anio = COALESCE(refrendos_anio, $11)
          WHERE vin = $1`,
         [
           contexto.vin,
           masterUpdates.color || null,
           masterUpdates.numMotor || null,
-          masterUpdates.kilometraje ? Number(masterUpdates.kilometraje.replace(/,/g, "")) : null,
+          masterUpdates.kilometraje != null
+            ? Number(masterUpdates.kilometraje.replace(/,/g, ""))
+            : null,
+          masterUpdates.versionTipo || null,
+          masterUpdates.placas || null,
+          masterUpdates.entidadEmisora || null,
+          masterUpdates.numeroFacturaVigente || null,
+          masterUpdates.numeroConstanciaRepuve || null,
+          masterUpdates.numeroTarjetaCirculacion || null,
+          masterUpdates.refrendosAnio != null
+            ? Number(masterUpdates.refrendosAnio.replace(/,/g, ""))
+            : null,
         ],
       );
     }

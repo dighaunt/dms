@@ -4,7 +4,7 @@
     "C-01": {
       "code": "C-01",
       "pages": 1,
-      "fieldCount": 32,
+      "fieldCount": 37,
       "sections": [
         {
           "id": "pagina_1",
@@ -791,6 +791,144 @@
             }
           ],
           "order": 31
+        },
+        {
+          "name": "c01_monto_num",
+          "label": "ofrecerla o venderla",
+          "section": "parte_iii_clausulas",
+          "page": 1,
+          "acroType": "Tx",
+          "inputType": "number",
+          "required": true,
+          "multiline": false,
+          "options": [],
+          "scripts": {
+            "V": "var v=parseFloat(String(event.value).replace(/[^0-9.]/g,''));if(!isNaN(v)&&v>0){event.value=util.printf('%,0.2f',v); montoALetra(this,v,'c01_monto_letra');}"
+          },
+          "widgets": [
+            {
+              "page": 0,
+              "rect": [
+                497.89,
+                386.5,
+                567.89,
+                395.5
+              ]
+            }
+          ],
+          "order": 32
+        },
+        {
+          "name": "c01_monto_letra",
+          "label": "terceros durante la vigencia de este contrato, manteniendo el",
+          "section": "parte_iii_clausulas",
+          "page": 1,
+          "acroType": "Tx",
+          "inputType": "text",
+          "required": true,
+          "multiline": false,
+          "options": [],
+          "scripts": {
+            "V": "if(event.value&&String(event.value).indexOf('-')<0){var s=String(event.value).toUpperCase();if(/^(CIEN|MIL)/.test(s)) s='UN '+s;event.value=conRelleno(s,46);}"
+          },
+          "widgets": [
+            {
+              "page": 0,
+              "rect": [
+                32.0,
+                394.9,
+                212.0,
+                403.9
+              ]
+            }
+          ],
+          "order": 33
+        },
+        {
+          "name": "c01_forma_pago",
+          "label": "unidad en las condiciones en que",
+          "section": "parte_iii_clausulas",
+          "page": 1,
+          "acroType": "Tx",
+          "inputType": "text",
+          "required": true,
+          "multiline": false,
+          "options": [],
+          "scripts": {},
+          "widgets": [
+            {
+              "page": 0,
+              "rect": [
+                321.57,
+                394.9,
+                411.57,
+                403.9
+              ]
+            }
+          ],
+          "order": 34
+        },
+        {
+          "name": "c01_precio_total",
+          "label": "SEGUNDA. MONTO Y",
+          "section": "parte_iii_clausulas",
+          "page": 1,
+          "acroType": "Tx",
+          "inputType": "number",
+          "required": true,
+          "multiline": false,
+          "options": [],
+          "scripts": {
+            "V": "var v=parseFloat(String(event.value).replace(/[^0-9.]/g,''));if(!isNaN(v)&&v>0){event.value=util.printf('%,0.2f',v);}"
+          },
+          "widgets": [
+            {
+              "page": 0,
+              "rect": [
+                32.0,
+                403.3,
+                102.0,
+                412.3
+              ]
+            }
+          ],
+          "order": 35
+        },
+        {
+          "name": "c01_mkt",
+          "label": "SÍ NO(marque una opción).",
+          "section": "parte_iii_clausulas",
+          "page": 1,
+          "acroType": "Btn",
+          "inputType": "radio",
+          "required": true,
+          "multiline": false,
+          "options": [
+            "SI",
+            "NO"
+          ],
+          "scripts": {},
+          "widgets": [
+            {
+              "page": 0,
+              "rect": [
+                281.42,
+                494.8,
+                290.42,
+                503.8
+              ]
+            },
+            {
+              "page": 0,
+              "rect": [
+                305.85,
+                494.8,
+                314.85,
+                503.8
+              ]
+            }
+          ],
+          "order": 36
         }
       ]
     },

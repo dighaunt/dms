@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "pdf:audit": "node scripts/auditar-contrato-pdf.cjs",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "db:reconcile-ledger": "node --env-file-if-exists=.env scripts/reconcile-migration-ledger.mjs",
     "db:verify-ledger": "node --env-file-if-exists=.env scripts/reconcile-migration-ledger.mjs --check"

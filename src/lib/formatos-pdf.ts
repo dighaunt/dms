@@ -3,10 +3,63 @@ import "server-only";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { PDFDocument } from "pdf-lib";
+import {
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFRef,
+  PDFString,
+} from "pdf-lib";
 
 import type { PlantillaFormulario } from "@/lib/formularios/catalogo";
 import { valorCerradoParaPdf } from "@/lib/formularios/presentacion";
+
+const NOMBRE_PARENT = PDFName.of("Parent");
+const NOMBRE_CAMPO = PDFName.of("T");
+
+/**
+ * C-01 rev. 1.6 contiene cinco widgets visibles en /Annots que no fueron
+ * declarados en /AcroForm/Fields. pdf-lib enumera sólo el árbol AcroForm y,
+ * por ello, no podía escribir monto, monto en letra, forma de pago, precio ni
+ * consentimiento. Antes de capturar, registramos exclusivamente los widgets
+ * que el catálogo oficial espera; el PDF fuente no se altera en disco.
+ */
+function registrarWidgetsHuerfanos(
+  doc: PDFDocument,
+  template: PlantillaFormulario,
+): void {
+  const form = doc.getForm();
+  const esperados = new Set(template.fields.map((field) => field.name));
+  const registrados = new Set(form.getFields().map((field) => field.getName()));
+
+  for (const page of doc.getPages()) {
+    for (const annotationRef of page.node.Annots()?.asArray() ?? []) {
+      const widget = doc.context.lookup(annotationRef, PDFDict);
+      const parent = widget.get(NOMBRE_PARENT);
+      const field =
+        parent instanceof PDFRef
+          ? doc.context.lookup(parent, PDFDict)
+          : parent instanceof PDFDict
+            ? parent
+            : widget;
+      const name = field.lookupMaybe(NOMBRE_CAMPO, PDFString, PDFHexString)?.decodeText();
+
+      if (!name || !esperados.has(name) || registrados.has(name)) continue;
+
+      const fieldRef =
+        parent instanceof PDFRef
+          ? parent
+          : doc.context.getObjectRef(field) ?? annotationRef;
+      if (!(fieldRef instanceof PDFRef)) {
+        throw new Error(`No se pudo registrar el campo PDF ${name}`);
+      }
+
+      form.acroForm.addField(fieldRef);
+      registrados.add(name);
+    }
+  }
+}
 
 /**
  * Escribe el snapshot completo del wizard sobre el AcroForm oficial.
@@ -27,6 +80,7 @@ export async function renderizarFormularioPdf({
 }): Promise<Uint8Array> {
   const ruta = path.join(process.cwd(), "public", "formatos", `${tipo}.pdf`);
   const doc = await PDFDocument.load(await readFile(ruta));
+  registrarWidgetsHuerfanos(doc, template);
   const form = doc.getForm();
 
   for (const field of template.fields) {

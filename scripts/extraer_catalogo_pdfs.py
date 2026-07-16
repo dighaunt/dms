@@ -185,6 +185,11 @@ def options(field: dict[str, Any], field_type: str, flags: int) -> list[str]:
     if field_type != "/Btn":
         return []
     states = [str(value).lstrip("/") for value in field.get("/_States_", [])]
+    if not states:
+        for child_ref in field.get("/Kids", []):
+            child = child_ref.get_object()
+            appearances = child.get("/AP", {}).get("/N", {})
+            states.extend(str(value).lstrip("/") for value in appearances.keys())
     values = [value for value in states if value not in {"Off", "Type", "Subtype", "BBox", "Resources"}]
     if flags & RADIO_FLAG:
         return list(dict.fromkeys(values))
@@ -215,9 +220,33 @@ def widgets(reader: PdfReader) -> dict[str, list[dict[str, Any]]]:
     return result
 
 
+def fields_from_widgets(reader: PdfReader) -> dict[str, Any]:
+    """Completa el árbol de campos con widgets operativos de cada página.
+
+    Un PDF puede dejar widgets funcionales fuera de /AcroForm/Fields. Acrobat
+    los muestra, pero `get_fields()` no los devuelve; omitirlos convierte un
+    dato contractual real en un hueco invisible para el diálogo.
+    """
+    result = dict(reader.get_fields() or {})
+    for page in reader.pages:
+        for reference in page.get("/Annots", []):
+            widget = reference.get_object()
+            if widget.get("/Subtype") != "/Widget":
+                continue
+            parent_ref = widget.get("/Parent")
+            field = parent_ref.get_object() if parent_ref else widget
+            name = field.get("/T") or widget.get("/T")
+            field_type = field.get("/FT") or widget.get("/FT")
+            flags = int(field.get("/Ff") or widget.get("/Ff") or 0)
+            if not name or not field_type or flags & PUSHBUTTON_FLAG:
+                continue
+            result.setdefault(str(name), field)
+    return result
+
+
 def extract(pdf_path: Path) -> dict[str, Any]:
     reader = PdfReader(str(pdf_path))
-    form_fields = reader.get_fields() or {}
+    form_fields = fields_from_widgets(reader)
     widget_map = widgets(reader)
 
     with pdfplumber.open(pdf_path) as document:

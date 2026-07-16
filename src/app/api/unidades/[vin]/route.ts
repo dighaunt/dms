@@ -3,14 +3,28 @@ import { z } from "zod";
 
 import { leerBody, requerirUsuario, respuesta404, respuestaError } from "@/lib/api";
 import { query } from "@/lib/db";
+import {
+  LONGITUD_MAXIMA_DATO_UNIDAD,
+  MAXIMO_KILOMETRAJE_UNIDAD,
+  MAXIMO_REFRENDOS_ANIO,
+} from "@/lib/unidad";
 
 // Datos complementarios de la unidad (alimentan el prellenado de PDFs).
 // Son datos maestros corregibles — a diferencia de folios e historial, que
 // son append-only. VIN, marca, modelo y año NO se tocan: vienen de factura.
+const datoRequerido = z.string().trim().min(1).max(LONGITUD_MAXIMA_DATO_UNIDAD);
+
 const bodySchema = z.object({
-  color: z.string().trim().max(60).nullable(),
-  numMotor: z.string().trim().max(60).nullable(),
-  kilometraje: z.number().int().min(0).max(9_999_999).nullable(),
+  color: datoRequerido,
+  numMotor: datoRequerido,
+  kilometraje: z.number().int().min(0).max(MAXIMO_KILOMETRAJE_UNIDAD),
+  versionTipo: datoRequerido,
+  placas: datoRequerido,
+  entidadEmisora: datoRequerido,
+  numeroFacturaVigente: datoRequerido,
+  numeroConstanciaRepuve: datoRequerido,
+  numeroTarjetaCirculacion: datoRequerido,
+  refrendosAnio: z.number().int().min(0).max(MAXIMO_REFRENDOS_ANIO),
 });
 
 export async function PATCH(
@@ -29,9 +43,24 @@ export async function PATCH(
   try {
     const actualizado = await query(
       `UPDATE traza.unidad
-          SET color = $2, num_motor = $3, kilometraje_ingreso = $4
+          SET color = $2, num_motor = $3, kilometraje_ingreso = $4,
+              version_tipo = $5, placas = $6, entidad_emisora = $7,
+              numero_factura_vigente = $8, numero_constancia_repuve = $9,
+              numero_tarjeta_circulacion = $10, refrendos_anio = $11
         WHERE vin = $1`,
-      [vin, data.color || null, data.numMotor || null, data.kilometraje],
+      [
+        vin,
+        data.color,
+        data.numMotor,
+        data.kilometraje,
+        data.versionTipo,
+        data.placas,
+        data.entidadEmisora,
+        data.numeroFacturaVigente,
+        data.numeroConstanciaRepuve,
+        data.numeroTarjetaCirculacion,
+        data.refrendosAnio,
+      ],
     );
     if (actualizado.rowCount === 0) return respuesta404("Unidad no encontrada");
     return NextResponse.json({ ok: true });

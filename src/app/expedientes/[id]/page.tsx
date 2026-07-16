@@ -45,13 +45,31 @@ export default async function ExpedienteDetallePage({
   const unidad = await query<{
     num_motor: string | null;
     kilometraje_ingreso: number | null;
+    version_tipo: string | null;
+    placas: string | null;
+    entidad_emisora: string | null;
+    numero_factura_vigente: string | null;
+    numero_constancia_repuve: string | null;
+    numero_tarjeta_circulacion: string | null;
+    refrendos_anio: number | null;
   }>(
-    `SELECT num_motor, kilometraje_ingreso FROM traza.unidad WHERE vin = $1`,
+    `SELECT num_motor, kilometraje_ingreso, version_tipo, placas, entidad_emisora,
+            numero_factura_vigente, numero_constancia_repuve,
+            numero_tarjeta_circulacion, refrendos_anio
+       FROM traza.unidad
+      WHERE vin = $1`,
     [exp.vin],
   );
   const { num_motor, kilometraje_ingreso } = unidad.rows[0] ?? {
     num_motor: null,
     kilometraje_ingreso: null,
+    version_tipo: null,
+    placas: null,
+    entidad_emisora: null,
+    numero_factura_vigente: null,
+    numero_constancia_repuve: null,
+    numero_tarjeta_circulacion: null,
+    refrendos_anio: null,
   };
 
   const iniciales = exp.marca.slice(0, 2).toUpperCase();
@@ -91,6 +109,7 @@ export default async function ExpedienteDetallePage({
               {exp.marca} {exp.modelo} · {exp.anio_modelo}
               {exp.color ? ` · ${exp.color}` : ""}
               {num_motor ? ` · motor ${num_motor}` : ""}
+              {unidad.rows[0]?.placas ? ` · placas ${unidad.rows[0].placas}` : ""}
               {kilometraje_ingreso != null
                 ? ` · ${separarMiles(kilometraje_ingreso)} km al ingreso`
                 : ""}{" "}
@@ -118,6 +137,13 @@ export default async function ExpedienteDetallePage({
                 color={exp.color}
                 numMotor={num_motor}
                 kilometraje={kilometraje_ingreso}
+                versionTipo={unidad.rows[0]?.version_tipo ?? null}
+                placas={unidad.rows[0]?.placas ?? null}
+                entidadEmisora={unidad.rows[0]?.entidad_emisora ?? null}
+                numeroFacturaVigente={unidad.rows[0]?.numero_factura_vigente ?? null}
+                numeroConstanciaRepuve={unidad.rows[0]?.numero_constancia_repuve ?? null}
+                numeroTarjetaCirculacion={unidad.rows[0]?.numero_tarjeta_circulacion ?? null}
+                refrendosAnio={unidad.rows[0]?.refrendos_anio ?? null}
               />
             </div>
           </div>
