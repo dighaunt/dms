@@ -47,6 +47,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { mensajeErrorRespuesta, mensajeErrorSinRespuesta } from "@/lib/cliente-api";
 import { etiquetaAlternativa } from "@/lib/formularios/etiquetas";
 import type { CampoCaptura, CapturaDocumento } from "@/lib/formularios/tipos";
+import { lecturaNumeroAgrupado } from "@/lib/numeros";
 import { cn } from "@/lib/utils";
 
 type ChoiceGroup = CapturaDocumento["choiceGroups"][number];
@@ -774,6 +775,7 @@ function FieldControl({
       {showInput ? (
         <>
           <FieldInput id={id} field={field} value={value} onChange={onChange} />
+          {field.inputType === "number" && <LecturaNumero value={value} />}
           {automatic && (
             <button
               type="button"
@@ -800,6 +802,19 @@ function FieldControl({
       {issue && <IssueMessage message={issue} />}
       {field.help && <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{field.help}</p>}
     </div>
+  );
+}
+
+function LecturaNumero({ value }: { value: string }) {
+  const lectura = lecturaNumeroAgrupado(value);
+  if (!lectura) return null;
+
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs leading-relaxed text-muted-foreground" aria-live="polite">
+      <span className="font-medium text-foreground">Lectura:</span>
+      <span className="font-mono tabular-nums text-foreground">{lectura.agrupado}</span>
+      <span>{lectura.escala}</span>
+    </p>
   );
 }
 
