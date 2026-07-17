@@ -10,11 +10,11 @@ export default function ManualesPage() {
     <DocsPage full tableOfContent={{ enabled: false }} footer={{ enabled: false }} breadcrumb={{ enabled: false }}>
       <DocsTitle>Manuales operativos</DocsTitle>
       <DocsDescription>
-        Consulta M-01 y su anexo M-02 por tema. Cada pagina indica la fuente para que la regla se lea con el contrato y el expediente, no como una respuesta aislada.
+        Consulta M-01 y su anexo M-02 por tema. Cada página indica la fuente para que la regla se lea con el contrato y el expediente, no como una respuesta aislada.
       </DocsDescription>
       <DocsBody className="max-w-none">
         <Callout type="info" title="Antes de capturar o cerrar">
-          Busca la regla, confirma el documento firmado y reune los datos fuente en el orden indicado. Si la causa, evidencia o autorizacion no esta clara, conserva el pendiente y escala antes de registrar un importe o una cancelacion.
+          Busca la regla, confirma el documento firmado y reúne los datos fuente en el orden indicado. Si la causa, evidencia o autorización no está clara, conserva el pendiente y escala antes de registrar un importe o una cancelación.
         </Callout>
 
         <div className="not-prose grid gap-3 sm:grid-cols-2">
@@ -24,8 +24,8 @@ export default function ManualesPage() {
           >
             <BookOpenIcon className="size-5 text-primary" />
             <p className="mt-4 font-mono text-[11px] font-semibold text-primary">M-01 · Libro de consulta</p>
-            <h2 className="mt-1 text-base font-semibold">Operacion, documentos y calculos</h2>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Del ingreso de la unidad a la entrega, con sus candados documentales y formulas fuente.</p>
+            <h2 className="mt-1 text-base font-semibold">Operación, documentos y cálculos</h2>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Del ingreso de la unidad a la entrega, con sus candados documentales y fórmulas fuente.</p>
             <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary">Abrir M-01 <ArrowRightIcon className="size-3.5" /></span>
           </Link>
           <Link
@@ -35,7 +35,7 @@ export default function ManualesPage() {
             <FileCheck2Icon className="size-5 text-primary" />
             <p className="mt-4 font-mono text-[11px] font-semibold text-primary">M-02 · Anexo operativo</p>
             <h2 className="mt-1 text-base font-semibold">Cancelaciones y desistimientos</h2>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Causas, procedimiento, casos borde y propuestas que requieren validacion antes de operar.</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Causas, procedimiento, casos borde y propuestas que requieren validación antes de operar.</p>
             <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary">Abrir M-02 <ArrowRightIcon className="size-3.5" /></span>
           </Link>
         </div>
@@ -46,7 +46,7 @@ export default function ManualesPage() {
             <h2 className="text-lg font-semibold">Lectura guiada</h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            El indice lateral agrupa todas las partes de ambos manuales. El buscador encuentra conceptos dentro de las reglas y abre su pagina; en movil, el indice aparece en el encabezado de manuales.
+            El índice lateral agrupa todas las partes de ambos manuales. El buscador encuentra conceptos dentro de las reglas y abre su página; en móvil, el índice aparece en el encabezado de manuales.
           </p>
         </section>
       </DocsBody>

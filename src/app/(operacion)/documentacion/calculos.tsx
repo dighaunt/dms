@@ -12,7 +12,7 @@ export function CalculosDocumentales() {
         <div className="flex items-center gap-2">
           <CalculatorIcon className="size-4 text-primary" />
           <h2 id="calculos-documentales" className="text-lg font-semibold tracking-tight">
-            Calculos automaticos
+            Cálculos automáticos
           </h2>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -39,7 +39,7 @@ export function CalculosDocumentales() {
           </ol>
         </div>
         <div className="border-t bg-muted/25 p-5 lg:border-t-0 lg:border-l">
-          <p className="text-xs font-medium text-muted-foreground">Formula aplicada</p>
+          <p className="text-xs font-medium text-muted-foreground">Fórmula aplicada</p>
           <p className="mt-2 font-mono text-sm">{c01.formula.replace("p", c01.porcentajeFijo)}</p>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
             P es la pena y R es el monto a devolver: R = A - P. La pena nunca supera OP.

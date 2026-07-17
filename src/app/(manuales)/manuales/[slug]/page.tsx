@@ -20,7 +20,7 @@ export async function generateMetadata({
   const manual = manualPorSlug(slug);
 
   return {
-    title: manual ? `${manual.manual} · ${manual.titulo}` : "Documentacion",
+    title: manual ? `${manual.manual} · ${manual.titulo}` : "Documentación",
     description: manual?.descripcion,
   };
 }

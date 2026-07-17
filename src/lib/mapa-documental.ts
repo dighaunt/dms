@@ -1,5 +1,5 @@
 // Mapa de dependencias del sistema documental M-01: qué es cada documento,
-// cuál es su documento madre y qué destraba. Alimenta el grafo de /documentacion.
+// cuál es su documento madre y qué destraba. Alimenta el grafo de /documentación.
 
 export type FichaDocumento = {
   codigo: string;
