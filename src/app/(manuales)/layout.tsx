@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
 
-import { Toaster } from "@/components/ui/sonner";
+import "./manuales.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,25 +14,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Signawork · Trazabilidad documental",
-  description:
-    "Trazabilidad documental de lote de autos usados conforme al manual M-01 Rev 3.0",
+  title: "Manuales | CLIQUEALO",
+  description: "Consulta operativa de los manuales M-01 y M-02.",
 };
 
-export default function RootLayout({
+export default function ManualesRootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-muted/30">
-        {children}
-        <Toaster richColors position="top-center" />
-      </body>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }
