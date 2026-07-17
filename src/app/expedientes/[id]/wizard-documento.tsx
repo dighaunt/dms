@@ -20,6 +20,13 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  AvisoErrorOperacion,
+  errorOperacionDesdeRespuesta,
+  PanelReglasCalculo,
+  type ErrorOperacion,
+  type ReglaCalculoOperativa,
+} from "@/components/calculos-y-errores-operativos";
 import { GuiaOperativaResumen, GuiaOperativaSheet } from "@/components/guia-operativa-formato";
 import {
   Dialog,
@@ -40,6 +47,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { mensajeErrorRespuesta, mensajeErrorSinRespuesta } from "@/lib/cliente-api";
+import {
+  formatearMontoCalculo,
+  formatearPorcentajeCalculo,
+  vistaCalculoPena,
+} from "@/lib/calculos/pena-convencional";
 import { etiquetaAlternativa } from "@/lib/formularios/etiquetas";
 import type { CampoCaptura, CapturaDocumento } from "@/lib/formularios/tipos";
 import { cn } from "@/lib/utils";
@@ -127,6 +139,14 @@ export function WizardDocumento({
   const [confirmandoGuia, setConfirmandoGuia] = useState(false);
   const [issues, setIssues] = useState<Map<string, string>>(new Map());
   const [optionalActive, setOptionalActive] = useState<Set<string>>(new Set());
+  const [errorCarga, setErrorCarga] = useState<ErrorOperacion | null>(null);
+  const [errorOperacion, setErrorOperacion] = useState<ErrorOperacion | null>(null);
+  const [operacionFallida, setOperacionFallida] = useState<{
+    action: "save" | "complete";
+    advance: boolean;
+  } | null>(null);
+  const [calculoPendientePersistir, setCalculoPendientePersistir] = useState(false);
+  const [intentoCarga, setIntentoCarga] = useState(0);
 
   useEffect(() => {
     if (documentoId == null) return;
@@ -135,10 +155,7 @@ export function WizardDocumento({
       .then(async (response) => {
         const body = await response.json().catch(() => undefined);
         if (!response.ok) {
-          toast.error("No se pudo abrir el formulario", {
-            description: mensajeErrorRespuesta(response.status, body),
-          });
-          onClose();
+          setErrorCarga(errorOperacionDesdeRespuesta(response.status, body));
           return null;
         }
         return body as CapturaDocumento;
@@ -147,6 +164,8 @@ export function WizardDocumento({
         if (!captura) return;
         const initial = valorInicial(captura);
         setData(captura);
+        setErrorCarga(null);
+        setCalculoPendientePersistir(false);
         setValues(initial);
         setOptionalActive(opcionalesActivos(captura, initial));
         setSectionIndex(0);
@@ -154,11 +173,10 @@ export function WizardDocumento({
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        toast.error("No se pudo abrir el formulario", { description: mensajeErrorSinRespuesta() });
-        onClose();
+        setErrorCarga(errorOperacionDesdeRespuesta(0));
       });
     return () => controller.abort();
-  }, [documentoId, onClose]);
+  }, [documentoId, intentoCarga]);
 
   const requiredNames = useMemo(() => {
     const names = new Set(data?.fields.filter((field) => field.baseRequired).map((field) => field.name));
@@ -223,6 +241,54 @@ export function WizardDocumento({
       ? firstItem.field.page
       : data?.fields.find((field) => field.name === firstItem.group.fields[0])?.page ?? 1;
 
+  const reglaCalculoActiva = useMemo<ReglaCalculoOperativa | null>(() => {
+    const calculoPena = data?.calculoPena;
+    if (!calculoPena || calculoPena.configuracion.section !== activeSection?.id) return null;
+
+    const configuracion = calculoPena.configuracion;
+    const vista = vistaCalculoPena(configuracion, values);
+    const canonico = calculoPena.resultadoCanonico;
+    const mostrarCanonico = Boolean(canonico && !calculoPendientePersistir);
+    const entradas = [
+      configuracion.base,
+      ...(configuracion.obligacionPrincipal.name === configuracion.base.name
+        ? []
+        : [configuracion.obligacionPrincipal]),
+      ...(configuracion.porcentaje ? [configuracion.porcentaje] : []),
+    ].map((entrada) => ({
+      campo: entrada.name,
+      etiqueta: entrada.label,
+      valor: values[entrada.name] ?? "",
+      tipo: "numero" as const,
+      obligatoria: true,
+    }));
+
+    return {
+      id: configuracion.version,
+      titulo: configuracion.titulo,
+      formula: configuracion.formula,
+      descripcion: mostrarCanonico
+        ? "Resultado contractual registrado por el motor de datos. No se captura ni se puede sustituir manualmente."
+        : "Vista previa derivada de los importes del contrato. Guarda para que el motor de datos la registre.",
+      entradas,
+      resultado: {
+        etiqueta: "Monto de pena",
+        valor: mostrarCanonico && canonico
+          ? formatearMontoCalculo(canonico.montoPena)
+          : vista.montoPena,
+        ayuda: mostrarCanonico
+          ? `Cálculo registrado con ${formatearPorcentajeCalculo(canonico!.porcentaje)} sobre los valores fuente de este folio.`
+          : "El motor de datos registra el cálculo contractual al guardar.",
+        secundarios: mostrarCanonico && canonico?.montoDevolucion != null
+          ? [{ etiqueta: "Monto a devolver", valor: formatearMontoCalculo(canonico.montoDevolucion) }]
+          : vista.montoDevolucion
+            ? [{ etiqueta: "Monto a devolver", valor: vista.montoDevolucion }]
+          : undefined,
+      },
+      estado: vista.estado === "RESUELTO" ? "calculada" : "pendiente",
+    };
+  }, [activeSection?.id, calculoPendientePersistir, data?.calculoPena, values]);
+
   const liveProgress = useMemo(() => {
     if (!data) return { complete: 0, warnings: 0, missing: 0 };
     const groupsComplete = data.choiceGroups.filter((group) =>
@@ -255,6 +321,15 @@ export function WizardDocumento({
     if (!data) return;
     setValues((current) => aplicarReglasCliente(data.rules, { ...current, [name]: value }));
     clearIssues([name]);
+    setErrorOperacion(null);
+    setOperacionFallida(null);
+    if (data.calculoPena && [
+      data.calculoPena.configuracion.base.name,
+      data.calculoPena.configuracion.obligacionPrincipal.name,
+      data.calculoPena.configuracion.porcentaje?.name,
+    ].includes(name)) {
+      setCalculoPendientePersistir(true);
+    }
   }
 
   function updateGroup(group: ChoiceGroup, selectedName: string) {
@@ -265,6 +340,8 @@ export function WizardDocumento({
       return aplicarReglasCliente(data.rules, next);
     });
     clearIssues(group.fields);
+    setErrorOperacion(null);
+    setOperacionFallida(null);
   }
 
   function toggleOptional(field: CampoCaptura, active: boolean) {
@@ -280,6 +357,7 @@ export function WizardDocumento({
   async function submit(action: "save" | "complete", advance = false) {
     if (!data) return;
     setSaving(action);
+    setErrorOperacion(null);
     try {
       const response = await fetch(`/api/documentos/${data.documentoId}/captura`, {
         method: "PATCH",
@@ -298,6 +376,8 @@ export function WizardDocumento({
           );
           if (firstSection >= 0) setSectionIndex(firstSection);
         }
+        setErrorOperacion(errorOperacionDesdeRespuesta(response.status, body));
+        setOperacionFallida({ action, advance });
         toast.error(mensajeErrorRespuesta(response.status, body));
         return;
       }
@@ -306,7 +386,10 @@ export function WizardDocumento({
       setData(captura);
       setValues(nextValues);
       setOptionalActive(opcionalesActivos(captura, nextValues));
+      setCalculoPendientePersistir(false);
       setIssues(new Map());
+      setErrorOperacion(null);
+      setOperacionFallida(null);
       if (action === "complete") {
         toast.success("Captura validada: el documento quedó resuelto y protegido contra huecos");
         onComplete?.();
@@ -316,6 +399,8 @@ export function WizardDocumento({
         toast.success("Borrador guardado");
       }
     } catch {
+      setErrorOperacion(errorOperacionDesdeRespuesta(0));
+      setOperacionFallida({ action, advance });
       toast.error("No se pudo guardar el formulario", { description: mensajeErrorSinRespuesta() });
     } finally {
       setSaving(null);
@@ -331,16 +416,19 @@ export function WizardDocumento({
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
+        setErrorOperacion(errorOperacionDesdeRespuesta(response.status, body));
         toast.error("No se pudo registrar la confirmación", {
           description: mensajeErrorRespuesta(response.status, body),
         });
         return;
       }
       setData((current) => current ? { ...current, guiaConfirmada: true } : current);
+      setErrorOperacion(null);
       toast.success("Guía confirmada", {
         description: "Tu confirmación quedó registrada antes de iniciar la captura.",
       });
     } catch {
+      setErrorOperacion(errorOperacionDesdeRespuesta(0));
       toast.error("No se pudo registrar la confirmación", {
         description: mensajeErrorSinRespuesta(),
       });
@@ -356,10 +444,25 @@ export function WizardDocumento({
         className="h-[92vh] max-h-[920px] w-[96vw] max-w-[1500px] gap-0 overflow-hidden p-0 sm:max-w-[1500px]"
       >
         {!data || data.documentoId !== documentoId ? (
-          <div className="flex h-full min-h-96 items-center justify-center gap-3 text-sm text-muted-foreground">
-            <LoaderCircleIcon className="size-5 animate-spin" />
-            Leyendo campos y reglas del PDF…
-          </div>
+          errorCarga ? (
+            <div className="h-full overflow-y-auto p-6 sm:p-10">
+              <div className="mx-auto max-w-3xl">
+                <AvisoErrorOperacion
+                  error={errorCarga}
+                  onRetry={() => {
+                    setErrorCarga(null);
+                    setIntentoCarga((value) => value + 1);
+                  }}
+                  onDismiss={onClose}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full min-h-96 items-center justify-center gap-3 text-sm text-muted-foreground">
+              <LoaderCircleIcon className="size-5 animate-spin" />
+              Leyendo campos y reglas del PDF…
+            </div>
+          )
         ) : (
           <div className="grid h-full min-h-0 grid-rows-[auto_1fr_auto]">
             <DialogHeader className="border-b px-6 py-4 pr-14">
@@ -431,7 +534,9 @@ export function WizardDocumento({
                     key={data.documentoId}
                     tipo={data.tipo}
                     confirmando={confirmandoGuia}
+                    error={errorOperacion}
                     onConfirmar={() => void confirmarGuia()}
+                    onCerrarError={() => setErrorOperacion(null)}
                   />
                 ) : data.bloqueada && data.estado !== "COMPLETA" ? (
                   <CenteredState
@@ -455,6 +560,16 @@ export function WizardDocumento({
                         Página {activePage} del PDF · <span className="text-red-500">*</span> obligatorio
                       </span>
                     </div>
+
+                    <AvisoErrorOperacion
+                      error={errorOperacion}
+                      className="mb-4"
+                      onRetry={operacionFallida
+                        ? () => void submit(operacionFallida.action, operacionFallida.advance)
+                        : undefined}
+                      onDismiss={() => setErrorOperacion(null)}
+                    />
+                    {reglaCalculoActiva && <PanelReglasCalculo reglas={[reglaCalculoActiva]} className="mb-4" />}
 
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {activeItems.map((item) =>
@@ -536,17 +651,27 @@ export function WizardDocumento({
 function ConfirmacionGuia({
   tipo,
   confirmando,
+  error,
   onConfirmar,
+  onCerrarError,
 }: {
   tipo: string;
   confirmando: boolean;
+  error: ErrorOperacion | null;
   onConfirmar: () => void;
+  onCerrarError: () => void;
 }) {
   const [aceptada, setAceptada] = useState(false);
 
   return (
     <div className="mx-auto max-w-4xl py-2">
       <div className="rounded-2xl border bg-background p-5 shadow-sm sm:p-6">
+        <AvisoErrorOperacion
+          error={error}
+          className="mb-4"
+          onRetry={error ? onConfirmar : undefined}
+          onDismiss={onCerrarError}
+        />
         <h3 className="text-lg font-semibold">Confirma la guía antes de capturar</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
           Esta constancia se registra con tu usuario y fecha para este formato. Si falta un requisito o hay una alerta, detén la captura y escala el caso.

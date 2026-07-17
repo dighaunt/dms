@@ -124,6 +124,7 @@ const OVERRIDES: Record<string, Record<string, Partial<CampoFormulario>>> = {
     c01_monto_num: {
       label: "Monto del apartado",
       inputType: "number",
+      order: 20,
       help: "Cláusula segunda: importe entregado para reservar la unidad.",
     },
     c01_monto_letra: {
@@ -139,6 +140,7 @@ const OVERRIDES: Record<string, Record<string, Partial<CampoFormulario>>> = {
     c01_precio_total: {
       label: "Precio total pactado de la unidad",
       inputType: "number",
+      order: 21,
       reuseKey: "operacion.precio_total",
       help: "Cláusula segunda: precio que el vendedor respetará durante la vigencia.",
     },
@@ -172,7 +174,8 @@ const OVERRIDES: Record<string, Record<string, Partial<CampoFormulario>>> = {
     C01_inl_30: {
       label: "Pena por desistimiento (% del apartado)",
       inputType: "number",
-      help: "Cláusula cuarta: porcentaje del monto del apartado retenible como pena convencional.",
+      order: 22,
+      help: "Se calcula sobre el monto del apartado ya capturado; el sistema aplica el tope de la obligación principal.",
     },
   },
   "F-01": {

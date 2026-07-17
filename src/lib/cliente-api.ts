@@ -10,7 +10,7 @@ type CuerpoError = {
 const MENSAJES_POR_ESTADO: Record<number, string> = {
   400: "Revisa los datos capturados e inténtalo de nuevo.",
   401: "Tu sesión terminó o no está activa. Inicia sesión de nuevo.",
-  402: "No se pudo completar la operación porque el servicio externo requiere atención del administrador.",
+  402: "El proveedor externo no confirmó la operación. No se generó ni modificó ningún documento; conserva el folio y la hora, y avisa al administrador.",
   403: "No tienes permiso para realizar esta operación.",
   404: "No se encontró la información solicitada. Actualiza la página e inténtalo de nuevo.",
   405: "Esta operación no está disponible en este momento.",
@@ -60,7 +60,7 @@ export function mensajeErrorRespuesta(status: number, cuerpo?: unknown): string 
   const mensaje = textoDeError(cuerpo);
   if (mensaje) return mensaje;
   if (status >= 500) {
-    return "El servidor tuvo un problema temporal. Intenta de nuevo y, si continúa, avisa al administrador.";
+    return "El servidor no terminó la operación. No asumas que se guardó: conserva el folio y la hora, reintenta una vez y avisa al administrador si continúa.";
   }
   return MENSAJES_POR_ESTADO[status] ?? "No se pudo completar la operación. Intenta de nuevo.";
 }

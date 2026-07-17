@@ -5,6 +5,7 @@ import type { PoolClient, QueryResultRow } from "pg";
 import { formatearFolio } from "@/lib/api";
 import { query, withTransaction } from "@/lib/db";
 import { monedaEnLetras, separarMiles } from "@/lib/numeros";
+import { configuracionCalculoPena } from "@/lib/calculos/pena-convencional";
 
 import {
   aplicarReglas,
@@ -63,6 +64,16 @@ type ValorRow = QueryResultRow & {
 };
 
 type CapturaRow = QueryResultRow & { estado: "BORRADOR" | "COMPLETA" };
+
+type CalculoPenaRow = QueryResultRow & {
+  algoritmo_version: "PENA_CONVENCIONAL_V1";
+  monto_base: string;
+  porcentaje: string;
+  obligacion_principal: string;
+  monto_pena: string;
+  monto_devolucion: string | null;
+  calculado_en: string;
+};
 
 export type ResultadoGuardar =
   | { ok: true; captura: CapturaDocumento }
@@ -445,7 +456,7 @@ export async function obtenerContextoDocumento(id: number): Promise<ContextoDocu
 }
 
 async function cargarValores(contexto: ContextoDocumento) {
-  const [captura, documento, expediente] = await Promise.all([
+  const [captura, documento, expediente, calculoPena] = await Promise.all([
     query<CapturaRow>(
       `SELECT estado FROM traza.documento_captura WHERE documento_id = $1`,
       [contexto.documentoId],
@@ -462,11 +473,20 @@ async function cargarValores(contexto: ContextoDocumento) {
          FROM traza.expediente_dato WHERE expediente_id = $1`,
       [contexto.expedienteId],
     ),
+    query<CalculoPenaRow>(
+      `SELECT algoritmo_version, monto_base::text, porcentaje::text,
+              obligacion_principal::text, monto_pena::text,
+              monto_devolucion::text, calculado_en::text
+         FROM traza.calculo_pena_convencional
+        WHERE documento_id = $1`,
+      [contexto.documentoId],
+    ),
   ]);
   return {
     estado: captura.rows[0]?.estado ?? "BORRADOR",
     documento: new Map(documento.rows.map((row) => [row.campo_pdf!, row])),
     expediente: new Map(expediente.rows.map((row) => [row.clave!, row])),
+    calculoPena: calculoPena.rows[0] ?? null,
   };
 }
 
@@ -535,6 +555,7 @@ export async function obtenerCapturaDocumento(
     [id, usuarioId],
   );
   const { values, origins } = resolverValores(contexto, template, stored);
+  const configuracionPena = configuracionCalculoPena(contexto.tipo);
   const required = camposRequeridos(template, values);
   const seenSystem = new Set<TokenSistema>();
   const fields = template.fields.map((field): CampoCaptura => {
@@ -578,6 +599,25 @@ export async function obtenerCapturaDocumento(
     fields,
     rules: template.rules,
     choiceGroups: template.choiceGroups,
+    ...(configuracionPena
+      ? {
+          calculoPena: {
+            configuracion: configuracionPena,
+            ...(stored.calculoPena
+              ? {
+                  resultadoCanonico: {
+                    montoBase: stored.calculoPena.monto_base,
+                    porcentaje: stored.calculoPena.porcentaje,
+                    obligacionPrincipal: stored.calculoPena.obligacion_principal,
+                    montoPena: stored.calculoPena.monto_pena,
+                    montoDevolucion: stored.calculoPena.monto_devolucion,
+                    calculadoEn: stored.calculoPena.calculado_en,
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
     progress: {
       total: visible.length,
       complete,

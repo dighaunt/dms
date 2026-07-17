@@ -77,7 +77,7 @@ export function respuestaError(error: unknown): NextResponse {
       return NextResponse.json(
         {
           error:
-            "No fue posible completar la operación por un problema temporal del servidor. Intenta de nuevo y, si continúa, avisa al administrador.",
+            "El servidor no terminó la operación. No asumas que se guardó: conserva el folio y la hora, reintenta una vez y avisa al administrador si continúa.",
         },
         { status: 500 },
       );
