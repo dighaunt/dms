@@ -52,7 +52,7 @@ export function BuscadorManual() {
             resultados.map((manual) => (
               <Link
                 key={manual.slug}
-                href={`/documentacion/${manual.slug}`}
+                href={`/manuales/${manual.slug}`}
                 onClick={() => setConsulta("")}
                 className="block border-b px-3 py-2 text-xs last:border-b-0 hover:bg-accent"
               >

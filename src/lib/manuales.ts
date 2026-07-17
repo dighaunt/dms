@@ -564,7 +564,7 @@ export const ARBOL_MANUALES: Root = {
     {
       type: "page",
       name: "Inicio de documentacion",
-      url: "/documentacion",
+      url: "/manuales",
     },
     {
       type: "folder",
@@ -573,7 +573,7 @@ export const ARBOL_MANUALES: Root = {
       children: MANUALES.filter((manual) => manual.manual === "M-01").map((manual) => ({
         type: "page" as const,
         name: `${manual.parte} · ${manual.titulo}`,
-        url: `/documentacion/${manual.slug}`,
+        url: `/manuales/${manual.slug}`,
       })),
     },
     {
@@ -583,7 +583,7 @@ export const ARBOL_MANUALES: Root = {
       children: MANUALES.filter((manual) => manual.manual === "M-02").map((manual) => ({
         type: "page" as const,
         name: `${manual.parte} · ${manual.titulo}`,
-        url: `/documentacion/${manual.slug}`,
+        url: `/manuales/${manual.slug}`,
       })),
     },
   ],

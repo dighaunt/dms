@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BookMarkedIcon,
   BookOpenIcon,
   CirclePlusIcon,
   FolderOpenIcon,
@@ -23,6 +24,7 @@ const OPERACION: Item[] = [
   { href: "/expedientes", etiqueta: "Expedientes", icono: FolderOpenIcon },
   { href: "/expedientes/nuevo", etiqueta: "Abrir expediente", icono: CirclePlusIcon, exacto: true },
   { href: "/documentacion", etiqueta: "Documentación", icono: BookOpenIcon },
+  { href: "/manuales", etiqueta: "Manuales M-01/M-02", icono: BookMarkedIcon },
 ];
 
 const ADMINISTRACION: Item[] = [
