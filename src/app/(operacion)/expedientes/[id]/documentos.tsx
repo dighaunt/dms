@@ -42,7 +42,7 @@ import {
   objetivoDeCandado,
   type ObjetivoCandado,
 } from "@/lib/candados-ui";
-import { mensajeErrorSinRespuesta, postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
+import { mensajeErrorRespuesta, mensajeErrorSinRespuesta, postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
 import type {
   DocumentoDetalle,
   ExcepcionDocumental,
@@ -57,6 +57,7 @@ import {
   type RequisitoDocumento,
 } from "@/lib/juego-documental";
 import { DEPENDENCIAS } from "@/lib/mapa-documental";
+import { canonizarNumeroCaptura, formatearNumeroCaptura } from "@/lib/numeros";
 import { cn } from "@/lib/utils";
 import { BotonCopiar } from "@/components/boton-copiar";
 import { Button } from "@/components/ui/button";
@@ -2342,6 +2343,117 @@ function DialogAnularExcepcionalmente({ expedienteId, tipoCodigo, nombreTipo, on
   return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent><DialogHeader><DialogTitle>Anular excepcionalmente · {tipoCodigo}</DialogTitle><DialogDescription>Decisión unilateral N3 para {nombreTipo}. Queda inmutable en la base de datos, con tu motivo y fecha; el requisito no volverá a habilitarse.</DialogDescription></DialogHeader><div className="grid gap-2"><Label htmlFor="motivo-anulacion">Motivo de la decisión</Label><Textarea id="motivo-anulacion" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Explica por qué este requisito no aplica y por qué la anulación excepcional está justificada…" /><p className={cn("text-xs", valido ? "text-muted-foreground" : "text-amber-700")}>{motivo.trim().length}/40 caracteres mínimo</p></div><DialogFooter><Button variant="outline" disabled={enviando} onClick={onClose}>Volver</Button><Button variant="destructive" disabled={!valido || enviando} onClick={anular}>{enviando ? "Anulando…" : "Confirmar anulación"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
+const MEDIOS_PAGO_C02 = [
+  {
+    value: "EFECTIVO",
+    label: "Efectivo",
+    referenciaLabel: "Folio del recibo firmado",
+    referenciaPlaceholder: "REC-2026-0001",
+    regla: "Resguarda el recibo de caja firmado y captura su folio.",
+  },
+  {
+    value: "SPEI",
+    label: "SPEI",
+    referenciaLabel: "Clave de rastreo SPEI",
+    referenciaPlaceholder: "40012345678901234567",
+    regla: "Usa la clave de rastreo que aparece en el comprobante bancario.",
+  },
+  {
+    value: "TRANSFERENCIA",
+    label: "Transferencia bancaria",
+    referenciaLabel: "Referencia de transferencia",
+    referenciaPlaceholder: "Referencia bancaria",
+    regla: "Resguarda el comprobante emitido por el banco.",
+  },
+  {
+    value: "TARJETA",
+    label: "Tarjeta",
+    referenciaLabel: "Autorización de terminal",
+    referenciaPlaceholder: "AUT-123456",
+    regla: "Registra únicamente la autorización de terminal; nunca el número completo de tarjeta.",
+  },
+  {
+    value: "CHEQUE",
+    label: "Cheque",
+    referenciaLabel: "Folio de cheque",
+    referenciaPlaceholder: "CHEQ-000123",
+    regla: "Resguarda la copia o comprobante de depósito del cheque.",
+  },
+  {
+    value: "FINANCIAMIENTO",
+    label: "Financiamiento",
+    referenciaLabel: "Folio de autorización",
+    referenciaPlaceholder: "FIN-2026-0001",
+    regla: "Resguarda la autorización o contrato de la financiera.",
+  },
+  {
+    value: "OTRO",
+    label: "Otro medio",
+    referenciaLabel: "Referencia adicional",
+    referenciaPlaceholder: "Referencia opcional",
+    regla: "Describe el medio y la referencia que permiten auditarlo.",
+  },
+] as const;
+
+type MedioPagoC02 = (typeof MEDIOS_PAGO_C02)[number]["value"];
+
+type EstadoPagoC02 = {
+  precioTotal: string | null;
+  totalRegistrado: string;
+  diferencia: string | null;
+  conciliado: boolean;
+  capturaCompleta: boolean;
+  escaneado: boolean;
+  pagoVerificado: boolean;
+  umbralEfectivoPld: string;
+  pagos: Array<{
+    id: string;
+    medio: MedioPagoC02;
+    monto: string;
+    fechaPago: string;
+    referencia: string | null;
+    detalle: string | null;
+    comprobanteVersion: number;
+    registradoEn: string;
+  }>;
+  comprobantes: Array<{
+    version: number;
+    contentType: string;
+    tamanoBytes: number;
+    subidoEn: string;
+  }>;
+};
+
+type ResultadoEstadoPagoC02 =
+  | { ok: true; data: EstadoPagoC02 }
+  | { ok: false; error: string };
+
+async function consultarEstadoPagoC02(documentoId: number): Promise<ResultadoEstadoPagoC02> {
+  try {
+    const respuesta = await fetch(`/api/documentos/${documentoId}/pago`, { cache: "no-store" });
+    const cuerpo: unknown = await respuesta.json().catch(() => undefined);
+    if (!respuesta.ok) {
+      return { ok: false, error: mensajeErrorRespuesta(respuesta.status, cuerpo) };
+    }
+    return { ok: true, data: cuerpo as EstadoPagoC02 };
+  } catch {
+    return { ok: false, error: mensajeErrorSinRespuesta() };
+  }
+}
+
+function efectivoBloqueadoPara(estado: Pick<EstadoPagoC02, "precioTotal" | "umbralEfectivoPld"> | null) {
+  return Boolean(
+    estado?.precioTotal && Number(estado.precioTotal) >= Number(estado.umbralEfectivoPld),
+  );
+}
+
+function formatoMoneda(valor: string | null) {
+  if (valor === null || valor === "") return "Pendiente";
+  const negativo = valor.startsWith("-");
+  const absoluto = negativo ? valor.slice(1) : valor;
+  return `${negativo ? "-" : ""}$${formatearNumeroCaptura(absoluto)}`;
+}
+
 function DialogPago({
   doc,
   onClose,
@@ -2351,73 +2463,306 @@ function DialogPago({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const [estado, setEstado] = useState<EstadoPagoC02 | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState<"registro" | "certificacion" | null>(null);
+  const [medio, setMedio] = useState<MedioPagoC02>("EFECTIVO");
+  const [monto, setMonto] = useState("");
+  const [fechaPago, setFechaPago] = useState(() => new Date().toISOString().slice(0, 10));
   const [referencia, setReferencia] = useState("");
-  const [enviando, setEnviando] = useState(false);
-  const [requiereComprobante, setRequiereComprobante] = useState(false);
+  const [detalle, setDetalle] = useState("");
+  const [comprobanteVersion, setComprobanteVersion] = useState("");
 
-  async function verificar() {
-    setEnviando(true);
-    try {
-      const res = await postJsonDetallado(`/api/documentos/${doc.id}/pago`, { referencia });
-      if (!res.ok) {
-        if (res.status === 409 && /comprobante/i.test(res.error)) {
-          setRequiereComprobante(true);
-        } else {
-          toast.error(res.error);
+  const cargar = useCallback(async () => {
+    const respuesta = await consultarEstadoPagoC02(doc.id);
+    if (respuesta.ok) {
+      setEstado(respuesta.data);
+      setError(null);
+      if (efectivoBloqueadoPara(respuesta.data)) {
+        setMedio((actual) => (actual === "EFECTIVO" ? "TRANSFERENCIA" : actual));
+      }
+    } else {
+      setEstado(null);
+      setError(respuesta.error);
+    }
+    setCargando(false);
+  }, [doc.id]);
+
+  useEffect(() => {
+    let vigente = true;
+    void consultarEstadoPagoC02(doc.id).then((respuesta) => {
+      if (!vigente) return;
+      if (respuesta.ok) {
+        setEstado(respuesta.data);
+        setError(null);
+        if (efectivoBloqueadoPara(respuesta.data)) {
+          setMedio((actual) => (actual === "EFECTIVO" ? "TRANSFERENCIA" : actual));
         }
+      } else {
+        setEstado(null);
+        setError(respuesta.error);
+      }
+      setCargando(false);
+    });
+    return () => { vigente = false; };
+  }, [doc.id]);
+
+  const efectivoBloqueado = efectivoBloqueadoPara(estado);
+  const configuracion = MEDIOS_PAGO_C02.find((item) => item.value === medio) ?? MEDIOS_PAGO_C02[0];
+  const montoCanonico = canonizarNumeroCaptura(monto);
+  const referenciaValida = medio === "OTRO"
+    ? detalle.trim().length >= 10
+    : referencia.trim().length >= 3;
+  const pagoValido = Boolean(
+    montoCanonico && montoCanonico !== "" && fechaPago && comprobanteVersion && referenciaValida,
+  );
+  const puedeCertificar = Boolean(
+    estado
+      && estado.pagos.length > 0
+      && estado.conciliado
+      && estado.capturaCompleta
+      && estado.escaneado
+      && !estado.pagoVerificado,
+  );
+
+  function irAComprobantes() {
+    onClose();
+    requestAnimationFrame(() => {
+      document.getElementById("anexo-comprobante_pago")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  async function registrar() {
+    if (!pagoValido || !montoCanonico) return;
+    setEnviando("registro");
+    setError(null);
+    try {
+      const respuesta = await postJsonDetallado(`/api/documentos/${doc.id}/pago`, {
+        accion: "registrar",
+        medio,
+        monto: montoCanonico,
+        fechaPago,
+        referencia: referencia.trim() || undefined,
+        detalle: detalle.trim() || undefined,
+        comprobanteVersion: Number(comprobanteVersion),
+      });
+      if (!respuesta.ok) {
+        setError(respuesta.error);
         return;
       }
-      toast.success(`Pago verificado para ${doc.folio}`);
-      onDone();
+      setMonto("");
+      setReferencia("");
+      setDetalle("");
+      setComprobanteVersion("");
+      toast.success("Medio de pago registrado");
+      await cargar();
     } finally {
-      setEnviando(false);
+      setEnviando(null);
     }
   }
 
+  async function certificar() {
+    if (!puedeCertificar) return;
+    setEnviando("certificacion");
+    setError(null);
+    try {
+      const respuesta = await postJsonDetallado(`/api/documentos/${doc.id}/pago`, { accion: "certificar" });
+      if (!respuesta.ok) {
+        setError(respuesta.error);
+        return;
+      }
+      toast.success(`Pago conciliado para ${doc.folio}`);
+      onDone();
+    } finally {
+      setEnviando(null);
+    }
+  }
+
+  const estadoConciliacion = estado?.conciliado
+    ? "Importes conciliados"
+    : estado?.diferencia?.startsWith("-")
+      ? "Importe excedido"
+      : "Importe pendiente";
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Verificar pago · {doc.folio}</DialogTitle>
+          <DialogTitle>Pago del C-02 · {doc.folio}</DialogTitle>
           <DialogDescription>
-            Candado del C-02: sin pago verificado no se emite F-11 ni se marca la
-            unidad como vendida.
+            Registra cada medio con el comprobante que lo respalda. Solo la conciliación exacta
+            contra el precio firmado habilita F-11 y la venta de la unidad.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-2">
-          <Label htmlFor="referencia">Referencia del pago</Label>
-          <Input
-            id="referencia"
-            value={referencia}
-            onChange={(e) => setReferencia(e.target.value)}
-            placeholder="SPEI 40012345678901234567"
-          />
-        </div>
-        {requiereComprobante && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            Primero resguarda el comprobante (SPEI, recibo o transferencia) en Anexos.
-            <Button
-              variant="link"
-              className="ml-1 h-auto px-0 text-amber-950"
-              onClick={() => {
-                onClose();
-                document.getElementById("anexos-expediente")?.scrollIntoView({ behavior: "smooth", block: "center" });
-              }}
-            >
-              Ir a Anexos
-            </Button>
+
+        {cargando && <p className="py-6 text-sm text-muted-foreground">Cargando estado de conciliación…</p>}
+
+        {!cargando && estado && (
+          <div className="grid gap-5">
+            <dl className="grid gap-3 border-y py-4 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-muted-foreground">Precio total C-02</dt>
+                <dd className="mt-1 font-medium tabular-nums">{formatoMoneda(estado.precioTotal)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Pagos registrados</dt>
+                <dd className="mt-1 font-medium tabular-nums">{formatoMoneda(estado.totalRegistrado)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{estadoConciliacion}</dt>
+                <dd className={cn("mt-1 font-medium tabular-nums", estado.conciliado ? "text-emerald-700" : "text-amber-700")}>
+                  {estado.conciliado ? "Listo para certificar" : formatoMoneda(estado.diferencia)}
+                </dd>
+              </div>
+            </dl>
+
+            {estado.pagoVerificado ? (
+              <p className="border-l-2 border-emerald-600 pl-3 text-sm text-emerald-800">
+                El pago ya quedó certificado e inmutable. No se admiten nuevos renglones.
+              </p>
+            ) : (
+              <section className="grid gap-4" aria-label="Registrar medio de pago">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="monto-pago">Monto del pago</Label>
+                    <Input
+                      id="monto-pago"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={formatearNumeroCaptura(monto)}
+                      onChange={(event) => {
+                        const siguiente = canonizarNumeroCaptura(event.target.value);
+                        if (siguiente !== null) setMonto(siguiente);
+                      }}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="fecha-pago">Fecha de pago</Label>
+                    <Input id="fecha-pago" type="date" value={fechaPago} onChange={(event) => setFechaPago(event.target.value)} />
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:max-w-sm">
+                  <Label htmlFor="medio-pago">Medio de pago</Label>
+                  <Select value={medio} onValueChange={(valor) => setMedio(valor as MedioPagoC02)}>
+                    <SelectTrigger id="medio-pago"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MEDIOS_PAGO_C02.map((opcion) => (
+                        <SelectItem
+                          key={opcion.value}
+                          value={opcion.value}
+                          disabled={opcion.value === "EFECTIVO" && efectivoBloqueado}
+                        >
+                          {opcion.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {efectivoBloqueado && (
+                  <p className="border-l-2 border-amber-500 pl-3 text-sm text-amber-800">
+                    El precio pactado ({formatoMoneda(estado.precioTotal)}) alcanza o supera el umbral PLD de
+                    efectivo ({formatoMoneda(estado.umbralEfectivoPld)}). Conforme al artículo 32 fracción II de la
+                    LFPIORPI, este C-02 solo se libera con un medio trazable: SPEI, transferencia, tarjeta, cheque o
+                    financiamiento.
+                  </p>
+                )}
+
+                <p className="border-l-2 border-primary/60 pl-3 text-sm text-muted-foreground">{configuracion.regla}</p>
+
+                {medio === "OTRO" ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor="detalle-pago">Descripción y referencia auditables</Label>
+                    <Textarea
+                      id="detalle-pago"
+                      value={detalle}
+                      onChange={(event) => setDetalle(event.target.value)}
+                      placeholder="Describe el medio, emisor y la referencia que aparece en el comprobante"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Label htmlFor="referencia-pago">{configuracion.referenciaLabel}</Label>
+                    <Input
+                      id="referencia-pago"
+                      value={referencia}
+                      onChange={(event) => setReferencia(event.target.value)}
+                      placeholder={configuracion.referenciaPlaceholder}
+                    />
+                  </div>
+                )}
+
+                <div className="grid gap-2">
+                  <Label htmlFor="comprobante-pago">Comprobante resguardado</Label>
+                  <Select value={comprobanteVersion} onValueChange={setComprobanteVersion}>
+                    <SelectTrigger id="comprobante-pago"><SelectValue placeholder="Selecciona la versión exacta" /></SelectTrigger>
+                    <SelectContent>
+                      {estado.comprobantes.map((comprobante) => (
+                        <SelectItem key={comprobante.version} value={String(comprobante.version)}>
+                          Comprobante de pago · versión {comprobante.version}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {estado.comprobantes.length === 0 && (
+                    <p className="text-sm text-amber-700">
+                      Primero resguarda el comprobante en Anexos.
+                      <Button variant="link" className="ml-1 h-auto px-0 align-baseline" onClick={irAComprobantes}>
+                        Ir a Anexos
+                      </Button>
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex justify-end border-t pt-4">
+                  <Button onClick={registrar} disabled={!pagoValido || enviando !== null}>
+                    {enviando === "registro" ? "Registrando…" : "Registrar medio"}
+                  </Button>
+                </div>
+              </section>
+            )}
+
+            {estado.pagos.length > 0 && (
+              <section className="border-t pt-4" aria-label="Medios de pago registrados">
+                <h3 className="text-sm font-medium">Medios registrados</h3>
+                <div className="mt-2 divide-y">
+                  {estado.pagos.map((pago) => (
+                    <div key={pago.id} className="grid gap-1 py-3 text-sm sm:grid-cols-[1fr_auto] sm:gap-x-4">
+                      <div>
+                        <p className="font-medium">{MEDIOS_PAGO_C02.find((opcion) => opcion.value === pago.medio)?.label ?? pago.medio}</p>
+                        <p className="text-muted-foreground">{pago.referencia ?? pago.detalle} · comprobante versión {pago.comprobanteVersion}</p>
+                      </div>
+                      <p className="font-medium tabular-nums sm:text-right">{formatoMoneda(pago.monto)}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {!estado.pagoVerificado && (
+              <section className="border-t pt-4" aria-label="Certificar pago conciliado">
+                <p className="text-sm text-muted-foreground">
+                  La certificación es definitiva. Requiere C-02 completo, firmado y escaneado, al menos un comprobante y suma exacta de los medios registrados.
+                </p>
+                <div className="mt-3 flex justify-end">
+                  <Button onClick={certificar} disabled={!puedeCertificar || enviando !== null}>
+                    {enviando === "certificacion" ? "Certificando…" : "Certificar pago conciliado"}
+                  </Button>
+                </div>
+              </section>
+            )}
           </div>
         )}
+
+        {error && (
+          <p role="alert" className="border-l-2 border-destructive pl-3 text-sm text-destructive">{error}</p>
+        )}
+
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={enviando}>
-            Volver
-          </Button>
-          <Button
-            onClick={verificar}
-            disabled={referencia.trim().length === 0 || enviando}
-          >
-            {enviando ? "Registrando…" : "Verificar pago"}
-          </Button>
+          <Button variant="outline" onClick={onClose} disabled={enviando !== null}>Cerrar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

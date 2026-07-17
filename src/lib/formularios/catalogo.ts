@@ -224,6 +224,10 @@ const OVERRIDES: Record<string, Record<string, Partial<CampoFormulario>>> = {
     c02_pub: { label: "Autoriza publicidad en redes" },
     c02_precio_letra: { label: "Precio con letra", inputType: "text", closeWithHyphens: true },
     c02_precio_num: { label: "Precio total pactado", inputType: "number", reuseKey: "operacion.precio_total" },
+    C02_f_58: {
+      label: "Forma de pago (trazable)",
+      help: "Asienta todos los medios pactados usando sus nombres: EFECTIVO, SPEI, TRANSFERENCIA, TARJETA, CHEQUE, FINANCIAMIENTO u OTRO. Deben coincidir con los renglones que se concilian después.",
+    },
     C02_otro_68: { label: "Especifique otro documento entregado" },
   },
   "C-03": {

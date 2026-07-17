@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRightIcon, BookOpenIcon, FileCheck2Icon, SearchIcon } from "lucide-react";
+import { ArrowRightIcon, BookOpenIcon, FileCheck2Icon, FileWarningIcon, SearchIcon } from "lucide-react";
 import { Callout } from "fumadocs-ui/components/callout";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 
@@ -37,6 +37,16 @@ export default function ManualesPage() {
             <h2 className="mt-1 text-base font-semibold">Cancelaciones y desistimientos</h2>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Causas, procedimiento, casos borde y propuestas que requieren validación antes de operar.</p>
             <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary">Abrir M-02 <ArrowRightIcon className="size-3.5" /></span>
+          </Link>
+          <Link
+            href="/manuales/m01a-endosos-cierre-y-entrega"
+            className="group border bg-background p-4 transition-colors hover:border-primary/40 hover:bg-accent/40 sm:col-span-2"
+          >
+            <FileWarningIcon className="size-5 text-amber-600" />
+            <p className="mt-4 font-mono text-[11px] font-semibold text-primary">M-01 · Anexo A (Rev. 3.1, borrador)</p>
+            <h2 className="mt-1 text-base font-semibold">Procedimientos complementarios</h2>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Cierre de endosos y estatus jurídico ante la SCJN, casos borde por datos faltantes, operaciones legales específicas, protocolo ampliado de adeudos, eficiencias legítimas y su línea roja, y jurisprudencia de respaldo. Borrador: las secciones C, D y E están pendientes de validación por el abogado y el contador del lote.</p>
+            <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary">Abrir el Anexo A <ArrowRightIcon className="size-3.5" /></span>
           </Link>
         </div>
 

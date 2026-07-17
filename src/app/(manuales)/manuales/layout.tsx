@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeftIcon, BookOpenCheckIcon } from "lucide-react";
+import { ArrowLeftIcon, BookOpenCheckIcon, LayoutDashboardIcon } from "lucide-react";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { RootProvider } from "fumadocs-ui/provider/next";
 
@@ -29,13 +29,22 @@ export default function ManualesLayout({
         sidebar={{
           banner: <BuscadorManual />,
           footer: (
-            <Link
-              href="/documentacion"
-              className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <ArrowLeftIcon className="size-4" />
-              Volver a documentación
-            </Link>
+            <div className="flex flex-col gap-1">
+              <Link
+                href="/documentacion"
+                className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <ArrowLeftIcon className="size-4" />
+                Volver a documentación
+              </Link>
+              <Link
+                href="/expedientes"
+                className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <LayoutDashboardIcon className="size-4" />
+                Ir al dashboard
+              </Link>
+            </div>
           ),
           collapsible: false,
           prefetch: false,

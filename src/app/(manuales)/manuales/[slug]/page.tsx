@@ -71,6 +71,31 @@ export default async function ManualPage({
                 {seccion.pasos.map((paso) => <Step key={paso}>{paso}</Step>)}
               </Steps>
             )}
+            {seccion.tablas?.map((tabla, indice) => (
+              <div key={tabla.titulo ?? indice} className="not-prose my-4 overflow-x-auto rounded-lg border">
+                {tabla.titulo && (
+                  <p className="border-b bg-muted/40 px-3 py-2 text-xs font-medium">{tabla.titulo}</p>
+                )}
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted/30">
+                    <tr>
+                      {tabla.encabezados.map((encabezado) => (
+                        <th key={encabezado} className="px-3 py-2 font-medium">{encabezado}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tabla.filas.map((fila, indiceFila) => (
+                      <tr key={indiceFila} className="border-t align-top">
+                        {fila.map((celda, indiceCelda) => (
+                          <td key={indiceCelda} className="px-3 py-2 text-muted-foreground">{celda}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           </section>
         ))}
 

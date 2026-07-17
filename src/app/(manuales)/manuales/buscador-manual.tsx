@@ -22,6 +22,12 @@ export function BuscadorManual() {
           seccion.titulo,
           ...seccion.parrafos,
           ...(seccion.puntos ?? []),
+          ...(seccion.pasos ?? []),
+          ...(seccion.tablas ?? []).flatMap((tabla) => [
+            tabla.titulo ?? "",
+            ...tabla.encabezados,
+            ...tabla.filas.flat(),
+          ]),
         ]),
       ]
         .join(" ")
