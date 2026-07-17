@@ -75,7 +75,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/expedientes");
+      router.push("/");
       router.refresh();
     } catch {
       setError(
