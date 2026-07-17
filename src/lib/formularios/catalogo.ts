@@ -172,10 +172,11 @@ const OVERRIDES: Record<string, Record<string, Partial<CampoFormulario>>> = {
       emptyValue: "NO APLICA",
     },
     C01_inl_30: {
-      label: "Pena por desistimiento (% del apartado)",
+      label: "Porcentaje contractual de pena por desistimiento",
       inputType: "number",
-      order: 22,
-      help: "Se calcula sobre el monto del apartado ya capturado; el sistema aplica el tope de la obligación principal.",
+      source: "derived",
+      required: false,
+      help: "Valor calculado por la política contractual C-01.",
     },
   },
   "F-01": {

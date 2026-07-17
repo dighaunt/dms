@@ -23,9 +23,7 @@ import { Button } from "@/components/ui/button";
 import {
   AvisoErrorOperacion,
   errorOperacionDesdeRespuesta,
-  PanelReglasCalculo,
   type ErrorOperacion,
-  type ReglaCalculoOperativa,
 } from "@/components/calculos-y-errores-operativos";
 import { GuiaOperativaResumen, GuiaOperativaSheet } from "@/components/guia-operativa-formato";
 import {
@@ -47,11 +45,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { mensajeErrorRespuesta, mensajeErrorSinRespuesta } from "@/lib/cliente-api";
-import {
-  formatearMontoCalculo,
-  formatearPorcentajeCalculo,
-  vistaCalculoPena,
-} from "@/lib/calculos/pena-convencional";
 import { etiquetaAlternativa } from "@/lib/formularios/etiquetas";
 import type { CampoCaptura, CapturaDocumento } from "@/lib/formularios/tipos";
 import { cn } from "@/lib/utils";
@@ -145,7 +138,6 @@ export function WizardDocumento({
     action: "save" | "complete";
     advance: boolean;
   } | null>(null);
-  const [calculoPendientePersistir, setCalculoPendientePersistir] = useState(false);
   const [intentoCarga, setIntentoCarga] = useState(0);
 
   useEffect(() => {
@@ -165,7 +157,6 @@ export function WizardDocumento({
         const initial = valorInicial(captura);
         setData(captura);
         setErrorCarga(null);
-        setCalculoPendientePersistir(false);
         setValues(initial);
         setOptionalActive(opcionalesActivos(captura, initial));
         setSectionIndex(0);
@@ -241,54 +232,6 @@ export function WizardDocumento({
       ? firstItem.field.page
       : data?.fields.find((field) => field.name === firstItem.group.fields[0])?.page ?? 1;
 
-  const reglaCalculoActiva = useMemo<ReglaCalculoOperativa | null>(() => {
-    const calculoPena = data?.calculoPena;
-    if (!calculoPena || calculoPena.configuracion.section !== activeSection?.id) return null;
-
-    const configuracion = calculoPena.configuracion;
-    const vista = vistaCalculoPena(configuracion, values);
-    const canonico = calculoPena.resultadoCanonico;
-    const mostrarCanonico = Boolean(canonico && !calculoPendientePersistir);
-    const entradas = [
-      configuracion.base,
-      ...(configuracion.obligacionPrincipal.name === configuracion.base.name
-        ? []
-        : [configuracion.obligacionPrincipal]),
-      ...(configuracion.porcentaje ? [configuracion.porcentaje] : []),
-    ].map((entrada) => ({
-      campo: entrada.name,
-      etiqueta: entrada.label,
-      valor: values[entrada.name] ?? "",
-      tipo: "numero" as const,
-      obligatoria: true,
-    }));
-
-    return {
-      id: configuracion.version,
-      titulo: configuracion.titulo,
-      formula: configuracion.formula,
-      descripcion: mostrarCanonico
-        ? "Resultado contractual registrado por el motor de datos. No se captura ni se puede sustituir manualmente."
-        : "Vista previa derivada de los importes del contrato. Guarda para que el motor de datos la registre.",
-      entradas,
-      resultado: {
-        etiqueta: "Monto de pena",
-        valor: mostrarCanonico && canonico
-          ? formatearMontoCalculo(canonico.montoPena)
-          : vista.montoPena,
-        ayuda: mostrarCanonico
-          ? `Cálculo registrado con ${formatearPorcentajeCalculo(canonico!.porcentaje)} sobre los valores fuente de este folio.`
-          : "El motor de datos registra el cálculo contractual al guardar.",
-        secundarios: mostrarCanonico && canonico?.montoDevolucion != null
-          ? [{ etiqueta: "Monto a devolver", valor: formatearMontoCalculo(canonico.montoDevolucion) }]
-          : vista.montoDevolucion
-            ? [{ etiqueta: "Monto a devolver", valor: vista.montoDevolucion }]
-          : undefined,
-      },
-      estado: vista.estado === "RESUELTO" ? "calculada" : "pendiente",
-    };
-  }, [activeSection?.id, calculoPendientePersistir, data?.calculoPena, values]);
-
   const liveProgress = useMemo(() => {
     if (!data) return { complete: 0, warnings: 0, missing: 0 };
     const groupsComplete = data.choiceGroups.filter((group) =>
@@ -323,13 +266,6 @@ export function WizardDocumento({
     clearIssues([name]);
     setErrorOperacion(null);
     setOperacionFallida(null);
-    if (data.calculoPena && [
-      data.calculoPena.configuracion.base.name,
-      data.calculoPena.configuracion.obligacionPrincipal.name,
-      data.calculoPena.configuracion.porcentaje?.name,
-    ].includes(name)) {
-      setCalculoPendientePersistir(true);
-    }
   }
 
   function updateGroup(group: ChoiceGroup, selectedName: string) {
@@ -386,7 +322,6 @@ export function WizardDocumento({
       setData(captura);
       setValues(nextValues);
       setOptionalActive(opcionalesActivos(captura, nextValues));
-      setCalculoPendientePersistir(false);
       setIssues(new Map());
       setErrorOperacion(null);
       setOperacionFallida(null);
@@ -569,8 +504,6 @@ export function WizardDocumento({
                         : undefined}
                       onDismiss={() => setErrorOperacion(null)}
                     />
-                    {reglaCalculoActiva && <PanelReglasCalculo reglas={[reglaCalculoActiva]} className="mb-4" />}
-
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {activeItems.map((item) =>
                         item.kind === "group" ? (

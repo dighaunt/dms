@@ -1,4 +1,5 @@
 import { BlurFade } from "@/components/ui/blur-fade";
+import { CalculosDocumentales } from "./calculos";
 import { DescargasFormatos } from "./descargas";
 import { MapaDocumental } from "./mapa";
 
@@ -22,6 +23,9 @@ export default function DocumentacionPage() {
         <MapaDocumental />
       </BlurFade>
       <BlurFade delay={0.18}>
+        <CalculosDocumentales />
+      </BlurFade>
+      <BlurFade delay={0.24}>
         <DescargasFormatos />
       </BlurFade>
     </div>

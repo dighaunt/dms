@@ -9,11 +9,10 @@ function configuracion() {
   return value;
 }
 
-test("C-01 calcula pena y devolución desde apartado, precio y porcentaje", () => {
+test("C-01 calcula pena y devolución con el porcentaje contractual automático", () => {
   const result = vistaCalculoPena(configuracion(), {
     c01_monto_num: "10000.00",
     c01_precio_total: "250000.00",
-    C01_inl_30: "12.5",
   });
 
   assert.deepEqual(result, {
@@ -21,25 +20,24 @@ test("C-01 calcula pena y devolución desde apartado, precio y porcentaje", () =
     faltantes: [],
     montoBase: "$10,000.00 MXN",
     obligacionPrincipal: "$250,000.00 MXN",
-    porcentaje: "12.5%",
-    montoPena: "$1,250.00 MXN",
-    montoDevolucion: "$8,750.00 MXN",
+    porcentaje: "50%",
+    montoPena: "$5,000.00 MXN",
+    montoDevolucion: "$5,000.00 MXN",
   });
 });
 
 test("C-01 limita la pena a la obligación principal", () => {
   const result = vistaCalculoPena(configuracion(), {
     c01_monto_num: "10000",
-    c01_precio_total: "8000",
-    C01_inl_30: "200",
+    c01_precio_total: "4000",
   });
 
-  assert.equal(result.montoPena, "$8,000.00 MXN");
-  assert.equal(result.montoDevolucion, "$2,000.00 MXN");
+  assert.equal(result.montoPena, "$4,000.00 MXN");
+  assert.equal(result.montoDevolucion, "$6,000.00 MXN");
 });
 
-test("C-01 no calcula hasta que el orden de sus insumos esté completo", () => {
-  const pending = vistaCalculoPena(configuracion(), { C01_inl_30: "3" });
+test("C-01 no calcula hasta que los dos importes fuente estén completos", () => {
+  const pending = vistaCalculoPena(configuracion(), {});
   assert.equal(pending.estado, "PENDIENTE");
   assert.deepEqual(
     pending.faltantes.map((field) => field.name),

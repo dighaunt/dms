@@ -12,8 +12,10 @@ export type ConfiguracionCalculoPena = {
   formula: string;
   base: CampoCalculoPena;
   obligacionPrincipal: CampoCalculoPena;
-  porcentaje?: CampoCalculoPena;
-  porcentajeFijo?: string;
+  /** Campo del PDF que recibe el porcentaje derivado por el sistema. */
+  porcentaje: CampoCalculoPena;
+  /** Política contractual; nunca proviene de la captura del usuario. */
+  porcentajeFijo: string;
   devuelveSaldo: boolean;
 };
 
@@ -36,7 +38,8 @@ const CONFIGURACION_C01: ConfiguracionCalculoPena = {
   formula: "P = min((p / 100) x A, OP)",
   base: { name: "c01_monto_num", label: "Monto del apartado (A)" },
   obligacionPrincipal: { name: "c01_precio_total", label: "Precio total pactado (OP)" },
-  porcentaje: { name: "C01_inl_30", label: "Pena por desistimiento (p)" },
+  porcentaje: { name: "C01_inl_30", label: "Porcentaje contractual de pena" },
+  porcentajeFijo: "50",
   devuelveSaldo: true,
 };
 
@@ -87,15 +90,13 @@ export function vistaCalculoPena(
   const montoBase = decimalesACentavos(values[configuracion.base.name]);
   const obligacionPrincipal = decimalesACentavos(values[configuracion.obligacionPrincipal.name]);
   const porcentaje = decimalesACentavos(
-    configuracion.porcentajeFijo ?? values[configuracion.porcentaje?.name ?? ""],
+    configuracion.porcentajeFijo,
   );
 
   if (montoBase === null) faltantes.push(configuracion.base);
   if (obligacionPrincipal === null && configuracion.obligacionPrincipal.name !== configuracion.base.name) {
     faltantes.push(configuracion.obligacionPrincipal);
   }
-  if (porcentaje === null && configuracion.porcentaje) faltantes.push(configuracion.porcentaje);
-
   if (montoBase === null || obligacionPrincipal === null || porcentaje === null) {
     return { estado: "PENDIENTE", faltantes };
   }

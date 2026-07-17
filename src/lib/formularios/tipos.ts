@@ -1,5 +1,4 @@
 import type { ReglaFormulario, TipoEntrada } from "./catalogo";
-import type { ConfiguracionCalculoPena } from "@/lib/calculos/pena-convencional";
 
 export type CampoCaptura = {
   name: string;
@@ -37,17 +36,6 @@ export type CapturaDocumento = {
     min: number;
     max: number;
   }>;
-  calculoPena?: {
-    configuracion: ConfiguracionCalculoPena;
-    resultadoCanonico?: {
-      montoBase: string;
-      porcentaje: string;
-      obligacionPrincipal: string;
-      montoPena: string;
-      montoDevolucion: string | null;
-      calculadoEn: string;
-    };
-  };
   progress: {
     total: number;
     complete: number;
