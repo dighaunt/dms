@@ -38,7 +38,7 @@ export default function ManualesLayout({
                 Volver a documentación
               </Link>
               <Link
-                href="/expedientes"
+                href="/"
                 className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <LayoutDashboardIcon className="size-4" />
