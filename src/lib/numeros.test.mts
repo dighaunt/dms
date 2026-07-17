@@ -1,27 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { lecturaNumeroAgrupado } from "./numeros.ts";
+import { canonizarNumeroCaptura, formatearNumeroCaptura } from "./numeros.ts";
 
-test("separa importes grandes sin perder sus decimales", () => {
-  assert.deepEqual(lecturaNumeroAgrupado("1250345.67"), {
-    agrupado: "1,250,345.67",
-    escala: "1 millón · 250 mil · 345 unidades",
-  });
+test("muestra miles y millones dentro del input sin perder decimales", () => {
+  assert.equal(formatearNumeroCaptura("1250345.67"), "1,250,345.67");
+  assert.equal(formatearNumeroCaptura("450000"), "450,000");
 });
 
-test("hace legibles centenas de miles y millones", () => {
-  assert.deepEqual(lecturaNumeroAgrupado("100000"), {
-    agrupado: "100,000",
-    escala: "100 mil",
-  });
-  assert.deepEqual(lecturaNumeroAgrupado("2000000"), {
-    agrupado: "2,000,000",
-    escala: "2 millones",
-  });
+test("convierte el valor formateado al decimal canónico para persistir", () => {
+  assert.equal(canonizarNumeroCaptura("450,000.50"), "450000.50");
+  assert.equal(canonizarNumeroCaptura("000,450"), "000450");
 });
 
-test("no inventa una lectura para una captura incompleta o inválida", () => {
-  assert.equal(lecturaNumeroAgrupado(""), null);
-  assert.equal(lecturaNumeroAgrupado("12e3"), null);
+test("rechaza valores que no son numéricos antes de actualizar el formulario", () => {
+  assert.equal(canonizarNumeroCaptura(""), "");
+  assert.equal(canonizarNumeroCaptura("450 mil"), null);
+  assert.equal(canonizarNumeroCaptura("12e3"), null);
+  assert.equal(canonizarNumeroCaptura("450.123"), null);
 });

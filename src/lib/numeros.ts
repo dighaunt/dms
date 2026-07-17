@@ -23,47 +23,29 @@ export function separarMiles(
   return digitos === "" ? "" : FORMATEADOR_ENTEROS.format(BigInt(digitos));
 }
 
-export type LecturaNumeroAgrupado = {
-  agrupado: string;
-  escala: string;
-};
+/**
+ * Convierte la representación que ve el capturista a un decimal canónico.
+ * Los separadores son puramente visuales; null rechaza letras, signos y más de
+ * dos decimales antes de que el estado del formulario cambie.
+ */
+export function canonizarNumeroCaptura(valor: string): string | null {
+  const canonico = valor.replace(/,/g, "").trim();
+  if (canonico === "") return "";
+  return /^\d+(?:\.\d{0,2})?$/.test(canonico) ? canonico : null;
+}
 
 /**
- * Da una lectura visual de un decimal sin convertirlo a Number, para no perder
- * precisión en los numeric(18,2) que se capturan en los contratos.
+ * Agrupa miles dentro del input sin convertir a Number, para conservar la
+ * precisión de numeric(18,2) y los decimales que el capturista está escribiendo.
  */
-export function lecturaNumeroAgrupado(
-  valor: string | number | null | undefined,
-): LecturaNumeroAgrupado | null {
-  if (valor == null || valor === "") return null;
-  const normalizado = String(valor).trim().replace(/,/g, "");
-  const match = /^(\d+)(?:\.(\d{0,2}))?$/.exec(normalizado);
-  if (!match) return null;
-
-  const entero = match[1].replace(/^0+(?=\d)/, "");
-  const decimales = match[2];
-  const agrupado = `${FORMATEADOR_ENTEROS.format(BigInt(entero))}${
-    decimales === undefined ? "" : `.${decimales}`
+export function formatearNumeroCaptura(valor: string): string {
+  const canonico = canonizarNumeroCaptura(valor);
+  if (canonico === null || canonico === "") return valor;
+  const [parteEntera, parteDecimal] = canonico.split(".");
+  const entero = parteEntera.replace(/^0+(?=\d)/, "");
+  return `${FORMATEADOR_ENTEROS.format(BigInt(entero))}${
+    parteDecimal === undefined ? "" : `.${parteDecimal}`
   }`;
-
-  const grupos = entero.match(/\d{1,3}(?=(?:\d{3})*$)/g) ?? ["0"];
-  const escala = grupos
-    .map((grupo, indice) => {
-      const cantidad = BigInt(grupo);
-      if (cantidad === 0n) return null;
-      const posicion = grupos.length - indice - 1;
-      const texto = cantidad.toString();
-      if (posicion === 0) return `${texto} ${cantidad === 1n ? "unidad" : "unidades"}`;
-      if (posicion === 1) return `${texto} mil`;
-      if (posicion === 2) return `${texto} ${cantidad === 1n ? "millón" : "millones"}`;
-      if (posicion === 3) return `${texto} mil millones`;
-      if (posicion === 4) return `${texto} ${cantidad === 1n ? "billón" : "billones"}`;
-      return `${texto} mil billones`;
-    })
-    .filter((grupo): grupo is string => grupo !== null)
-    .join(" · ");
-
-  return { agrupado, escala: escala || "0 unidades" };
 }
 
 const UNIDADES = [
