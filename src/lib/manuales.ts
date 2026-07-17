@@ -33,7 +33,7 @@ export const MANUALES: ManualArticulo[] = [
     slug: "m01-organizacion-y-gobierno",
     manual: "M-01",
     parte: "Parte I",
-    titulo: "Organizacion, roles y gobierno",
+    titulo: "Organización, roles y gobierno",
     descripcion:
       "La referencia para saber quien ejecuta, quien verifica y cuando debe escalarse una decision documental.",
     fuentes: [{ documento: "M-01 Rev. 3.0", referencia: "pp. 3-5" }],
@@ -200,7 +200,7 @@ export const MANUALES: ManualArticulo[] = [
     slug: "m01-calculos-y-tablas",
     manual: "M-01",
     parte: "Parte IV",
-    titulo: "Formulas, tabuladores y escalamiento",
+    titulo: "Fórmulas, tabuladores y escalamiento",
     descripcion:
       "Reglas matematicas de apartado, venta, compra, consignacion, PLD y garantia. El motor calcula desde los datos fuente; el capturista no sustituye el resultado.",
     fuentes: [{ documento: "M-01 Rev. 3.0", referencia: "pp. 37-40" }],
@@ -250,32 +250,32 @@ export const MANUALES: ManualArticulo[] = [
     parte: "Parte I",
     titulo: "Alcance y uso del anexo",
     descripcion:
-      "Como leer M-02 junto con M-01 para documentar penalizaciones, desistimientos y cancelaciones sin alterar las formulas fuente.",
+      "Cómo leer M-02 junto con M-01 para documentar penalizaciones, desistimientos y cancelaciones sin alterar las fórmulas fuente.",
     fuentes: [{ documento: "M-02 v1.0", referencia: "Parte I" }],
     aviso: {
       tipo: "warning",
       titulo: "M-02 es complementario",
       texto:
-        "M-02 no sustituye ni modifica las formulas, tabuladores o glosario de M-01. Para calculos, la fuente sigue siendo M-01 Parte IV y la politica contractual vigente en DMS.",
+        "M-02 no sustituye ni modifica las fórmulas, tabuladores o glosario de M-01. Para cálculos, la fuente sigue siendo M-01 Parte IV y la política contractual vigente en DMS.",
     },
     secciones: [
       {
         id: "que-aporta",
-        titulo: "Que aporta el anexo",
+        titulo: "Qué aporta el anexo",
         parrafos: [
-          "El anexo reune el fundamento normativo, autorizaciones, documentacion trazable y casos borde que M-01 distribuye entre contratos y procesos. Se consulta en conjunto con el contrato concreto y con los documentos del expediente.",
+          "El anexo reúne el fundamento normativo, autorizaciones, documentación trazable y casos borde que M-01 distribuye entre contratos y procesos. Se consulta en conjunto con el contrato concreto y con los documentos del expediente.",
         ],
         puntos: [
-          "Identifica la norma y articulo citado por el anexo.",
-          "Distingue la regla legal de una politica interna del lote.",
-          "Relaciona la decision con el contrato, formato y formula de M-01 que la ejecutan.",
+          "Identifica la norma y artículo citado por el anexo.",
+          "Distingue la regla legal de una política interna del lote.",
+          "Relaciona la decisión con el contrato, formato y fórmula de M-01 que la ejecutan.",
         ],
       },
       {
         id: "alcance-operativo",
         titulo: "Alcance operativo",
         parrafos: [
-          "Aplica a cancelacion, desistimiento o terminacion anticipada de C-01, C-02, C-03 y C-04. El operador clasifica el caso con evidencia; no usa una causa para evitar una penalizacion ni impone una pena cuando la causa documentada la excluye.",
+          "Aplica a cancelación, desistimiento o terminación anticipada de C-01, C-02, C-03 y C-04. El operador clasifica el caso con evidencia; no usa una causa para evitar una penalización ni impone una pena cuando la causa documentada la excluye.",
         ],
       },
     ],
@@ -353,7 +353,7 @@ export const MANUALES: ManualArticulo[] = [
     slug: "m02-pena-convencional",
     manual: "M-02",
     parte: "Parte IV",
-    titulo: "Pena convencional: limites y validez",
+    titulo: "Pena convencional: límites y validez",
     descripcion:
       "Controles previos para que una clausula o su aplicacion no contradigan los limites que M-02 identifica.",
     fuentes: [{ documento: "M-02 v1.0", referencia: "Parte IV" }],
@@ -378,7 +378,7 @@ export const MANUALES: ManualArticulo[] = [
     slug: "m02-matriz-de-aplicacion",
     manual: "M-02",
     parte: "Parte V",
-    titulo: "Matriz de aplicacion por operacion y causa",
+    titulo: "Matriz de aplicación por operación y causa",
     descripcion:
       "Marco para cruzar contrato, quien origina la terminacion, causa acreditada y tratamiento documentable.",
     fuentes: [{ documento: "M-02 v1.0", referencia: "Parte V" }],
@@ -403,7 +403,7 @@ export const MANUALES: ManualArticulo[] = [
     slug: "m02-procedimiento",
     manual: "M-02",
     parte: "Parte VI",
-    titulo: "Procedimiento de cancelacion y desistimiento",
+    titulo: "Procedimiento de cancelación y desistimiento",
     descripcion:
       "Secuencia de control aplicable a C-01, C-02, C-03 y C-04 cuando se solicita una cancelacion o terminacion anticipada.",
     fuentes: [{ documento: "M-02 v1.0", referencia: "Parte VI" }],
@@ -473,7 +473,7 @@ export const MANUALES: ManualArticulo[] = [
     slug: "m02-f12-propuesto",
     manual: "M-02",
     parte: "Parte VIII",
-    titulo: "F-12 propuesto: acta de cancelacion",
+    titulo: "F-12 propuesto: acta de cancelación",
     descripcion:
       "Alcance del formato propuesto por M-02 para dejar evidencia de una pena aplicada o exenta.",
     fuentes: [{ documento: "M-02 v1.0", referencia: "Parte VIII" }],
@@ -563,7 +563,7 @@ export const ARBOL_MANUALES: Root = {
   children: [
     {
       type: "page",
-      name: "Inicio de documentacion",
+      name: "Inicio de documentación",
       url: "/manuales",
     },
     {
