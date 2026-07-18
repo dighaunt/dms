@@ -740,13 +740,11 @@ function FieldControl({
   const id = `wizard-${field.name}`;
   const automatic = Boolean(field.automaticValue) && !field.required && !field.readOnly;
   const showInput = !automatic || optionalActive;
-  const sourceLabel = field.source === "system"
-    ? "Sistema"
-    : field.source === "reused"
-      ? "Reutilizado"
-      : field.source === "rule"
-        ? "Automático"
-        : null;
+  const sourceLabel = field.source === "reused"
+    ? "Reutilizado"
+    : field.source === "rule"
+      ? "Automático"
+      : null;
   const wide = field.inputType === "textarea";
   return (
     <div className={cn(
