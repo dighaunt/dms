@@ -23,6 +23,25 @@ import type { CampoCaptura, CapturaDocumento } from "./tipos";
 
 const RAZON_SOCIAL = "COMERCIALIZADORA AUTOMOTRIZ CLIQUEALO DE MÉXICO, S. DE R.L. DE C.V.";
 
+/**
+ * Mismos diez campos del CHECK unidad_datos_contractuales_requeridos
+ * (migración 022): traza.unidad los exige completos a la vez. Se listan aquí
+ * una sola vez para que "requerido en el wizard" y "bloquea el guardado"
+ * nunca queden desincronizados.
+ */
+const CAMPOS_FICHA_UNIDAD: TokenSistema[] = [
+  "color",
+  "numMotor",
+  "kilometraje",
+  "versionTipo",
+  "placas",
+  "entidadEmisora",
+  "numeroFacturaVigente",
+  "numeroConstanciaRepuve",
+  "numeroTarjetaCirculacion",
+  "refrendosAnio",
+];
+
 export type ContextoDocumento = {
   documentoId: number;
   expedienteId: number;
@@ -137,6 +156,33 @@ function origenDeRow(row: ValorRow, field: CampoFormulario): CampoCaptura["sourc
 
 function vacio(value: string | null | undefined): boolean {
   return value == null || value.trim() === "";
+}
+
+function valorFichaUnidad(contexto: ContextoDocumento, token: TokenSistema): string | null {
+  switch (token) {
+    case "color":
+      return contexto.color;
+    case "numMotor":
+      return contexto.numMotor;
+    case "kilometraje":
+      return contexto.kilometrajeIngreso == null ? null : String(contexto.kilometrajeIngreso);
+    case "versionTipo":
+      return contexto.versionTipo;
+    case "placas":
+      return contexto.placas;
+    case "entidadEmisora":
+      return contexto.entidadEmisora;
+    case "numeroFacturaVigente":
+      return contexto.numeroFacturaVigente;
+    case "numeroConstanciaRepuve":
+      return contexto.numeroConstanciaRepuve;
+    case "numeroTarjetaCirculacion":
+      return contexto.numeroTarjetaCirculacion;
+    case "refrendosAnio":
+      return contexto.refrendosAnio == null ? null : String(contexto.refrendosAnio);
+    default:
+      return null;
+  }
 }
 
 function ayudaDeScript(field: CampoFormulario): string | undefined {
@@ -492,8 +538,10 @@ function resolverValores(
       continue;
     }
     if (field.systemToken) {
-      values[field.name] = system[field.systemToken];
-      origins[field.name] = "system";
+      const valorSistema = system[field.systemToken];
+      values[field.name] = valorSistema;
+      // Sin dato aún: no es "resuelto por el sistema", es un dato por capturar.
+      origins[field.name] = vacio(valorSistema) ? "capture" : "system";
       continue;
     }
     if (snapshot) {
@@ -541,6 +589,13 @@ export async function obtenerCapturaDocumento(
   );
   const { values, origins } = resolverValores(contexto, template, stored);
   const required = camposRequeridos(template, values);
+  // La ficha contractual de la unidad no es opcional: si aún no tiene valor,
+  // el candado de traza.unidad la exigirá al guardar (ver CAMPOS_FICHA_UNIDAD).
+  for (const field of template.fields) {
+    if (field.systemToken && CAMPOS_FICHA_UNIDAD.includes(field.systemToken) && vacio(values[field.name])) {
+      required.add(field.name);
+    }
+  }
   const seenSystem = new Set<TokenSistema>();
   const fields = template.fields.map((field): CampoCaptura => {
     const duplicateSystem = field.systemToken ? seenSystem.has(field.systemToken) : false;
@@ -775,24 +830,10 @@ export async function guardarCapturaDocumento(
   // diez campos queden completos a la vez: si esta captura aporta alguno nuevo
   // pero deja otro en null, el UPDATE de abajo violaría el candado. Se detecta
   // antes de escribir para señalar el campo exacto en vez de un 23514 opaco.
-  const camposUnidadRequeridos: Array<{ token: TokenSistema; actual: string | null }> = [
-    { token: "color", actual: contexto.color },
-    { token: "numMotor", actual: contexto.numMotor },
-    {
-      token: "kilometraje",
-      actual: contexto.kilometrajeIngreso == null ? null : String(contexto.kilometrajeIngreso),
-    },
-    { token: "versionTipo", actual: contexto.versionTipo },
-    { token: "placas", actual: contexto.placas },
-    { token: "entidadEmisora", actual: contexto.entidadEmisora },
-    { token: "numeroFacturaVigente", actual: contexto.numeroFacturaVigente },
-    { token: "numeroConstanciaRepuve", actual: contexto.numeroConstanciaRepuve },
-    { token: "numeroTarjetaCirculacion", actual: contexto.numeroTarjetaCirculacion },
-    {
-      token: "refrendosAnio",
-      actual: contexto.refrendosAnio == null ? null : String(contexto.refrendosAnio),
-    },
-  ];
+  const camposUnidadRequeridos = CAMPOS_FICHA_UNIDAD.map((token) => ({
+    token,
+    actual: valorFichaUnidad(contexto, token),
+  }));
   const tocaDatosUnidad = camposUnidadRequeridos.some(({ token }) => masterUpdates[token] != null);
   if (tocaDatosUnidad) {
     const faltantesUnidad = camposUnidadRequeridos.filter(
