@@ -12,6 +12,9 @@ export { TIPOS_LEGACY };
 type ErrorBaseDatos = {
   code?: string;
   message?: string;
+  table?: string;
+  column?: string;
+  constraint?: string;
 };
 
 /**
@@ -47,6 +50,16 @@ export function respuestaError(error: unknown): NextResponse {
       },
       { status: 503 },
     );
+  }
+  if (pgError.code) {
+    // Solo metadatos de esquema (código/tabla/columna/restricción), nunca
+    // el detalle crudo de Postgres: puede traer el valor capturado.
+    console.error("Error de base de datos:", {
+      code: pgError.code,
+      table: pgError.table,
+      column: pgError.column,
+      constraint: pgError.constraint,
+    });
   }
   switch (pgError.code) {
     case "P0001": // raise_exception: candados del manual
