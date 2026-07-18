@@ -771,6 +771,48 @@ export async function guardarCapturaDocumento(
     if (problems.length > 0) return { ok: false, missing: problems };
   }
 
+  // traza.unidad exige (CHECK unidad_datos_contractuales_requeridos) que estos
+  // diez campos queden completos a la vez: si esta captura aporta alguno nuevo
+  // pero deja otro en null, el UPDATE de abajo violaría el candado. Se detecta
+  // antes de escribir para señalar el campo exacto en vez de un 23514 opaco.
+  const camposUnidadRequeridos: Array<{ token: TokenSistema; actual: string | null }> = [
+    { token: "color", actual: contexto.color },
+    { token: "numMotor", actual: contexto.numMotor },
+    {
+      token: "kilometraje",
+      actual: contexto.kilometrajeIngreso == null ? null : String(contexto.kilometrajeIngreso),
+    },
+    { token: "versionTipo", actual: contexto.versionTipo },
+    { token: "placas", actual: contexto.placas },
+    { token: "entidadEmisora", actual: contexto.entidadEmisora },
+    { token: "numeroFacturaVigente", actual: contexto.numeroFacturaVigente },
+    { token: "numeroConstanciaRepuve", actual: contexto.numeroConstanciaRepuve },
+    { token: "numeroTarjetaCirculacion", actual: contexto.numeroTarjetaCirculacion },
+    {
+      token: "refrendosAnio",
+      actual: contexto.refrendosAnio == null ? null : String(contexto.refrendosAnio),
+    },
+  ];
+  const tocaDatosUnidad = camposUnidadRequeridos.some(({ token }) => masterUpdates[token] != null);
+  if (tocaDatosUnidad) {
+    const faltantesUnidad = camposUnidadRequeridos.filter(
+      ({ token, actual }) => vacio(actual) && vacio(masterUpdates[token]),
+    );
+    if (faltantesUnidad.length > 0) {
+      const problems: ProblemaCampo[] = faltantesUnidad.map(({ token }) => {
+        const field = template.fields.find((candidate) => candidate.systemToken === token);
+        return {
+          name: field?.name ?? token,
+          label: field?.label ?? token,
+          section: field?.section ?? "",
+          message:
+            "Los datos de la unidad se completan todos juntos: captura este dato para poder guardar los demás.",
+        };
+      });
+      return { ok: false, missing: problems };
+    }
+  }
+
   await withTransaction(async (client) => {
     if (
       masterUpdates.color != null ||
