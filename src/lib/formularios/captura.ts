@@ -714,11 +714,22 @@ export async function guardarCapturaDocumento(
   const template = obtenerPlantillaFormulario(contexto.tipo);
   const byName = new Map(template.fields.map((field) => [field.name, field]));
   const provided: Record<string, string> = {};
+  const formatProblems: ProblemaCampo[] = [];
   for (const [name, raw] of Object.entries(input)) {
     const field = byName.get(name);
     if (!field || field.source === "derived") continue;
-    provided[name] = normalizeValue(field, raw);
+    try {
+      provided[name] = normalizeValue(field, raw);
+    } catch (error) {
+      formatProblems.push({
+        name: field.name,
+        label: field.label,
+        section: field.section,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
+  if (formatProblems.length > 0) return { ok: false, missing: formatProblems };
   const clearedFields = Object.entries(provided)
     .filter(([, value]) => vacio(value))
     .map(([name]) => name);
