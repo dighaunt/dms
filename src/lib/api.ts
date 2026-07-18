@@ -85,6 +85,11 @@ export function respuestaError(error: unknown): NextResponse {
 }
 
 export function respuesta400(error: z.ZodError): NextResponse {
+  // Sin valores (solo path/code) para no exponer datos capturados en los logs.
+  console.error(
+    "Cuerpo de solicitud inválido:",
+    JSON.stringify(error.issues.map(({ path, code, message }) => ({ path, code, message }))),
+  );
   return NextResponse.json(
     {
       error:
