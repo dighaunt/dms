@@ -1,6 +1,11 @@
 import catalogoGenerado from "./catalogo-generado.json";
 
 import { normalizarEtiquetaCampo, normalizarSeccion } from "./etiquetas";
+import {
+  aplicarReglasFormulario,
+  camposRequeridosPorReglas,
+  type ReglaFormulario,
+} from "./reglas";
 
 export type TipoEntrada =
   | "text"
@@ -74,11 +79,7 @@ export type CampoFormulario = CampoGenerado & {
   closeWithHyphens: boolean;
 };
 
-export type ReglaFormulario = {
-  when: { field: string; equals: string };
-  require?: string[];
-  fill?: Record<string, string>;
-};
+export type { ReglaFormulario };
 
 export type PlantillaFormulario = Omit<PlantillaGenerada, "fields"> & {
   fields: CampoFormulario[];
@@ -633,42 +634,18 @@ export function aplicarReglas(
   template: PlantillaFormulario,
   input: Record<string, string>,
 ): Record<string, string> {
-  const values = { ...input };
-
-  // Si una condición dejó de cumplirse, retira únicamente el valor que esa
-  // misma regla había generado. Así SIN garantía -> CON garantía no conserva
-  // un NO APLICA que podría hacer pasar una validación incorrecta.
-  const activeFills = new Map<string, string>();
-  for (const rule of template.rules) {
-    if (values[rule.when.field] !== rule.when.equals) continue;
-    for (const [field, value] of Object.entries(rule.fill ?? {})) {
-      activeFills.set(field, value);
-    }
-  }
-  for (const rule of template.rules) {
-    for (const [field, automaticValue] of Object.entries(rule.fill ?? {})) {
-      if (!activeFills.has(field) && values[field] === automaticValue) values[field] = "";
-    }
-  }
-  for (const [field, value] of activeFills) {
-    values[field] = value;
-  }
-  return values;
+  return aplicarReglasFormulario(template.rules, input);
 }
 
 export function camposRequeridos(
   template: PlantillaFormulario,
   values: Record<string, string>,
 ): Set<string> {
-  const required = new Set(
+  return camposRequeridosPorReglas(
+    template.rules,
     template.fields.filter((field) => field.required).map((field) => field.name),
+    values,
   );
-  for (const rule of template.rules) {
-    if (values[rule.when.field] === rule.when.equals) {
-      for (const name of rule.require ?? []) required.add(name);
-    }
-  }
-  return required;
 }
 
 /** Límite de captura: usa contratos semánticos; el PDF nunca limita por ancho visual. */
