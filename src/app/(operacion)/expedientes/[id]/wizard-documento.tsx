@@ -46,6 +46,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { mensajeErrorRespuesta, mensajeErrorSinRespuesta } from "@/lib/cliente-api";
 import { etiquetaAlternativa } from "@/lib/formularios/etiquetas";
+import {
+  aplicarReglasFormulario,
+  camposRequeridosPorReglas,
+  rellenosActivos,
+} from "@/lib/formularios/reglas";
 import type { CampoCaptura, CapturaDocumento } from "@/lib/formularios/tipos";
 import { canonizarNumeroCaptura, formatearNumeroCaptura } from "@/lib/numeros";
 import { cn } from "@/lib/utils";
@@ -70,25 +75,6 @@ function etiquetaOpcion(value: string): string {
   return labels[value] ?? value.replaceAll("_", " ");
 }
 
-function aplicarReglasCliente(
-  rules: CapturaDocumento["rules"],
-  input: Record<string, string>,
-): Record<string, string> {
-  const values = { ...input };
-  const activeFills = new Map<string, string>();
-  for (const rule of rules) {
-    if (values[rule.when.field] !== rule.when.equals) continue;
-    for (const [name, value] of Object.entries(rule.fill ?? {})) activeFills.set(name, value);
-  }
-  for (const rule of rules) {
-    for (const [name, automaticValue] of Object.entries(rule.fill ?? {})) {
-      if (!activeFills.has(name) && values[name] === automaticValue) values[name] = "";
-    }
-  }
-  for (const [name, value] of activeFills) values[name] = value;
-  return values;
-}
-
 function payloadEditable(data: CapturaDocumento, values: Record<string, string>) {
   return Object.fromEntries(
     data.fields
@@ -98,7 +84,7 @@ function payloadEditable(data: CapturaDocumento, values: Record<string, string>)
 }
 
 function valorInicial(data: CapturaDocumento) {
-  return aplicarReglasCliente(
+  return aplicarReglasFormulario(
     data.rules,
     Object.fromEntries(data.fields.map((field) => [field.name, field.value])),
   );
@@ -170,28 +156,41 @@ export function WizardDocumento({
     return () => controller.abort();
   }, [documentoId, intentoCarga]);
 
-  const requiredNames = useMemo(() => {
-    const names = new Set(data?.fields.filter((field) => field.baseRequired).map((field) => field.name));
-    for (const rule of data?.rules ?? []) {
-      if (values[rule.when.field] !== rule.when.equals) continue;
-      for (const name of rule.require ?? []) names.add(name);
-    }
-    return names;
-  }, [data, values]);
+  const requiredNames = useMemo(
+    () =>
+      camposRequeridosPorReglas(
+        data?.rules ?? [],
+        (data?.fields ?? []).filter((field) => field.baseRequired).map((field) => field.name),
+        values,
+      ),
+    [data, values],
+  );
 
-  const activeFillNames = useMemo(() => {
-    const names = new Set<string>();
-    for (const rule of data?.rules ?? []) {
-      if (values[rule.when.field] !== rule.when.equals) continue;
-      for (const name of Object.keys(rule.fill ?? {})) names.add(name);
-    }
-    return names;
-  }, [data, values]);
+  const activeFillNames = useMemo(
+    () => new Set(rellenosActivos(data?.rules ?? [], values).keys()),
+    [data, values],
+  );
 
   const groupFieldNames = useMemo(
     () => new Set(data?.choiceGroups.flatMap((group) => group.fields) ?? []),
     [data],
   );
+
+  // Un reclamo sobre un campo que el wizard nunca dibuja —porque una regla lo
+  // resolvió o el PDF lo repite— sería un callejón sin salida: el aviso
+  // aparece, la sección se ve limpia y no hay dónde corregir. Se listan aparte
+  // con su etiqueta para que se vea qué condición hay que revisar.
+  const issuesSinControl = useMemo(() => {
+    if (!data || issues.size === 0) return [];
+    return [...issues.entries()]
+      .map(([name, message]) => ({
+        name,
+        message,
+        field: data.fields.find((candidate) => candidate.name === name),
+      }))
+      .filter(({ field, name }) => !field?.visible || activeFillNames.has(name))
+      .map(({ name, message, field }) => ({ name, message, label: field?.label ?? name }));
+  }, [activeFillNames, data, issues]);
 
   const visibleSections = useMemo(() => {
     if (!data) return [];
@@ -263,7 +262,7 @@ export function WizardDocumento({
 
   function update(name: string, value: string) {
     if (!data) return;
-    setValues((current) => aplicarReglasCliente(data.rules, { ...current, [name]: value }));
+    setValues((current) => aplicarReglasFormulario(data.rules, { ...current, [name]: value }));
     clearIssues([name]);
     setErrorOperacion(null);
     setOperacionFallida(null);
@@ -274,7 +273,7 @@ export function WizardDocumento({
     setValues((current) => {
       const next = { ...current };
       for (const name of group.fields) next[name] = name === selectedName ? "SI" : "NO";
-      return aplicarReglasCliente(data.rules, next);
+      return aplicarReglasFormulario(data.rules, next);
     });
     clearIssues(group.fields);
     setErrorOperacion(null);
@@ -505,6 +504,24 @@ export function WizardDocumento({
                         : undefined}
                       onDismiss={() => setErrorOperacion(null)}
                     />
+                    {issuesSinControl.length > 0 && (
+                      <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4">
+                        <p className="flex items-center gap-2 text-sm font-medium text-red-900">
+                          <AlertTriangleIcon className="size-4 shrink-0" />
+                          Datos que el sistema resuelve solo y no pasaron la validación
+                        </p>
+                        <ul className="mt-2 space-y-1 text-xs leading-relaxed text-red-800">
+                          {issuesSinControl.map((issue) => (
+                            <li key={issue.name}>
+                              <span className="font-medium">{issue.label}:</span> {issue.message}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-xs text-red-700">
+                          Revise la condición que los activa; no se capturan directamente.
+                        </p>
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {activeItems.map((item) =>
                         item.kind === "group" ? (

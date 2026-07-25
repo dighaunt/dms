@@ -44,11 +44,18 @@ Cada tabla tiene valores atómicos (1FN), depende de su clave completa (2FN), no
 
 Los tipos se conservan en SQL mediante `TEXTO`, `NUMERO`, `FECHA`, `BOOLEANO` y `OPCION`, con un `CHECK` que permite exactamente una columna de valor compatible. Un trigger impide cambiar la captura después de que existe un escaneo y otro registra cada versión antes de ese cierre.
 
+## Reglas condicionales
+
+`src/lib/formularios/reglas.ts` es el único motor de reglas: el catálogo del servidor y el wizard del navegador lo comparten para que "obligatorio" signifique lo mismo en los dos lados. Vive fuera de `catalogo.ts` porque el cliente no debe cargar `catalogo-generado.json`.
+
+Una regla declara `when` (condición), `fill` (valores que impone) y `require` (datos que vuelve obligatorios). El `required` del AcroForm marca todos los huecos de una cláusula sin distinguir qué condición los activa, así que un campo que una regla vigente está anulando deja de ser obligatorio: su valor lo pone la regla y el wizard ni siquiera lo muestra. Cuando dos reglas vigentes se cruzan, `require` gana sobre `fill`.
+
 ## Reglas críticas verificadas
 
-- C-02 sin garantía rellena días, kilómetros y cobertura con `NO APLICA` y guiones.
-- C-02 con garantía exige los tres datos.
+- C-02 sin garantía rellena días, kilómetros y cobertura con `NO APLICA` y guiones, y no los reclama como datos faltantes.
+- C-02 con garantía exige los tres datos, sin arrastrar el `NO APLICA` anterior.
 - C-04 sin seguro cierra el número de póliza con `NO APLICA`.
+- F-07 sin adeudo cierra el monto del concepto con `NO APLICA`.
 - Importes generan texto como `UN MIL TRESCIENTOS PESOS 00/100 M.N.`.
 - Fechas de captura se guardan tipadas y se presentan como `10 JULIO 2026`, con año de cuatro dígitos.
 - Teléfonos exigen exactamente 10 dígitos; RFC, CURP, correo, hora y fecha se validan por patrón y longitud.
