@@ -12,9 +12,10 @@
  * ella: los candados del manual se imponen en plpgsql y llegan como P0001.
  */
 
+import { z } from "zod";
+
 import { aCentavos, deCentavos } from "@/lib/finanzas/calculos";
 import { LONGITUD_VIN, vinEsValido } from "@/lib/finanzas/formato";
-import { z } from "zod";
 
 // ===== FORMATOS =====
 

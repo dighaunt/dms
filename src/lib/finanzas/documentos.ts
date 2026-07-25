@@ -2,8 +2,9 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { query, withTransaction } from "@/lib/db";
+import { z } from "zod";
 
+import { query, withTransaction } from "@/lib/db";
 import {
   esquemaEstadoDocumento,
   esquemaFechaIso,
@@ -22,7 +23,6 @@ import {
   type RolFirmante,
   type TipoRci,
 } from "@/lib/finanzas/tipos";
-import { z } from "zod";
 
 /**
  * Servicio común a los siete formatos CACM-RCI: emitir el folio, consultarlo,
@@ -125,7 +125,7 @@ export function filaADocumento(fila: FilaDocumentoFinanciero): DocumentoFinancie
     sucursalClave: fila.sucursal_clave,
     sucursalNombre: fila.sucursal_nombre,
     consecutivo: aNumero(fila.consecutivo),
-    estado: (fila.estado as EstadoDocumentoFinanciero | null) ?? null,
+    estado: fila.estado as EstadoDocumentoFinanciero | null,
     estadoDesde: aIsoOpcional(fila.estado_desde),
     estadoMotivo: fila.estado_motivo,
     complementaA: aNumeroOpcional(fila.complementa_a),
