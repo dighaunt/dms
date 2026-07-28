@@ -13,15 +13,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getUsuarioSesion } from "@/lib/auth/usuario";
-import { query } from "@/lib/db";
 import { anticiposDeSocios, listarRepartosUtilidades } from "@/lib/finanzas/egresos";
 import { importeEnCasillas } from "@/lib/finanzas/formato";
+import { listarSocios } from "@/lib/finanzas/personas";
 
 import { RegistrarReparto, type SocioCandidato } from "./registrar-reparto";
 
 export const dynamic = "force-dynamic";
-
-type FilaUsuario = { id: number; nombre: string };
 
 /**
  * Reparto formal de utilidades — la salida de la regla 5.
@@ -50,31 +48,24 @@ export default async function RepartosUtilidadesPage() {
    */
   const puedeRegistrar = sesion.nivel === "N3";
 
-  const [posiciones, repartos, usuarios] = await Promise.all([
+  const [posiciones, repartos, socios] = await Promise.all([
     anticiposDeSocios(),
     listarRepartosUtilidades(),
 
-    // Candidatos a socio. `v_anticipo_utilidades_socio` sólo lista a quien ya
-    // retiró o ya recibió reparto, así que no basta para poblar el selector: un
-    // socio al que se le reparte por primera vez no aparecería en ella y no
-    // habría manera de nombrarlo. La posición se cruza después, por id.
-    puedeRegistrar
-      ? query<FilaUsuario>(
-          `SELECT u.id::int AS id, u.nombre
-             FROM traza.usuario u
-            WHERE u.activo
-            ORDER BY u.nombre`,
-        ).then(({ rows }) => rows)
-      : Promise.resolve([] as FilaUsuario[]),
+    // A quién se le puede repartir lo dice el REGISTRO DE SOCIOS, no el padrón
+    // de usuarios del sistema: la utilidad le corresponde a quien tiene parte
+    // del capital social, y eso se acredita con un acta. La posición de cada
+    // uno se cruza después, por la persona.
+    puedeRegistrar ? listarSocios({ soloActivos: true }) : Promise.resolve([]),
   ]);
 
-  const posicionPorSocio = new Map(posiciones.map((p) => [p.socioUsuarioId, p]));
+  const posicionPorSocio = new Map(posiciones.map((p) => [p.socioPersonaId, p]));
 
-  const candidatos: SocioCandidato[] = usuarios.map((usuario) => {
-    const posicion = posicionPorSocio.get(usuario.id);
+  const candidatos: SocioCandidato[] = socios.map((socio) => {
+    const posicion = posicionPorSocio.get(socio.personaId);
     return {
-      usuarioId: usuario.id,
-      nombre: usuario.nombre,
+      personaId: socio.personaId,
+      nombre: socio.nombre,
       totalAnticipos: posicion?.totalAnticipos ?? "0.00",
       totalRepartido: posicion?.totalRepartido ?? "0.00",
       saldoPorComprobar: posicion?.saldoPorComprobar ?? "0.00",
@@ -119,7 +110,12 @@ export default async function RepartosUtilidadesPage() {
           <CardContent>
             {posiciones.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Ningún socio ha retirado dinero ni ha recibido reparto todavía.
+                Todavía no hay ningún socio dado de alta. Ser socio se acredita con un acta y no se
+                deduce de tener cuenta en el sistema:{" "}
+                <Link href="/finanzas/catalogos/socios" className="underline">
+                  regístralos primero
+                </Link>
+                .
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -135,7 +131,7 @@ export default async function RepartosUtilidadesPage() {
                   </TableHeader>
                   <TableBody>
                     {posiciones.map((p) => (
-                      <TableRow key={p.socioUsuarioId}>
+                      <TableRow key={p.socioPersonaId}>
                         <TableCell className="font-medium">{p.socioNombre}</TableCell>
                         <TableCell className="text-right font-mono tabular-nums">
                           {importeEnCasillas(p.totalAnticipos).texto}
@@ -207,7 +203,7 @@ export default async function RepartosUtilidadesPage() {
                     <ul className="mt-3 divide-y text-sm">
                       {reparto.asignaciones.map((asignacion) => (
                         <li
-                          key={asignacion.socioUsuarioId}
+                          key={asignacion.socioPersonaId}
                           className="flex justify-between gap-4 py-1.5"
                         >
                           <span>{asignacion.socioNombre}</span>

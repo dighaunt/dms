@@ -66,10 +66,10 @@ INSERT INTO sucursal (clave, nombre, creada_por)
  VALUES ('MTY','Matriz Monterrey',(SELECT id FROM usuario WHERE email='gerente@t.mx'))
 ON CONFLICT (clave) DO NOTHING;
 
-INSERT INTO empleado (num_empleado, nombre, puesto, sucursal_id, usuario_id, creado_por) VALUES
- ('E-01','Vendedora Prueba','Vendedor',(SELECT id FROM sucursal WHERE clave='MTY'),
+INSERT INTO empleado (num_empleado, nombres, apellido_paterno, apellido_materno, puesto, sucursal_id, usuario_id, creado_por) VALUES
+ ('E-01','Vendedora','Prueba',NULL,'Vendedor',(SELECT id FROM sucursal WHERE clave='MTY'),
   (SELECT id FROM usuario WHERE email='vendedor@t.mx'),(SELECT id FROM usuario WHERE email='gerente@t.mx')),
- ('E-02','Asesor Servicio','Asesor de servicio',(SELECT id FROM sucursal WHERE clave='MTY'),
+ ('E-02','Asesor','Servicio',NULL,'Asesor de servicio',(SELECT id FROM sucursal WHERE clave='MTY'),
   NULL,(SELECT id FROM usuario WHERE email='gerente@t.mx'))
 ON CONFLICT (sucursal_id, num_empleado) DO NOTHING;
 

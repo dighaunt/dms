@@ -342,6 +342,14 @@ export default async function FinanzasPage() {
               <Button asChild variant="secondary" size="sm">
                 <Link href="/finanzas/catalogos">Catálogos y PIN de firma</Link>
               </Button>
+              <Button asChild variant="secondary" size="sm">
+                <Link href="/finanzas/catalogos/personas">Personas</Link>
+              </Button>
+              {/* Ser socio es tener parte del capital social y se acredita con
+                  un acta; no se deduce de tener cuenta en el sistema. */}
+              <Button asChild variant="secondary" size="sm">
+                <Link href="/finanzas/catalogos/socios">Socios</Link>
+              </Button>
             </div>
           </CardContent>
         </Card>

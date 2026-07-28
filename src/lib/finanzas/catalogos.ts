@@ -267,33 +267,52 @@ export function desactivarSucursal(sucursalId: number): Promise<Sucursal | null>
 type FilaEmpleado = {
   id: string | number;
   num_empleado: string;
+  nombres: string;
+  apellido_paterno: string;
+  apellido_materno: string | null;
   nombre: string;
+  departamento: string | null;
   puesto: string | null;
   sucursal_id: string | number;
   usuario_id: string | number | null;
   activo: boolean;
+  baja_en: string | Date | null;
 };
 
 function filaAEmpleado(fila: FilaEmpleado): Empleado {
   return {
     id: aNumero(fila.id),
     numEmpleado: fila.num_empleado,
+    nombres: fila.nombres,
+    apellidoPaterno: fila.apellido_paterno,
+    apellidoMaterno: fila.apellido_materno,
     nombre: fila.nombre,
+    departamento: fila.departamento,
     puesto: fila.puesto,
     sucursalId: aNumero(fila.sucursal_id),
     usuarioId: aNumeroOpcional(fila.usuario_id),
     activo: fila.activo,
+    bajaEn: fila.baja_en === null ? null : new Date(fila.baja_en).toISOString(),
   };
 }
+
+// `nombre` se lee, nunca se escribe: la base lo deriva de las tres partes.
+const COLUMNAS_EMPLEADO = `id, num_empleado, nombres, apellido_paterno, apellido_materno,
+         nombre, departamento, puesto, sucursal_id, usuario_id, activo, baja_en`;
 
 const SELECT_EMPLEADO = `
   SELECT e.id,
          e.num_empleado,
+         e.nombres,
+         e.apellido_paterno,
+         e.apellido_materno,
          e.nombre,
+         e.departamento,
          e.puesto,
          e.sucursal_id,
          e.usuario_id,
-         e.activo
+         e.activo,
+         e.baja_en
     FROM traza.empleado e`;
 
 export const esquemaFiltroEmpleados = z.object({
@@ -318,7 +337,7 @@ export async function listarEmpleados(filtro: FiltroEmpleados = {}): Promise<Emp
     `${SELECT_EMPLEADO}
       WHERE ($1::bigint IS NULL OR e.sucursal_id = $1)
         AND (NOT $2::boolean OR e.activo)
-      ORDER BY e.sucursal_id, e.nombre`,
+      ORDER BY e.sucursal_id, e.apellido_paterno, e.apellido_materno NULLS FIRST, e.nombres`,
     [sucursalId ?? null, soloActivos],
   );
   return rows.map(filaAEmpleado);
@@ -330,11 +349,24 @@ export const esquemaCrearEmpleado = z.object({
     .trim()
     .min(1, "Captura el número de empleado")
     .max(20),
-  nombre: z
+  /**
+   * El nombre va en tres partes porque así lo entrega Recursos Humanos y así
+   * lo pide el IMSS. El nombre completo NO se captura: lo deriva la base, de
+   * modo que corregir un apellido corrija también lo que sale impreso.
+   */
+  nombres: z
     .string()
     .trim()
-    .min(3, "El nombre debe tener al menos 3 caracteres")
-    .max(160),
+    .min(2, "Captura el nombre de pila")
+    .max(80),
+  apellidoPaterno: z
+    .string()
+    .trim()
+    .min(2, "Captura el apellido paterno")
+    .max(80),
+  /** Opcional de verdad: exigirlo obliga a inventarlo a quien lleva uno solo. */
+  apellidoMaterno: textoOpcional(80),
+  departamento: textoOpcional(80),
   puesto: textoOpcional(80),
   sucursalId: esquemaId,
   /**
@@ -355,12 +387,16 @@ export async function crearEmpleado(entrada: EntradaCrearEmpleado): Promise<Empl
 
   const { rows } = await query<FilaEmpleado>(
     `INSERT INTO traza.empleado
-       (num_empleado, nombre, puesto, sucursal_id, usuario_id, creado_por)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, num_empleado, nombre, puesto, sucursal_id, usuario_id, activo`,
+       (num_empleado, nombres, apellido_paterno, apellido_materno, departamento,
+        puesto, sucursal_id, usuario_id, creado_por)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING ${COLUMNAS_EMPLEADO}`,
     [
       datos.numEmpleado,
-      datos.nombre,
+      datos.nombres,
+      datos.apellidoPaterno,
+      datos.apellidoMaterno,
+      datos.departamento,
       datos.puesto,
       datos.sucursalId,
       datos.usuarioId ?? null,
@@ -368,6 +404,86 @@ export async function crearEmpleado(entrada: EntradaCrearEmpleado): Promise<Empl
     ],
   );
   return filaAEmpleado(rows[0]);
+}
+
+/** Los mismos campos del alta, menos los que fijan la identidad del registro. */
+export const esquemaActualizarEmpleado = esquemaCrearEmpleado.omit({
+  sucursalId: true,
+  usuario: true,
+});
+
+export type EntradaActualizarEmpleado = z.input<typeof esquemaActualizarEmpleado>;
+
+/**
+ * Corrige la ficha. La sucursal no se cambia: el consecutivo de folios corre
+ * por sucursal, y mover a alguien de agencia es un alta nueva allá, no una
+ * edición aquí.
+ */
+export async function actualizarEmpleado(
+  empleadoId: number,
+  entrada: EntradaActualizarEmpleado,
+): Promise<Empleado | null> {
+  const id = esquemaId.parse(empleadoId);
+  const datos = esquemaActualizarEmpleado.parse(entrada);
+
+  const { rows } = await query<FilaEmpleado>(
+    `UPDATE traza.empleado
+        SET num_empleado     = $2,
+            nombres          = $3,
+            apellido_paterno = $4,
+            apellido_materno = $5,
+            departamento     = $6,
+            puesto           = $7,
+            usuario_id       = $8
+      WHERE id = $1
+      RETURNING ${COLUMNAS_EMPLEADO}`,
+    [
+      id,
+      datos.numEmpleado,
+      datos.nombres,
+      datos.apellidoPaterno,
+      datos.apellidoMaterno,
+      datos.departamento,
+      datos.puesto,
+      datos.usuarioId ?? null,
+    ],
+  );
+  return rows[0] ? filaAEmpleado(rows[0]) : null;
+}
+
+/**
+ * Da de baja o reactiva a un empleado. Devuelve null si no existe.
+ *
+ * Dar de baja NO es borrar: es inhabilitar. La ficha tiene que seguir ahí
+ * porque cada RCI-01 que esa persona cobró la cita por su nombre, y leer un
+ * folio de hace tres años exige poder resolver quién era el vendedor. Borrarla
+ * sería además imposible —la referencian los recibos y la nómina— y dejaría
+ * huecos inexplicables. Lo único que cambia es que deja de poder elegirse en
+ * una captura nueva.
+ *
+ * El cambio lo hace `cambiar_alta_empleado`, que anota cuándo y quién.
+ */
+async function marcarEmpleado(
+  empleadoId: number,
+  activo: boolean,
+  usuario: number,
+): Promise<Empleado | null> {
+  const id = esquemaId.parse(empleadoId);
+  const usuarioId = esquemaId.parse(usuario);
+
+  const { rows } = await query<FilaEmpleado>(
+    `SELECT ${COLUMNAS_EMPLEADO} FROM traza.cambiar_alta_empleado($1, $2, $3)`,
+    [id, activo, usuarioId],
+  );
+  return rows[0] ? filaAEmpleado(rows[0]) : null;
+}
+
+export function activarEmpleado(empleadoId: number, usuario: number): Promise<Empleado | null> {
+  return marcarEmpleado(empleadoId, true, usuario);
+}
+
+export function desactivarEmpleado(empleadoId: number, usuario: number): Promise<Empleado | null> {
+  return marcarEmpleado(empleadoId, false, usuario);
 }
 
 // ===== CONCEPTOS Y FORMAS DE PAGO =====

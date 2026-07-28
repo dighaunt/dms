@@ -959,6 +959,11 @@ export async function posicionEfectivo(
 // ===== 5. UTILIDADES PENDIENTES DE REPARTO =====
 
 export type FichaSocio = PosicionSocio & {
+  /**
+   * Id de la PERSONA registrada como socio. Ser accionista es una condición
+   * jurídica y no "tener cuenta en el DMS": desde la migración 040 el socio se
+   * registra sobre `persona` y su enlace con `usuario` es opcional.
+   */
   socioId: number;
   nombre: string;
   /** Lo retirado dentro del rango y sucursal elegidos, sólo como contexto. */
@@ -1010,20 +1015,20 @@ export async function utilidadesPendientesReparto(
 
   const [{ rows: filasSocio }, { rows: filasPeriodo }, { rows: filasReparto }] = await Promise.all([
     query<{
-      socio_usuario_id: string | number;
+      socio_persona_id: string | number;
       socio_nombre: string;
       total_anticipos: string;
       total_repartido: string;
     }>(
-      `SELECT a.socio_usuario_id,
+      `SELECT a.socio_persona_id,
               a.socio_nombre,
               a.total_anticipos::text,
               a.total_repartido::text
          FROM traza.v_anticipo_utilidades_socio a
         ORDER BY a.socio_nombre`,
     ),
-    query<{ socio_usuario_id: string | number; importe: string; vales: string | number }>(
-      `SELECT v.socio_usuario_id,
+    query<{ socio_persona_id: string | number; importe: string; vales: string | number }>(
+      `SELECT v.socio_persona_id,
               sum(v.importe)::text AS importe,
               count(*) AS vales
          FROM traza.vale_egreso_rci05 v
@@ -1032,7 +1037,7 @@ export async function utilidadesPendientesReparto(
           AND d.estado = 'FIRMADO'
           AND v.fecha_hora::date BETWEEN $1::date AND $2::date
           AND ($3::bigint IS NULL OR d.sucursal_id = $3::bigint)
-        GROUP BY v.socio_usuario_id`,
+        GROUP BY v.socio_persona_id`,
       [rango.desde, rango.hasta, rango.sucursalId],
     ),
     query<{
@@ -1054,13 +1059,13 @@ export async function utilidadesPendientesReparto(
 
   const enPeriodo = new Map(
     filasPeriodo.map((fila) => [
-      aNumero(fila.socio_usuario_id),
+      aNumero(fila.socio_persona_id),
       { importe: aImporte(fila.importe), vales: aNumero(fila.vales) },
     ]),
   );
 
   const socios: FichaSocio[] = filasSocio.map((fila) => {
-    const socioId = aNumero(fila.socio_usuario_id);
+    const socioId = aNumero(fila.socio_persona_id);
     const posicion = posicionSocio({
       totalAnticipos: fila.total_anticipos,
       totalRepartido: fila.total_repartido,

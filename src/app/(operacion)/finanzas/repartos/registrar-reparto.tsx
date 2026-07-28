@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -17,13 +18,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { InputMoneda } from "@/components/ui/input-moneda";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { aCentavos, deCentavos } from "@/lib/finanzas/calculos";
 import { importeEnCasillas } from "@/lib/finanzas/formato";
 
+/**
+ * Un socio REGISTRADO. La utilidad le corresponde a quien tiene parte del
+ * capital social —lo acredita un acta—, no a quien tiene cuenta en el sistema.
+ */
 export type SocioCandidato = {
-  usuarioId: number;
+  personaId: number;
   nombre: string;
   /** Lo retirado con vales RCI-05 ya firmados. */
   totalAnticipos: string;
@@ -46,9 +52,7 @@ type Props = {
 /** El mismo que el CHECK de la tabla y el zod del servicio. */
 const PATRON_EJERCICIO = /^[0-9]{4}(-[ST][1-4])?$/;
 
-const soloImporte = (valor: string): string => valor.replace(/[^\d.]/g, "");
-
-type Renglon = { clave: number; socioUsuarioId: string; monto: string };
+type Renglon = { clave: number; socioPersonaId: string; monto: string };
 
 /**
  * Alta del reparto formal de utilidades.
@@ -89,14 +93,14 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
   const [renglones, setRenglones] = useState<Renglon[]>(() => [
     {
       clave: 1,
-      socioUsuarioId: String(socios.find((s) => s.tieneSaldoPorComprobar)?.usuarioId ?? ""),
+      socioPersonaId: String(socios.find((s) => s.tieneSaldoPorComprobar)?.personaId ?? ""),
       monto: "",
     },
   ]);
   const [siguienteClave, setSiguienteClave] = useState(2);
 
   const porId = useMemo(
-    () => new Map(socios.map((socio) => [String(socio.usuarioId), socio])),
+    () => new Map(socios.map((socio) => [String(socio.personaId), socio])),
     [socios],
   );
 
@@ -111,7 +115,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
   const remanente =
     repartibleCentavos === null ? null : deCentavos(repartibleCentavos - asignadoCentavos);
 
-  const elegidos = renglones.map((r) => r.socioUsuarioId).filter((id) => id !== "");
+  const elegidos = renglones.map((r) => r.socioPersonaId).filter((id) => id !== "");
   const hayRepetidos = new Set(elegidos).size !== elegidos.length;
 
   const ejercicioValido = PATRON_EJERCICIO.test(ejercicio.trim());
@@ -121,7 +125,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
     renglones.length > 0 &&
     renglones.every((renglon) => {
       const centavos = aCentavos(renglon.monto);
-      return renglon.socioUsuarioId !== "" && centavos !== null && centavos > 0n;
+      return renglon.socioPersonaId !== "" && centavos !== null && centavos > 0n;
     });
 
   const listo =
@@ -146,13 +150,13 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
     // Se propone el siguiente socio con saldo por comprobar que no esté ya en
     // la lista: es a quien le toca descargarse, y teclearlo a mano sólo abre la
     // puerta a repartirle a quien no debía nada mientras el que debe sigue igual.
-    const yaElegidos = new Set(renglones.map((r) => r.socioUsuarioId));
+    const yaElegidos = new Set(renglones.map((r) => r.socioPersonaId));
     const propuesto = socios.find(
-      (socio) => socio.tieneSaldoPorComprobar && !yaElegidos.has(String(socio.usuarioId)),
+      (socio) => socio.tieneSaldoPorComprobar && !yaElegidos.has(String(socio.personaId)),
     );
     setRenglones((previos) => [
       ...previos,
-      { clave: siguienteClave, socioUsuarioId: String(propuesto?.usuarioId ?? ""), monto: "" },
+      { clave: siguienteClave, socioPersonaId: String(propuesto?.personaId ?? ""), monto: "" },
     ]);
     setSiguienteClave((n) => n + 1);
   }
@@ -174,7 +178,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
           utilidadRepartible,
           actaReferencia: actaReferencia.trim(),
           asignaciones: renglones.map((renglon) => ({
-            socioUsuarioId: Number(renglon.socioUsuarioId),
+            socioPersonaId: Number(renglon.socioPersonaId),
             monto: renglon.monto,
           })),
         }),
@@ -189,7 +193,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
       setFechaBalance("");
       setUtilidadRepartible("");
       setActaReferencia("");
-      setRenglones([{ clave: siguienteClave, socioUsuarioId: "", monto: "" }]);
+      setRenglones([{ clave: siguienteClave, socioPersonaId: "", monto: "" }]);
       setSiguienteClave((n) => n + 1);
       router.refresh();
     } catch (error) {
@@ -208,6 +212,28 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
           asamblea sobre un balance aprobado, y queda inmutable con el nombre de quien lo autorizó.
           Por eso lo reserva el sistema al nivel N3. Puedes consultar aquí la posición de cada socio
           y los repartos ya registrados.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // Un selector de socios vacío no explica nada. Lo que falta no es capturar:
+  // es registrar quién tiene parte del capital social, con su acta.
+  if (socios.length === 0) {
+    return (
+      <Alert>
+        <AlertTitle>Todavía no hay socios registrados</AlertTitle>
+        <AlertDescription className="space-y-2">
+          <p>
+            Un reparto asigna utilidades a quien tiene parte del capital social, y eso se acredita
+            con un acta —no se deduce de tener cuenta en el sistema—. Mientras no haya nadie dado de
+            alta como socio no hay a quién repartirle.
+          </p>
+          <p>
+            <Link href="/finanzas/catalogos/socios" className="underline">
+              Registrar a los socios
+            </Link>
+          </p>
         </AlertDescription>
       </Alert>
     );
@@ -281,13 +307,12 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
 
           <div className="space-y-1.5">
             <Label htmlFor="utilidad">Utilidad repartible según el balance *</Label>
-            <Input
+            <InputMoneda
               id="utilidad"
-              value={utilidadRepartible}
-              onChange={(e) => setUtilidadRepartible(soloImporte(e.target.value))}
-              inputMode="decimal"
+              valor={utilidadRepartible}
+              onValorChange={setUtilidadRepartible}
               placeholder="0.00"
-              className="font-mono text-lg"
+              className="font-mono text-lg tabular-nums"
               aria-invalid={utilidadRepartible !== "" && repartibleCentavos === null}
             />
             {repartibleCentavos !== null && utilidadRepartible !== "" ? (
@@ -335,7 +360,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
 
           <ul className="space-y-3">
             {renglones.map((renglon) => {
-              const socio = porId.get(renglon.socioUsuarioId) ?? null;
+              const socio = porId.get(renglon.socioPersonaId) ?? null;
               const monto = aCentavos(renglon.monto);
               const saldo = socio ? aCentavos(socio.saldoPorComprobar) : null;
               const saldoRestante =
@@ -351,15 +376,15 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
                       <Label htmlFor={`socio-${renglon.clave}`}>Socio *</Label>
                       <select
                         id={`socio-${renglon.clave}`}
-                        value={renglon.socioUsuarioId}
+                        value={renglon.socioPersonaId}
                         onChange={(e) =>
-                          cambiarRenglon(renglon.clave, { socioUsuarioId: e.target.value })
+                          cambiarRenglon(renglon.clave, { socioPersonaId: e.target.value })
                         }
                         className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                       >
                         <option value="">— elige al socio —</option>
                         {socios.map((candidato) => (
-                          <option key={candidato.usuarioId} value={candidato.usuarioId}>
+                          <option key={candidato.personaId} value={candidato.personaId}>
                             {candidato.nombre}
                             {candidato.tieneSaldoPorComprobar
                               ? ` · ${importeEnCasillas(candidato.saldoPorComprobar).texto} por comprobar`
@@ -371,15 +396,12 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
 
                     <div className="space-y-1.5">
                       <Label htmlFor={`monto-${renglon.clave}`}>Monto asignado *</Label>
-                      <Input
+                      <InputMoneda
                         id={`monto-${renglon.clave}`}
-                        value={renglon.monto}
-                        onChange={(e) =>
-                          cambiarRenglon(renglon.clave, { monto: soloImporte(e.target.value) })
-                        }
-                        inputMode="decimal"
+                        valor={renglon.monto}
+                        onValorChange={(valor) => cambiarRenglon(renglon.clave, { monto: valor })}
                         placeholder="0.00"
-                        className="font-mono"
+                        className="font-mono tabular-nums"
                         aria-invalid={renglon.monto !== "" && (monto === null || monto <= 0n)}
                       />
                     </div>
@@ -498,7 +520,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
             <ul className="space-y-1">
               {renglones.map((renglon) => (
                 <li key={renglon.clave} className="flex justify-between gap-4">
-                  <span>{porId.get(renglon.socioUsuarioId)?.nombre ?? "—"}</span>
+                  <span>{porId.get(renglon.socioPersonaId)?.nombre ?? "—"}</span>
                   <span className="font-mono tabular-nums">
                     {importeEnCasillas(renglon.monto || "0").texto}
                   </span>

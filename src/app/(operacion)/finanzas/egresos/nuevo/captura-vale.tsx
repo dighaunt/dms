@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -8,7 +9,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ComboboxPersona,
+  PERSONA_SIN_CAPTURAR,
+  personaDeTextoLibre,
+  type PersonaCapturada,
+} from "@/components/ui/combobox-persona";
 import { Input } from "@/components/ui/input";
+import { InputMoneda } from "@/components/ui/input-moneda";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { aCentavos, deCentavos, estadoValeEgreso } from "@/lib/finanzas/calculos";
@@ -19,9 +27,16 @@ type Sucursal = { id: number; clave: string; nombre: string };
 type Concepto = { codigo: string; etiqueta: string; esAnticipoUtilidades: boolean };
 type FormaPago = { codigo: string; etiqueta: string; afectaCajaFisica: boolean };
 
+/**
+ * Un socio REGISTRADO, no un usuario del sistema. Ser socio es tener parte del
+ * capital social y se acredita con un acta; tener cuenta en el DMS no es lo
+ * mismo ni se le parece, y confundirlos permitía entregar un "retiro de
+ * utilidades" a quien no tiene derecho a utilidad alguna.
+ */
 type Socio = {
-  usuarioId: number;
+  personaId: number;
   nombre: string;
+  participacionPct: string | null;
   saldoPorComprobar: string;
   tieneSaldoPorComprobar: boolean;
   /** Redactada por `posicionSocio`; null si nunca ha retirado ni recibido reparto. */
@@ -74,10 +89,6 @@ function aInstanteIso(valorLocal: string): string | null {
   return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString();
 }
 
-function soloImporte(valor: string): string {
-  return valor.replace(/[^\d.]/g, "");
-}
-
 /**
  * Captura del CACM-RCI-05, en el orden del papel: Parte I los datos del egreso,
  * Parte II el importe, Parte III la declaración y la autorización.
@@ -118,13 +129,15 @@ export function CapturaVale({
   // Parte I — datos del egreso, en el orden numerado de la forma.
   const [fechaHora, setFechaHora] = useState(ahoraLocal());
   const [folioRelacionado, setFolioRelacionado] = useState("");
-  const [beneficiario, setBeneficiario] = useState("");
+  const [beneficiario, setBeneficiario] = useState<PersonaCapturada>(PERSONA_SIN_CAPTURAR);
   const [idTipo, setIdTipo] = useState("INE");
   const [idNumero, setIdNumero] = useState("");
+  /** La ficha elegida no traía identificación y el vale sí la exige. */
+  const [fichaSinIdentificacion, setFichaSinIdentificacion] = useState(false);
   const [conceptoCodigo, setConceptoCodigo] = useState(conceptos[0]?.codigo ?? "");
   const [conceptoOtro, setConceptoOtro] = useState("");
   const [reciboNominaId, setReciboNominaId] = useState("");
-  const [socioUsuarioId, setSocioUsuarioId] = useState("");
+  const [socioPersonaId, setSocioPersonaId] = useState("");
 
   // Parte II — importe y forma en que sale.
   const [formaPago, setFormaPago] = useState(formasPago[0]?.codigo ?? "");
@@ -143,8 +156,8 @@ export function CapturaVale({
     [recibosNomina, reciboNominaId],
   );
   const socio = useMemo(
-    () => socios.find((s) => String(s.usuarioId) === socioUsuarioId) ?? null,
-    [socios, socioUsuarioId],
+    () => socios.find((s) => String(s.personaId) === socioPersonaId) ?? null,
+    [socios, socioPersonaId],
   );
 
   const esNomina = conceptoCodigo === CONCEPTO_NOMINA;
@@ -201,13 +214,13 @@ export function CapturaVale({
     conceptoCodigo !== "" &&
     formaPago !== "" &&
     instante !== null &&
-    beneficiario.trim().length >= 3 &&
+    beneficiario.nombre.trim().length >= 3 &&
     idTipo.trim().length >= 2 &&
     idNumero.trim().length >= 3 &&
     importeValido &&
     (!esOtro || conceptoOtro.trim().length >= 3) &&
     (!esNomina || reciboNominaId !== "") &&
-    (!esRetiroSocio || socioUsuarioId !== "");
+    (!esRetiroSocio || socioPersonaId !== "");
 
   /**
    * Al elegir un recibo de nómina se copian el trabajador y su neto: son los
@@ -220,11 +233,30 @@ export function CapturaVale({
     setReciboNominaId(valor);
     const elegido = recibosNomina.find((r) => String(r.documentoId) === valor);
     if (!elegido) return;
-    setBeneficiario(elegido.trabajador);
+    // Como texto libre: el nombre lo dicta el recibo, no el catálogo. Si esa
+    // persona además tiene ficha, quien captura la elige y el enlace se pone.
+    setBeneficiario(personaDeTextoLibre(elegido.trabajador));
+    setFichaSinIdentificacion(false);
     setImporte(elegido.netoPagado);
     // El folio del recibo NO se copia además al campo 2: el enlace ya vive en
     // su propia columna, y escribirlo dos veces crearía dos versiones del mismo
     // dato que un día pueden decir cosas distintas.
+  }
+
+  /**
+   * Al elegir una ficha del catálogo se copia su identificación, si la tiene.
+   * Los campos NO se bloquean: el catálogo admite fichas sin identificación y
+   * el vale la exige siempre, y además la credencial con la que alguien cobra
+   * hoy puede no ser la que quedó registrada.
+   */
+  function copiarIdentificacion(persona: { idTipo: string | null; idNumero: string | null }) {
+    if (persona.idTipo && persona.idNumero) {
+      setIdTipo(persona.idTipo);
+      setIdNumero(persona.idNumero);
+      setFichaSinIdentificacion(false);
+      return;
+    }
+    setFichaSinIdentificacion(true);
   }
 
   function cambiarConcepto(codigo: string) {
@@ -235,7 +267,7 @@ export function CapturaVale({
     if (codigo !== CONCEPTO_NOMINA) setReciboNominaId("");
     if (codigo !== CONCEPTO_RETIRO_SOCIO) {
       const nuevo = conceptos.find((c) => c.codigo === codigo);
-      if (!nuevo?.esAnticipoUtilidades) setSocioUsuarioId("");
+      if (!nuevo?.esAnticipoUtilidades) setSocioPersonaId("");
     }
     if (codigo !== CONCEPTO_OTRO) setConceptoOtro("");
   }
@@ -262,10 +294,14 @@ export function CapturaVale({
           conceptoOtro: esOtro ? conceptoOtro : null,
           folioRelacionadoTexto: folioRelacionado || null,
           reciboNominaId: esNomina ? Number(reciboNominaId) : null,
-          beneficiarioNombre: beneficiario,
+          // El nombre viaja como TEXTO siempre: es lo que la persona firma, y
+          // si mañana se corrige la ficha del catálogo el vale firmado no debe
+          // cambiar en silencio. El enlace va aparte y sólo sirve para sumar.
+          beneficiarioNombre: beneficiario.nombre,
+          beneficiarioPersonaId: beneficiario.personaId,
           beneficiarioIdTipo: idTipo,
           beneficiarioIdNumero: idNumero,
-          socioUsuarioId: esRetiroSocio ? Number(socioUsuarioId) : null,
+          socioPersonaId: esRetiroSocio ? Number(socioPersonaId) : null,
           formaPago,
           importe,
         }),
@@ -417,29 +453,55 @@ export function CapturaVale({
                 dice ANTES de que el dinero salga, no en un informe posterior. */}
             {esRetiroSocio && (
               <div className="space-y-3 sm:col-span-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="socio">b) Socio / accionista que retira *</Label>
-                  <select
-                    id="socio"
-                    value={socioUsuarioId}
-                    onChange={(e) => setSocioUsuarioId(e.target.value)}
-                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-                  >
-                    <option value="">— indica quién retira —</option>
-                    {socios.map((s) => (
-                      <option key={s.usuarioId} value={s.usuarioId}>
-                        {s.nombre}
-                        {s.tieneSaldoPorComprobar
-                          ? ` · ${importeEnCasillas(s.saldoPorComprobar).texto} por comprobar`
-                          : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-muted-foreground">
-                    Sin este dato no habría a quién cargarle el anticipo cuando se haga el reparto
-                    formal.
-                  </p>
-                </div>
+                {/* Aquí SÓLO aparecen los socios registrados. Antes se llenaba
+                    con todos los usuarios del sistema, y elegir mal era
+                    cuestión de un clic: el anticipo se le cargaba a quien no
+                    era, o la caja entregaba un "retiro de utilidades" a alguien
+                    que no tiene parte del capital social. */}
+                {socios.length === 0 ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>Todavía no hay ningún socio dado de alta</AlertTitle>
+                    <AlertDescription className="space-y-2">
+                      <p>
+                        Ser socio es tener parte del capital social, y eso se acredita con un acta;
+                        no se deduce de tener cuenta en el sistema. Mientras no haya socios
+                        registrados no hay a quién cargarle este retiro cuando llegue el reparto, y
+                        el vale no puede emitirse.
+                      </p>
+                      <p>
+                        <Link href="/finanzas/catalogos/socios" className="underline">
+                          Registrar a los socios
+                        </Link>{" "}
+                        o elige otro concepto si esta salida de efectivo no es un retiro de socio.
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="socio">b) Socio / accionista que retira *</Label>
+                    <select
+                      id="socio"
+                      value={socioPersonaId}
+                      onChange={(e) => setSocioPersonaId(e.target.value)}
+                      className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                    >
+                      <option value="">— indica quién retira —</option>
+                      {socios.map((s) => (
+                        <option key={s.personaId} value={s.personaId}>
+                          {s.nombre}
+                          {s.participacionPct !== null ? ` · ${s.participacionPct}%` : ""}
+                          {s.tieneSaldoPorComprobar
+                            ? ` · ${importeEnCasillas(s.saldoPorComprobar).texto} por comprobar`
+                            : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      Sólo los socios dados de alta en el registro. Sin este dato no habría a quién
+                      cargarle el anticipo cuando se haga el reparto formal.
+                    </p>
+                  </div>
+                )}
 
                 <Alert>
                   <AlertTitle>
@@ -501,13 +563,17 @@ export function CapturaVale({
 
             <Separator className="sm:col-span-2" />
 
+            {/* 3. Quien recibe. Se escribe libremente o se elige del catálogo,
+                en el mismo campo: a veces se le paga a alguien una sola vez y
+                darlo de alta sería un estorbo, y a veces es el proveedor de
+                todas las semanas al que hay que poder sumarle lo pagado. */}
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="beneficiario">3. Nombre de quien recibe el efectivo *</Label>
-              <Input
+              <ComboboxPersona
                 id="beneficiario"
-                value={beneficiario}
-                onChange={(e) => setBeneficiario(e.target.value)}
-                maxLength={200}
+                valor={beneficiario}
+                onChange={setBeneficiario}
+                onElegirFicha={copiarIdentificacion}
               />
             </div>
 
@@ -524,6 +590,14 @@ export function CapturaVale({
                 placeholder="al menos 3 caracteres"
               />
             </div>
+
+            {fichaSinIdentificacion && (
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Esa ficha del catálogo no tiene identificación registrada. El vale sí la exige:
+                captúrala de la credencial que quien cobra tenga en la mano —es de ella de la que
+                responde el documento, no del catálogo—.
+              </p>
+            )}
 
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="folio-relacionado">
@@ -551,13 +625,12 @@ export function CapturaVale({
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="importe">6. Importe entregado *</Label>
-              <Input
+              <InputMoneda
                 id="importe"
-                value={importe}
-                onChange={(e) => setImporte(soloImporte(e.target.value))}
-                inputMode="decimal"
+                valor={importe}
+                onValorChange={setImporte}
                 placeholder="0.00"
-                className="text-lg"
+                className="font-mono text-lg tabular-nums"
                 aria-invalid={importe !== "" && !importeValido}
               />
               {importeValido ? (
@@ -645,9 +718,16 @@ export function CapturaVale({
                 {importeEnCasillas(importeValido ? importe : "0").texto}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">Recibe</span>
-              <span className="font-medium">{beneficiario.trim() || "—"}</span>
+              <span className="text-right font-medium">
+                {beneficiario.nombre.trim() || "—"}
+                {beneficiario.personaId !== null && (
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    enlazado al catálogo
+                  </span>
+                )}
+              </span>
             </div>
             {esNomina && (
               <div className="flex justify-between">
