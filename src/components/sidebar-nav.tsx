@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BanknoteIcon,
   BookOpenIcon,
   CirclePlusIcon,
   FolderOpenIcon,
@@ -24,6 +25,7 @@ const OPERACION: Item[] = [
   { href: "/", etiqueta: "Inicio", icono: HomeIcon, exacto: true },
   { href: "/expedientes", etiqueta: "Expedientes", icono: FolderOpenIcon },
   { href: "/expedientes/nuevo", etiqueta: "Abrir expediente", icono: CirclePlusIcon, exacto: true },
+  { href: "/finanzas", etiqueta: "Finanzas", icono: BanknoteIcon },
   { href: "/documentacion", etiqueta: "Documentación", icono: BookOpenIcon },
 ];
 
