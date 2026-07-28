@@ -1338,6 +1338,74 @@ test(
   },
 );
 
+test(
+  "corte: el turno vacío es cadena vacía y NUNCA null, y por eso dos cortes del mismo día colisionan",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      // Este caso nació de un fallo en producción. La migración 039 normalizó
+      // `turno` a NOT NULL DEFAULT '' para cerrar el hueco H9 —con NULL, la
+      // UNIQUE no impedía dos cortes del mismo día, porque en SQL dos NULL son
+      // distintos entre sí— pero el esquema zod del servicio siguió mandando
+      // null, y abrir el corte del día reventaba con un 23502 que en pantalla
+      // sólo decía "ocurrió un error del servidor".
+      //
+      // Lo que se fija aquí es el CONTRATO de la columna. Si alguien vuelve a
+      // hacerla nullable, esta prueba lo dice; y el comentario explica por qué
+      // la capa de TypeScript tiene que hablar el mismo idioma.
+      const { rows: contrato } = await esc.cx.query<{
+        is_nullable: string;
+        column_default: string | null;
+      }>(
+        `SELECT is_nullable, column_default
+           FROM information_schema.columns
+          WHERE table_schema = 'traza' AND table_name = 'corte_caja_rci07'
+            AND column_name = 'turno'`,
+      );
+      assert.equal(contrato[0].is_nullable, "NO", "turno no puede volver a admitir null");
+      assert.match(contrato[0].column_default ?? "", /''/, "el turno vacío es cadena vacía");
+
+      const abrirCorteCon = async (turno: string | null) => {
+        const { rows } = await esc.cx.query<{ id: string }>(
+          "SELECT id FROM emitir_folio_financiero('CACM-RCI-07', $1, $2, NULL)",
+          [esc.sucursalId, esc.usuarios.custodio],
+        );
+        await esc.cx.query(
+          `INSERT INTO corte_caja_rci07
+             (documento_id, sucursal_id, fecha_corte, turno, custodio_usuario_id)
+           VALUES ($1, $2, current_date, $3, $4)`,
+          [rows[0].id, esc.sucursalId, turno, esc.usuarios.custodio],
+        );
+        return rows[0].id;
+      };
+
+      // Mandar null es exactamente lo que hacía el servicio y lo que rompía.
+      await esc.cx.query("SAVEPOINT con_null");
+      await assert.rejects(
+        () => abrirCorteCon(null),
+        (error: { code?: string }) => error.code === "23502",
+        "un turno null tiene que rechazarse, no colarse",
+      );
+      await esc.cx.query("ROLLBACK TO SAVEPOINT con_null");
+
+      await abrirCorteCon("");
+
+      // Y con la cadena vacía la UNIQUE por fin hace su trabajo: el segundo
+      // corte del mismo día y sucursal no puede existir. Con NULL convivían.
+      await esc.cx.query("SAVEPOINT segundo");
+      await assert.rejects(
+        () => abrirCorteCon(""),
+        (error: { code?: string }) => error.code === "23505",
+        "dos cortes del mismo día y sucursal no pueden convivir",
+      );
+      await esc.cx.query("ROLLBACK TO SAVEPOINT segundo");
+
+      // Un turno con nombre sí abre otro corte: son turnos distintos.
+      await abrirCorteCon("VESPERTINO");
+    });
+  },
+);
+
 // =====================================================================
 // REGLA 7 — la diferencia de caja se explica o el día no cierra
 // =====================================================================
