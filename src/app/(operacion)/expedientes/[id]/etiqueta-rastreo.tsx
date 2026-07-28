@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { QrCodeIcon, PrinterIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +26,7 @@ export function EtiquetaRastreo({ expedienteId, numeroExpediente, vin }: {
     void QRCode.toDataURL(url, { width: 320, margin: 1, errorCorrectionLevel: "M" }).then(setQr);
   }, [url]);
   return <Dialog>
-    <DialogTrigger asChild><Button size="sm" variant="outline"><QrCodeIcon className="size-3.5" /> Etiqueta de carpeta</Button></DialogTrigger>
+    <DialogTrigger asChild><Button size="sm" variant="outline"><IconoSilk nombre="etiquetaAzul" className="size-3.5" /> Etiqueta de carpeta</Button></DialogTrigger>
     <DialogContent>
       <DialogHeader>
         <DialogTitle>Etiqueta de rastreo</DialogTitle>
@@ -36,7 +36,7 @@ export function EtiquetaRastreo({ expedienteId, numeroExpediente, vin }: {
         {qr && <img src={qr} alt={`QR del expediente ${numeroExpediente}`} className="size-44" />}
         <div><p className="text-lg font-bold">EXP. {numeroExpediente}</p><p className="font-mono text-xs">{vin}</p></div>
       </div>
-      <DialogFooter><Button onClick={() => window.print()}><PrinterIcon className="size-4" /> Imprimir etiqueta</Button></DialogFooter>
+      <DialogFooter><Button onClick={() => window.print()}><IconoSilk nombre="imprimir" className="size-4" /> Imprimir etiqueta</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }

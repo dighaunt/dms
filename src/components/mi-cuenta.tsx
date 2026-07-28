@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRightIcon, KeyRoundIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { cambiarContrasena } from "@/lib/auth/client";
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -104,7 +105,7 @@ export function MiCuenta({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <KeyRoundIcon className="size-4 text-muted-foreground" />
+            <IconoSilk nombre="llave" className="shrink-0" />
             Cambiar contraseña
           </DialogTitle>
           <DialogDescription>

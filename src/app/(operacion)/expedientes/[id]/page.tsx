@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { BadgeCheckIcon, CircleAlertIcon } from "lucide-react";
+import { BadgeCheckIcon } from "lucide-react";
 
 import { query } from "@/lib/db";
 import { getUsuarioSesion } from "@/lib/auth/usuario";
@@ -17,6 +17,7 @@ import {
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BotonCopiar } from "@/components/boton-copiar";
 import { EstadoBadge } from "@/components/estado-badge";
+import { IconoSilk } from "@/components/iconos/silk";
 import { AnexosExpediente } from "./anexos";
 import { LineaTiempoExpediente } from "./documentos";
 import { EmitirFolio } from "./emitir-folio";
@@ -124,7 +125,7 @@ export default async function ExpedienteDetallePage({
               />
               {anexosPendientes > 0 && (
                 <Link href="#anexos-expediente" className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900 shadow-xs transition-colors hover:bg-amber-100">
-                  <CircleAlertIcon className="size-3.5 animate-pulse" />
+                  <IconoSilk nombre="aviso" tamano={14} className="shrink-0 animate-pulse" />
                   {anexosPendientes} actividad{anexosPendientes === 1 ? "" : "es"} pendiente{anexosPendientes === 1 ? "" : "s"}
                 </Link>
               )}
@@ -153,7 +154,8 @@ export default async function ExpedienteDetallePage({
       <BlurFade delay={0.12}>
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-medium">
+            <h2 className="flex items-center gap-1.5 text-sm font-medium">
+              <IconoSilk nombre="reloj" className="shrink-0" />
               Línea de tiempo del expediente
             </h2>
             <div className="flex flex-wrap items-center justify-end gap-2">

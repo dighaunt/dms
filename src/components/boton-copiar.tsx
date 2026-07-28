@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -45,7 +45,10 @@ export function BotonCopiar({
     }
   }
 
-  const Icono = copiado ? CheckIcon : CopyIcon;
+  // La palomita ya es verde en Silk, así que la confirmación no necesita que se
+  // la tiña: se lee sola. Lo que se copia aquí —un folio, un VIN— es dato del
+  // negocio, y por eso el botón lleva icono a color y no el del mueble.
+  const icono = copiado ? "palomita" : "copia";
 
   return (
     <Button
@@ -56,7 +59,7 @@ export function BotonCopiar({
       aria-label={`Copiar ${texto}`}
       className={cn(!etiqueta && "size-6", className)}
     >
-      <Icono className={cn("size-3.5", copiado && "text-emerald-600")} />
+      <IconoSilk nombre={icono} className="shrink-0" />
       {etiqueta && (copiado ? "Copiado" : etiqueta)}
     </Button>
   );

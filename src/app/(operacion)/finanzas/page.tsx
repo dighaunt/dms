@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { HandshakeIcon, UsersIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,14 @@ function hoy(): string {
  * El orden es el del manual, no el de uso: quien tiene la forma impresa
  * enfrente busca por código, y encontrarlo fuera de orden hace dudar de si es
  * el mismo documento.
+ *
+ * Cada formato lleva un icono distinto porque esta lista se recorre con la
+ * vista, no se lee renglón por renglón: el billete es la cobranza, la caja
+ * abierta es el inventario, el peso es la liquidación al consignante, la llave
+ * inglesa es el taller, el vale amarillo es la salida de dinero, la lista es la
+ * nómina y las monedas apiladas son el corte del día —las mismas del menú
+ * lateral—. Dos formatos con el mismo icono no ayudarían a nadie, así que
+ * ninguno se repite.
  */
 const FORMATOS = [
   {
@@ -34,42 +44,49 @@ const FORMATOS = [
     nombre: "Recibo de Caja Interno",
     resumen: "Efectivo cobrado en una venta de vehículo, del vendedor al Custodio Financiero.",
     href: "/finanzas/recibos/nuevo",
+    icono: "dinero",
   },
   {
     codigo: "CACM-RCI-02",
     nombre: "Ingreso de Vehículo a Inventario",
     resumen: "Cómo entra la unidad: compra directa o consignación de un tercero.",
     href: "/finanzas/consignacion/nuevo",
+    icono: "caja3d",
   },
   {
     codigo: "CACM-RCI-03",
     nombre: "Liquidación de Venta en Consignación",
     resumen: "Lo que se paga al consignante y la utilidad neta que queda a la empresa.",
     href: "/finanzas/consignacion/liquidar",
+    icono: "peso",
   },
   {
     codigo: "CACM-RCI-04",
     nombre: "Recibo de Ingreso por Servicio",
     resumen: "Efectivo cobrado en servicio o taller, entregado al Custodio Financiero.",
     href: "/finanzas/servicios/nuevo",
+    icono: "herramienta",
   },
   {
     codigo: "CACM-RCI-05",
     nombre: "Vale de Egreso de Caja",
     resumen: "Toda salida de dinero: comisiones, proveedores, gastos y retiros de socio.",
     href: "/finanzas/egresos/nuevo",
+    icono: "nota",
   },
   {
     codigo: "CACM-RCI-06",
     nombre: "Recibo de Pago de Nómina",
     resumen: "Constancia individual del pago de sueldo a cada trabajador.",
     href: "/finanzas/nomina/nuevo",
+    icono: "listado",
   },
   {
     codigo: "CACM-RCI-07",
     nombre: "Corte de Caja Diario",
     resumen: "Rendición de cuentas del día: cuánto entró, cuánto salió y dónde quedó.",
     href: "/finanzas/cortes",
+    icono: "monedas",
   },
 ] as const;
 
@@ -91,10 +108,16 @@ export default async function FinanzasPage() {
   if (sucursales.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Finanzas</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <IconoSilk nombre="finanzas" tamano={20} className="shrink-0" />
+          Finanzas
+        </h1>
         <Card>
           <CardHeader>
-            <CardTitle>Falta dar de alta la primera sucursal</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="aviso" className="shrink-0" />
+              Falta dar de alta la primera sucursal
+            </CardTitle>
             <CardDescription>
               El folio de cada formato es consecutivo por sucursal y por tipo, así que ningún
               documento puede emitirse hasta que exista al menos una. La da de alta un
@@ -128,13 +151,20 @@ export default async function FinanzasPage() {
       <BlurFade delay={0.05}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Finanzas</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+              <IconoSilk nombre="finanzas" tamano={20} className="shrink-0" />
+              Finanzas
+            </h1>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <IconoSilk nombre="sucursal" className="shrink-0" />
               Control interno de efectivo · {principal.nombre} ({principal.clave})
             </p>
           </div>
           <Button asChild>
-            <Link href="/finanzas/recibos/nuevo">Nuevo recibo de caja</Link>
+            <Link href="/finanzas/recibos/nuevo">
+              <IconoSilk nombre="agregar" className="shrink-0" />
+              Nuevo recibo de caja
+            </Link>
           </Button>
         </div>
       </BlurFade>
@@ -145,6 +175,7 @@ export default async function FinanzasPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="dinero" className="shrink-0" />
               Dinero en tránsito
               {pendientes.length > 0 && (
                 <Badge variant="secondary">{pendientes.length}</Badge>
@@ -199,7 +230,10 @@ export default async function FinanzasPage() {
         <BlurFade delay={0.15}>
           <Card className="h-full">
             <CardHeader>
-              <CardTitle>Corte del día</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <IconoSilk nombre="monedas" className="shrink-0" />
+                Corte del día
+              </CardTitle>
               <CardDescription>
                 {fecha} · el corte jala los folios firmados; el único dato que se teclea es el
                 efectivo contado.
@@ -217,7 +251,10 @@ export default async function FinanzasPage() {
                     {importeEnCasillas(corte.totalEgresos).texto}
                   </p>
                   <Button asChild variant="secondary" size="sm">
-                    <Link href={`/finanzas/cortes/${corte.documentoId}`}>Abrir corte</Link>
+                    <Link href={`/finanzas/cortes/${corte.documentoId}`}>
+                      <IconoSilk nombre="monedas" className="shrink-0" />
+                      Abrir corte
+                    </Link>
                   </Button>
                 </>
               ) : (
@@ -228,7 +265,8 @@ export default async function FinanzasPage() {
 
               {sinFirmar.length > 0 && (
                 <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-                  <p className="font-medium">
+                  <p className="flex items-start gap-2 font-medium">
+                    <IconoSilk nombre="advertencia" className="mt-0.5 shrink-0" />
                     El día no puede cerrarse: {sinFirmar.length} folio(s) sin firmar
                   </p>
                   <p className="mt-1 font-mono text-xs text-muted-foreground">
@@ -244,6 +282,7 @@ export default async function FinanzasPage() {
           <Card className="h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
+                <IconoSilk nombre="riesgo" className="shrink-0" />
                 Alertas abiertas
                 {alertas.length > 0 && <Badge variant="destructive">{alertas.length}</Badge>}
               </CardTitle>
@@ -300,7 +339,10 @@ export default async function FinanzasPage() {
       <BlurFade delay={0.25}>
         <Card>
           <CardHeader>
-            <CardTitle>Emitir un formato</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="formulario" className="shrink-0" />
+              Emitir un formato
+            </CardTitle>
             <CardDescription>
               Los siete formatos de control interno. El folio es consecutivo por sucursal y por
               tipo, y se consume al emitirlo: se abre uno cuando ya se va a llenar.
@@ -312,13 +354,16 @@ export default async function FinanzasPage() {
                 <li key={formato.codigo}>
                   <Link
                     href={formato.href}
-                    className="flex h-full flex-col gap-1 rounded-md border p-3 transition-colors hover:border-foreground/30 hover:bg-accent/50"
+                    className="flex h-full gap-3 rounded-md border p-3 transition-colors hover:border-foreground/30 hover:bg-accent/50"
                   >
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {formato.codigo}
+                    <IconoSilk nombre={formato.icono} tamano={20} className="mt-0.5 shrink-0" />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {formato.codigo}
+                      </span>
+                      <span className="text-sm font-medium">{formato.nombre}</span>
+                      <span className="text-xs text-muted-foreground">{formato.resumen}</span>
                     </span>
-                    <span className="text-sm font-medium">{formato.nombre}</span>
-                    <span className="text-xs text-muted-foreground">{formato.resumen}</span>
                   </Link>
                 </li>
               ))}
@@ -328,27 +373,49 @@ export default async function FinanzasPage() {
 
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="secondary" size="sm">
-                <Link href="/finanzas/cortes">Cortes de caja</Link>
+                <Link href="/finanzas/cortes">
+                  <IconoSilk nombre="monedas" className="shrink-0" />
+                  Cortes de caja
+                </Link>
               </Button>
               {/* No es un formato del manual, pero sin él la regla 5 no cierra:
                   es el único hecho que convierte el anticipo de un socio en
                   utilidad repartida. */}
               <Button asChild variant="secondary" size="sm">
-                <Link href="/finanzas/repartos">Reparto de utilidades</Link>
+                <Link href="/finanzas/repartos">
+                  {/* El pastel partido es lo que es un reparto de utilidades. */}
+                  <IconoSilk nombre="pastel" className="shrink-0" />
+                  Reparto de utilidades
+                </Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
-                <Link href="/finanzas/reportes">Reportes</Link>
+                <Link href="/finanzas/reportes">
+                  <IconoSilk nombre="reportes" className="shrink-0" />
+                  Reportes
+                </Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
-                <Link href="/finanzas/catalogos">Catálogos y PIN de firma</Link>
+                <Link href="/finanzas/catalogos">
+                  <IconoSilk nombre="llave" className="shrink-0" />
+                  Catálogos y PIN de firma
+                </Link>
               </Button>
+              {/* Silk no tiene ningún icono de persona ni de grupo, así que
+                  estas dos entradas —y sólo éstas— se quedan con el juego
+                  monocromo, que sí los trae. */}
               <Button asChild variant="secondary" size="sm">
-                <Link href="/finanzas/catalogos/personas">Personas</Link>
+                <Link href="/finanzas/catalogos/personas">
+                  <UsersIcon className="shrink-0" />
+                  Personas
+                </Link>
               </Button>
               {/* Ser socio es tener parte del capital social y se acredita con
                   un acta; no se deduce de tener cuenta en el sistema. */}
               <Button asChild variant="secondary" size="sm">
-                <Link href="/finanzas/catalogos/socios">Socios</Link>
+                <Link href="/finanzas/catalogos/socios">
+                  <HandshakeIcon className="shrink-0" />
+                  Socios
+                </Link>
               </Button>
             </div>
           </CardContent>

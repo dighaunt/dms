@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -164,7 +165,10 @@ export function CerrarCorte({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Depósitos bancarios y resguardos del día</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="dinero" className="shrink-0" />
+            Depósitos bancarios y resguardos del día
+          </CardTitle>
           <CardDescription>
             No son pagos a terceros: el dinero sigue siendo de la empresa y sólo cambió de lugar.
             Aun así salió del cajón, así que restan de los egresos y bajan el saldo que debería
@@ -173,7 +177,10 @@ export function CerrarCorte({
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-3">
-            <h3 className="text-sm font-medium">b) Depósito bancario</h3>
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+              <IconoSilk nombre="dinero" className="shrink-0" />
+              b) Depósito bancario
+            </h3>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="institucion">Institución *</Label>
@@ -243,6 +250,7 @@ export function CerrarCorte({
                 }
               }}
             >
+              <IconoSilk nombre="agregar" className="shrink-0" />
               Registrar depósito
             </Button>
           </div>
@@ -250,7 +258,12 @@ export function CerrarCorte({
           <Separator />
 
           <div className="space-y-3">
-            <h3 className="text-sm font-medium">c) y d) Resguardo de efectivo</h3>
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+              {/* Resguardar es poner bajo llave: el efectivo salió del cajón
+                  pero sigue siendo de la empresa. */}
+              <IconoSilk nombre="candado" className="shrink-0" />
+              c) y d) Resguardo de efectivo
+            </h3>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="tipo-resguardo">Tipo *</Label>
@@ -300,6 +313,7 @@ export function CerrarCorte({
                 if (listo) setResguardo({ tipo: "TRANSITO", monto: "", detalle: "" });
               }}
             >
+              <IconoSilk nombre="agregar" className="shrink-0" />
               Registrar resguardo
             </Button>
           </div>
@@ -308,7 +322,10 @@ export function CerrarCorte({
 
       <Card>
         <CardHeader>
-          <CardTitle>Arqueo real y cierre del día</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="monedas" className="shrink-0" />
+            Arqueo real y cierre del día
+          </CardTitle>
           <CardDescription>
             Cuenta el efectivo que está físicamente en la caja y escríbelo. Es el único importe de
             todo el corte que se teclea; el saldo que debería existir ya está calculado arriba.
@@ -317,7 +334,9 @@ export function CerrarCorte({
         <CardContent className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="efectivo">Efectivo físico contado al cierre *</Label>
+              <Label htmlFor="efectivo">
+                Efectivo físico contado al cierre *
+              </Label>
               <InputMoneda
                 id="efectivo"
                 valor={efectivo}
@@ -351,7 +370,18 @@ export function CerrarCorte({
           ) : (
             previa && (
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-3">
+                {/* El icono queda FUERA de la etiqueta: dentro, sobre su fondo
+                    de color, estas figuras a color se perderían.
+
+                    Un FALTANTE lleva el círculo rojo y un sobrante la campana,
+                    y la distinción no es de matiz: falta dinero que alguien
+                    tiene que explicar, contra sobra dinero que también hay que
+                    explicar pero no señala a nadie. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <IconoSilk
+                    nombre={previa.cuadra ? "correcto" : previa.esFaltante ? "alerta" : "aviso"}
+                    className="shrink-0"
+                  />
                   {previa.cuadra ? (
                     <Badge>El arqueo cuadra</Badge>
                   ) : (
@@ -364,6 +394,7 @@ export function CerrarCorte({
 
                 {previa.esFaltante && (
                   <Alert variant="destructive">
+                    <IconoSilk nombre="riesgo" className="shrink-0" />
                     <AlertTitle>
                       Al cerrar se levantará una alerta GRAVE para el Gerente General
                     </AlertTitle>
@@ -377,6 +408,7 @@ export function CerrarCorte({
 
                 {previa.esSobrante && (
                   <Alert>
+                    <IconoSilk nombre="aviso" className="shrink-0" />
                     <AlertTitle>Sobra efectivo: quedará registrado un aviso</AlertTitle>
                     <AlertDescription>
                       Un sobrante suele ser un cobro que no se documentó. Explícalo: dinero sin
@@ -398,7 +430,8 @@ export function CerrarCorte({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="explicacion">
+            <Label htmlFor="explicacion" className="gap-1.5">
+              <IconoSilk nombre="comentario" className="shrink-0" />
               Si hay diferencia, explicar
               {previa?.requiereExplicacion ? " *" : " (opcional mientras el arqueo cuadre)"}
             </Label>
@@ -422,6 +455,7 @@ export function CerrarCorte({
 
           {bloqueadoPorFolios && (
             <Alert variant="destructive">
+              <IconoSilk nombre="alto" className="shrink-0" />
               <AlertTitle>No se puede cerrar el día todavía</AlertTitle>
               <AlertDescription>
                 Quedan folios del día sin firmar
@@ -442,7 +476,16 @@ export function CerrarCorte({
                 )
               }
             >
-              {ocupado ? "Cerrando…" : "Cerrar el día y mandar a firma"}
+              {ocupado ? (
+                "Cerrando…"
+              ) : (
+                <>
+                  {/* Cerrar el día echa el candado: el corte deja de ser
+                      borrador y pasa a firmas. */}
+                  <IconoSilk nombre="candado" className="shrink-0" />
+                  Cerrar el día y mandar a firma
+                </>
+              )}
             </Button>
             {contado === "" && (
               <span className="text-xs text-muted-foreground">

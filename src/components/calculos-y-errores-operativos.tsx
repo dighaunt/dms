@@ -1,7 +1,8 @@
 "use client";
 
-import { CircleAlertIcon, RefreshCwIcon, ServerCrashIcon } from "lucide-react";
+import { RefreshCwIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { mensajeErrorRespuesta, mensajeErrorSinRespuesta } from "@/lib/cliente-api";
@@ -113,7 +114,17 @@ export function AvisoErrorOperacion({
 
   return (
     <Alert variant="destructive" className={cn("items-start", className)} aria-live="assertive">
-      {error.status >= 500 ? <ServerCrashIcon /> : <CircleAlertIcon />}
+      {/*
+        El icono distingue de un vistazo de quién es el problema: si el servidor
+        no respondió, no hay nada que corregir en la captura. «advertencia» es el
+        círculo rojo con el signo de admiración —el más fuerte del juego—; el
+        triángulo ámbar se llama «error» y aquí se quedaría corto.
+      */}
+      {error.status >= 500 ? (
+        <IconoSilk nombre="servidor" />
+      ) : (
+        <IconoSilk nombre="alerta" />
+      )}
       <AlertTitle>{error.titulo}</AlertTitle>
       <AlertDescription className="mt-1.5 w-full">
         <p>{error.mensaje}</p>

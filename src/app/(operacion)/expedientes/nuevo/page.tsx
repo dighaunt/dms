@@ -27,6 +27,7 @@ import {
 } from "@/lib/unidad";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BotonCopiar } from "@/components/boton-copiar";
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -187,10 +188,13 @@ export default function NuevoExpedientePage() {
             </Link>{" "}
             / Nuevo
           </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            Expediente{" "}
-            <span className="font-mono">{resultado.expediente.numeroExpediente}</span>{" "}
-            abierto
+          <h1 className="mt-1 flex flex-wrap items-center gap-x-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="correcto" tamano={22} className="shrink-0" />
+            <span>
+              Expediente{" "}
+              <span className="font-mono">{resultado.expediente.numeroExpediente}</span>{" "}
+              abierto
+            </span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             VIN <span className="font-mono">{resultado.expediente.vin}</span> ·
@@ -223,7 +227,10 @@ export default function NuevoExpedientePage() {
 
         <div className="flex gap-3">
           <Button asChild>
-            <Link href={`/expedientes/${resultado.expediente.id}`}>Ir al expediente</Link>
+            <Link href={`/expedientes/${resultado.expediente.id}`}>
+              <IconoSilk nombre="expedientes" className="size-4" />
+              Ir al expediente
+            </Link>
           </Button>
           <Button variant="outline" asChild>
             <Link href="/expedientes">Volver al listado</Link>
@@ -426,7 +433,10 @@ export default function NuevoExpedientePage() {
                       </div>
                       <div className="space-y-4 border-t pt-4">
                         <div>
-                          <h2 className="text-sm font-semibold">Datos para contratos</h2>
+                          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+                            <IconoSilk nombre="formulario" className="shrink-0" />
+                            Datos para contratos
+                          </h2>
                           <p className="mt-1 text-sm text-muted-foreground">
                             No tendrás que capturarlos de nuevo al emitir C-01, C-02, C-03 o C-04.
                           </p>

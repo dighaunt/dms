@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { differenceInCalendarDays } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
-import { FileTextIcon, FolderOpenIcon, LoaderCircleIcon, SearchIcon } from "lucide-react";
+import { FileTextIcon, LoaderCircleIcon, SearchIcon } from "lucide-react";
 
 import type { ExpedienteListado } from "@/lib/db/consultas";
 import {
@@ -14,6 +14,7 @@ import {
   PUNTO_ESTADO_UNIDAD,
 } from "@/lib/estados";
 import { EstadoBadge } from "@/components/estado-badge";
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Input } from "@/components/ui/input";
 
@@ -48,7 +49,7 @@ export function TablaExpedientes({ expedientes }: { expedientes: ExpedienteLista
 
       {visibles.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed bg-background py-16 text-center">
-          <FolderOpenIcon className="size-8 text-muted-foreground/50" />
+          <IconoSilk nombre="expedientes" tamano={32} className="opacity-60" />
           <p className="text-sm text-muted-foreground">
             {expedientes.length === 0
               ? "Sin expedientes. Abre el primero con «Abrir expediente»."
@@ -90,7 +91,7 @@ function TarjetaExpediente({ expediente: e }: { expediente: ExpedienteListado })
             <div className="absolute left-2 top-1.5 h-11 w-16 rotate-3 rounded-md border bg-muted transition-transform duration-300 group-hover:translate-x-2 group-hover:rotate-6" />
             <div className="absolute left-1 top-1 h-11 w-16 rotate-1 rounded-md border bg-muted/60 transition-transform duration-300 group-hover:translate-x-1 group-hover:rotate-3" />
             <div className="absolute left-0 top-0 flex h-11 w-16 items-center justify-center rounded-md border border-primary/20 bg-primary/10 transition-transform duration-300 group-hover:-rotate-2">
-              <FolderOpenIcon className="size-5 text-primary" />
+              <IconoSilk nombre="expedientes" tamano={20} />
             </div>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium tabular-nums text-muted-foreground">

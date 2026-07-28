@@ -10,6 +10,7 @@ import {
 } from "fumadocs-ui/layouts/docs/page";
 
 import { manualPorSlug } from "@/lib/manuales";
+import { IconoSilk } from "@/components/iconos/silk";
 
 export async function generateMetadata({
   params,
@@ -73,8 +74,14 @@ export default async function ManualPage({
             )}
             {seccion.tablas?.map((tabla, indice) => (
               <div key={tabla.titulo ?? indice} className="not-prose my-4 overflow-x-auto rounded-lg border">
+                {/* El manual es prosa larga: la tabla es el único bloque que se
+                    busca hojeando, y el icono en su rótulo es lo que la hace
+                    encontrable sin leer. No va en las filas, que son cientos. */}
                 {tabla.titulo && (
-                  <p className="border-b bg-muted/40 px-3 py-2 text-xs font-medium">{tabla.titulo}</p>
+                  <p className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2 text-xs font-medium">
+                    <IconoSilk nombre="tabla" tamano={14} className="shrink-0" />
+                    {tabla.titulo}
+                  </p>
                 )}
                 <table className="w-full text-left text-sm">
                   <thead className="bg-muted/30">
@@ -100,7 +107,13 @@ export default async function ManualPage({
         ))}
 
         <section id="fuentes">
-          <h2>Fuente de consulta</h2>
+          {/* El único apartado que no es contenido del manual sino su respaldo
+              documental: el guion —el procedimiento escrito— lo separa de las
+              secciones normales cuando se recorre el índice lateral. */}
+          <h2 className="flex items-center gap-2">
+            <IconoSilk nombre="guion" tamano={20} className="shrink-0" />
+            Fuente de consulta
+          </h2>
           <ul>
             {manual.fuentes.map((fuente) => (
               <li key={`${fuente.documento}-${fuente.referencia}`}>

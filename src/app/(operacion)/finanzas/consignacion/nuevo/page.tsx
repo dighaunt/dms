@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formasPago, listarSucursales } from "@/lib/finanzas/catalogos";
@@ -79,7 +80,11 @@ export default async function NuevoIngresoPage({
           <p className="font-mono text-sm text-muted-foreground">
             Expediente {ficha.numeroExpediente}
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          {/* El mismo icono con el que este formato se anuncia en el panel de
+              Finanzas: quien llegó desde ahí tiene que reconocer que aterrizó
+              en el formato que eligió. */}
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="caja3d" tamano={20} className="shrink-0" />
             Ingreso de Vehículo a Inventario · CACM-RCI-02
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -114,12 +119,16 @@ export default async function NuevoIngresoPage({
 function Aviso({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
+      <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+        <IconoSilk nombre="caja3d" tamano={20} className="shrink-0" />
         Ingreso de Vehículo a Inventario · CACM-RCI-02
       </h1>
       <Card>
         <CardHeader>
-          <CardTitle>{titulo}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="aviso" className="shrink-0" />
+            {titulo}
+          </CardTitle>
           <CardDescription>{children}</CardDescription>
         </CardHeader>
         <CardContent>

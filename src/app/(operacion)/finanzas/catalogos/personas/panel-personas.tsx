@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { UserPlusIcon, UsersIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -253,6 +255,7 @@ export function PanelPersonas({
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
+            <UsersIcon className="size-4 shrink-0" />
             Personas
             <Badge variant="outline">{visibles.length}</Badge>
           </CardTitle>
@@ -402,7 +405,10 @@ export function PanelPersonas({
       {puedeAdministrar ? (
         <Card>
           <CardHeader>
-            <CardTitle>Dar de alta a una persona</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlusIcon className="size-4 shrink-0" />
+              Dar de alta a una persona
+            </CardTitle>
             <CardDescription>
               Vale la pena para quien cobra más de una vez. La identificación puede quedar pendiente
               —se completa después—, pero sin ella el vale de egreso la pedirá de todas formas: no
@@ -421,12 +427,14 @@ export function PanelPersonas({
             )}
 
             <Button disabled={ocupado !== null || problemasAlta.length > 0} onClick={darDeAlta}>
+              <UserPlusIcon className="size-4 shrink-0" />
               {ocupado === "alta" ? "Dando de alta…" : "Dar de alta"}
             </Button>
           </CardContent>
         </Card>
       ) : (
         <Alert>
+          <IconoSilk nombre="candado" />
           <AlertTitle>Alta reservada a la administración del sistema</AlertTitle>
           <AlertDescription>
             De estos nombres depende a quién se le suma cada pago, así que darlos de alta o
@@ -445,7 +453,10 @@ export function PanelPersonas({
       >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Corregir la ficha de {editando?.nombre}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <IconoSilk nombre="editar" className="shrink-0" />
+              Corregir la ficha de {editando?.nombre}
+            </DialogTitle>
             <DialogDescription>
               Corregir la ficha NO reescribe lo ya firmado: cada vale guarda el nombre y la
               identificación como texto, tal como se capturaron el día del pago. Aquí sólo cambia lo
@@ -471,6 +482,7 @@ export function PanelPersonas({
               disabled={ocupado !== null || problemasEdicion.length > 0}
               onClick={guardarEdicion}
             >
+              <IconoSilk nombre="guardar" className="shrink-0" />
               {ocupado?.startsWith("editar-") ? "Guardando…" : "Guardar los cambios"}
             </Button>
           </DialogFooter>

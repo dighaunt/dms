@@ -1,15 +1,5 @@
 import Link from "next/link";
-import {
-  ArrowRightIcon,
-  BookMarkedIcon,
-  BookOpenIcon,
-  CalendarIcon,
-  CirclePlusIcon,
-  FolderOpenIcon,
-  ScaleIcon,
-  ShieldAlertIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowRightIcon, UsersIcon } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -18,6 +8,7 @@ import { listarExpedientes } from "@/lib/db/consultas";
 import { ACTUALIZACIONES_LEGALES } from "@/lib/actualizaciones-legales";
 import { INDICE_ESTATICO, indiceExpedientes } from "@/lib/indice-busqueda";
 import { AppShell } from "@/components/app-shell";
+import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { BuscadorGlobal } from "@/components/buscador-global";
 
@@ -27,7 +18,12 @@ type AccionRapida = {
   titulo: string;
   descripcion: string;
   href: string;
-  icono: React.ComponentType<{ className?: string }>;
+  /**
+   * Un alias de Silk, o un componente monocromo para lo que Silk no dibuja.
+   * Cada acceso repite el icono de su entrada en el menú lateral: quien ya
+   * ubicó «Expedientes» ahí lo reconoce aquí sin volver a leer el rótulo.
+   */
+  icono: NombreIconoSilk | React.ComponentType<{ className?: string }>;
   soloAdmin?: boolean;
 };
 
@@ -36,26 +32,29 @@ const ACCIONES_RAPIDAS: AccionRapida[] = [
     titulo: "Abrir expediente",
     descripcion: "Registra una unidad nueva y emite su juego documental día 0.",
     href: "/expedientes/nuevo",
-    icono: CirclePlusIcon,
+    icono: "agregar",
   },
   {
     titulo: "Ver expedientes",
     descripcion: "Consulta el estado documental y el ciclo de vida de cada unidad.",
     href: "/expedientes",
-    icono: FolderOpenIcon,
+    icono: "expedientes",
   },
   {
     titulo: "Documentación",
     descripcion: "Mapa documental, cálculos del manual y formatos descargables.",
     href: "/documentacion",
-    icono: BookOpenIcon,
+    icono: "manuales",
   },
+  // El libro es la entrada a Documentación; los manuales en sí son el
+  // procedimiento escrito, y por eso llevan el guion y no otro libro.
   {
     titulo: "Manuales M-01 / M-02",
     descripcion: "Procedimientos, candados y el Anexo A de PLD y jurisprudencia.",
     href: "/manuales",
-    icono: BookMarkedIcon,
+    icono: "guion",
   },
+  // Silk no dibuja personas: Usuarios se queda con el juego monocromo.
   {
     titulo: "Usuarios",
     descripcion: "Administra accesos y niveles de autorización (N1/N2/N3).",
@@ -67,7 +66,7 @@ const ACCIONES_RAPIDAS: AccionRapida[] = [
     titulo: "Modo riesgo",
     descripcion: "Resuelve excepciones documentales de expedientes legacy.",
     href: "/modo-riesgo",
-    icono: ShieldAlertIcon,
+    icono: "riesgo",
     soloAdmin: true,
   },
 ];
@@ -89,7 +88,7 @@ export default async function Dashboard() {
                 {nombre ? `Hola, ${nombre}` : "Hola"}
               </h1>
               <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-                <CalendarIcon className="size-3.5" />
+                <IconoSilk nombre="fecha" tamano={14} className="shrink-0" />
                 {format(new Date(), "EEEE d 'de' MMMM, yyyy", { locale: es })}
               </p>
             </div>
@@ -117,7 +116,11 @@ export default async function Dashboard() {
                     href={accion.href}
                     className="group flex flex-col rounded-xl border bg-background p-4 transition-colors hover:border-primary/40 hover:bg-accent/40"
                   >
-                    <Icono className="size-5 text-primary" />
+                    {typeof Icono === "string" ? (
+                      <IconoSilk nombre={Icono} tamano={20} />
+                    ) : (
+                      <Icono className="size-5 text-primary" />
+                    )}
                     <span className="mt-3 text-sm font-semibold">{accion.titulo}</span>
                     <span className="mt-1 text-xs leading-relaxed text-muted-foreground">
                       {accion.descripcion}
@@ -135,7 +138,7 @@ export default async function Dashboard() {
         <BlurFade delay={0.22}>
           <section aria-label="Actualizaciones legales">
             <div className="flex items-center gap-2">
-              <ScaleIcon className="size-4 text-primary" />
+              <IconoSilk nombre="aviso" className="shrink-0" />
               <h2 className="text-sm font-medium text-muted-foreground">Actualizaciones legales</h2>
             </div>
             <div className="mt-3 space-y-2">

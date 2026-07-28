@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { UserPlusIcon } from "lucide-react";
 
 import { postJson } from "@/lib/cliente-api";
 import { cn } from "@/lib/utils";
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -228,7 +230,13 @@ function DialogEditarNombre({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nombre completo · {usuario.email}</DialogTitle>
+          {/* La pluma es «corregir» en todo el sistema; el botón de cada
+              renglón se queda sin icono para no repetirlo tantas veces como
+              usuarios haya. */}
+          <DialogTitle className="flex items-center gap-2">
+            <IconoSilk nombre="editar" className="shrink-0" />
+            Nombre completo · {usuario.email}
+          </DialogTitle>
           <DialogDescription>
             Por norma, todos los actos del sistema (apertura de expedientes,
             emisión de folios, escaneos) quedan a nombre completo de quien los
@@ -295,11 +303,19 @@ function DialogCrearUsuario({ onDone }: { onDone: () => void }) {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button size="sm">Crear usuario</Button>
+        {/* Alta de una persona: Silk no dibuja personas, así que aquí manda el
+            juego monocromo, el mismo que usan «Personas» y «Socios». */}
+        <Button size="sm">
+          <UserPlusIcon className="size-4 shrink-0" />
+          Crear usuario
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Crear usuario</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <UserPlusIcon className="size-4 shrink-0" />
+            Crear usuario
+          </DialogTitle>
           <DialogDescription>
             La cuenta se crea en Neon Auth con una contraseña temporal que tú
             defines; el nivel controla lo que puede autorizar en el sistema.

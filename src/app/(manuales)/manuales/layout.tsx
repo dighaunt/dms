@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ArrowLeftIcon, BookOpenCheckIcon, LayoutDashboardIcon } from "lucide-react";
+import { ArrowLeftIcon } from "lucide-react";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { RootProvider } from "fumadocs-ui/provider/next";
 
 import { BuscadorManual } from "./buscador-manual";
 import { ARBOL_MANUALES } from "@/lib/manuales";
+import { CreditoIconos, IconoSilk } from "@/components/iconos/silk";
 
 export default function ManualesLayout({
   children,
@@ -17,7 +18,7 @@ export default function ManualesLayout({
         nav={{
           title: (
             <span className="inline-flex items-center gap-2">
-              <BookOpenCheckIcon className="size-4 text-primary" />
+              <IconoSilk nombre="guion" className="shrink-0" />
               CLIQUEALO · Manuales
             </span>
           ),
@@ -34,6 +35,8 @@ export default function ManualesLayout({
                 href="/documentacion"
                 className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
+                {/* Silk no tiene flechas: el regreso se queda monocromo y sigue
+                    el color del enlace al pasar el puntero. */}
                 <ArrowLeftIcon className="size-4" />
                 Volver a documentación
               </Link>
@@ -41,9 +44,16 @@ export default function ManualesLayout({
                 href="/"
                 className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
-                <LayoutDashboardIcon className="size-4" />
+                <IconoSilk nombre="inicio" className="shrink-0" />
                 Ir al dashboard
               </Link>
+              {/*
+                Los manuales cuelgan de su propio layout raíz: no pasan por
+                AppShell, así que el crédito que pide la CC-BY-SA no llegaría
+                aquí solo. Va al pie de la barra, que es la única pieza que
+                esta sección dibuja una vez por pantalla.
+              */}
+              <CreditoIconos className="mt-2 px-2 text-[11px] leading-relaxed text-muted-foreground" />
             </div>
           ),
           collapsible: false,

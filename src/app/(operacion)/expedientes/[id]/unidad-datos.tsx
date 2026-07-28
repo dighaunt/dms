@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PencilLineIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { patchJson } from "@/lib/cliente-api";
@@ -13,6 +12,7 @@ import {
   MAXIMO_ANIO_REFRENDO,
   MINIMO_ANIO_REFRENDO,
 } from "@/lib/unidad";
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -125,7 +125,7 @@ export function UnidadDatos({
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="h-6 gap-1.5 px-2 text-[11px]">
-          <PencilLineIcon className="size-3" />
+          <IconoSilk nombre="editar" className="size-3.5" />
           Corregir datos de la unidad
         </Button>
       </DialogTrigger>

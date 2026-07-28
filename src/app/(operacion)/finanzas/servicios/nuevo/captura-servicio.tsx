@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -162,7 +163,10 @@ export function CapturaServicio({ sucursales, empleados, formasPago }: Props) {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Parte I · Datos del servicio</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="formulario" className="shrink-0" />
+              Parte I · Datos del servicio
+            </CardTitle>
             <CardDescription>
               Los campos siguen el orden de la forma impresa, para que quien ya la usa no tenga que
               reaprender nada.
@@ -308,7 +312,10 @@ export function CapturaServicio({ sucursales, empleados, formasPago }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte II · Importe cobrado</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="peso" className="shrink-0" />
+              Parte II · Importe cobrado
+            </CardTitle>
             <CardDescription>
               El importe con letra se arma solo a partir de la cifra, como en el papel se escribe
               debajo de ella.
@@ -344,7 +351,12 @@ export function CapturaServicio({ sucursales, empleados, formasPago }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte III · Declaración y transferencia de custodia</CardTitle>
+            {/* El candado: la custodia del efectivo cambia de manos aquí, y no
+                antes de que el Custodio Financiero firme. */}
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="candado" className="shrink-0" />
+              Parte III · Declaración y transferencia de custodia
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
@@ -366,7 +378,10 @@ export function CapturaServicio({ sucursales, empleados, formasPago }: Props) {
       <div className="lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>Resumen</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="listado" className="shrink-0" />
+              Resumen
+            </CardTitle>
             <CardDescription>Orden {ordenServicio || "sin capturar"}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -389,6 +404,7 @@ export function CapturaServicio({ sucursales, empleados, formasPago }: Props) {
                 custodia. Mientras el custodio no firme, el dinero sigue siendo
                 responsabilidad de quien lo cobró, y así se leerá en la ficha. */}
             <Alert>
+              <IconoSilk nombre="aviso" />
               <AlertTitle>Guardar no confirma la custodia</AlertTitle>
               <AlertDescription>
                 El folio nacerá con la etiqueta “{etiquetaCustodia(false)}”. La custodia se
@@ -407,6 +423,7 @@ export function CapturaServicio({ sucursales, empleados, formasPago }: Props) {
             </div>
 
             <Button className="w-full" disabled={guardando || !listo} onClick={guardar}>
+              <IconoSilk nombre="guardar" className="shrink-0" />
               {guardando ? "Guardando…" : "Emitir folio y guardar"}
             </Button>
             <p className="text-xs text-muted-foreground">

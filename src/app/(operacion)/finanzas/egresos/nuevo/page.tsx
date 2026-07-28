@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { query } from "@/lib/db";
@@ -73,10 +74,16 @@ export default async function NuevoValeEgresoPage() {
   if (sucursales.length === 0 || conceptos.length === 0 || formas.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Vale de Egreso de Caja</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <IconoSilk nombre="nota" tamano={20} className="shrink-0" />
+          Vale de Egreso de Caja
+        </h1>
         <Card>
           <CardHeader>
-            <CardTitle>Falta configurar el catálogo</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="aviso" className="shrink-0" />
+              Falta configurar el catálogo
+            </CardTitle>
             <CardDescription>
               {sucursales.length === 0
                 ? "No hay ninguna sucursal dada de alta, y el folio es consecutivo por sucursal y por tipo."
@@ -103,7 +110,8 @@ export default async function NuevoValeEgresoPage() {
     <div className="space-y-6">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="nota" tamano={20} className="shrink-0" />
             Vale de Egreso de Caja · CACM-RCI-05
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

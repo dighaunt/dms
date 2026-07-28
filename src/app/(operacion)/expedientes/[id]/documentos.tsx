@@ -13,21 +13,15 @@ import {
   CircleAlertIcon,
   CircleDashedIcon,
   ClipboardCheckIcon,
-  FileCheck2Icon,
-  FileTextIcon,
   FolderIcon,
   FolderOpenIcon,
   HandshakeIcon,
   InfoIcon,
   LandmarkIcon,
   LayersIcon,
-  ListChecksIcon,
   ListIcon,
-  ScanLineIcon,
-  ShieldAlertIcon,
   ShoppingCartIcon,
   SkullIcon,
-  WalletCardsIcon,
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -60,6 +54,7 @@ import { DEPENDENCIAS } from "@/lib/mapa-documental";
 import { canonizarNumeroCaptura, formatearNumeroCaptura } from "@/lib/numeros";
 import { cn } from "@/lib/utils";
 import { BotonCopiar } from "@/components/boton-copiar";
+import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -94,12 +89,26 @@ const TIPOS_ACEPTADOS = "application/pdf,image/jpeg,image/png,image/webp";
 const MIMES_ACEPTADOS = new Set(TIPOS_ACEPTADOS.split(","));
 const MAX_BYTES_ESCANEO = 25 * 1024 * 1024;
 
+// Riel de la línea de tiempo: es un indicador de avance, así que se queda en
+// monocromo —tiene que apagarse en gris cuando la etapa aún no llega y
+// encenderse en el color primario cuando la unidad está ahí.
 const ICONO_ETAPA: Record<string, React.ComponentType<{ className?: string }>> = {
   ADQUISICION: ShoppingCartIcon,
   INSPECCION: ClipboardCheckIcon,
   EXPEDIENTE: FolderOpenIcon,
   TRAMITES: LandmarkIcon,
   VENTA: HandshakeIcon,
+};
+
+// Encabezado de la etapa: aquí sí manda el significado de negocio —lo que
+// pasa en esa etapa del expediente—, y es donde el icono a color ayuda a
+// encontrar la etapa de un vistazo.
+const ICONO_ETAPA_SILK: Record<string, NombreIconoSilk> = {
+  ADQUISICION: "paquete",
+  INSPECCION: "listado",
+  EXPEDIENTE: "expedientes",
+  TRAMITES: "sello",
+  VENTA: "dinero",
 };
 
 // Etapa de la línea de tiempo en la que «vive» cada estado de la unidad.
@@ -143,7 +152,7 @@ function AnexosDeEtapa({ etapa, origen, anexos }: { etapa: string; origen: "PROP
           window.dispatchEvent(new CustomEvent(EVENTO_ENFOCAR_ANEXO, { detail: { clave: ficha.clave } }));
           document.getElementById(`anexo-${ficha.clave}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
         }} className={cn("flex items-start gap-2 rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:border-primary/40", cargado ? "border-emerald-200" : exigencia === "OBLIGATORIO" ? "border-amber-200" : "border-border")}>
-          {cargado ? <FileCheck2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" /> : <CircleDashedIcon className={cn("mt-0.5 size-4 shrink-0", exigencia === "OBLIGATORIO" ? "text-amber-500" : "text-muted-foreground")} />}
+          {cargado ? <IconoSilk nombre="hojaOk" className="mt-0.5 shrink-0" /> : <CircleDashedIcon className={cn("mt-0.5 size-4 shrink-0", exigencia === "OBLIGATORIO" ? "text-amber-500" : "text-muted-foreground")} />}
           <span className="min-w-0"><span className="block text-xs font-medium">{ficha.nombre}</span><span className="block text-[11px] text-muted-foreground">{cargado ? `Cargado · ${cargado.version_maxima} archivo${cargado.version_maxima === 1 ? "" : "s"}` : ETIQUETA_EXIGENCIA[exigencia]}</span></span>
         </button>;
       })}
@@ -160,12 +169,17 @@ function estadoDe(docs: DocumentoDetalle[], tieneExcepcion = false): EstadoRequi
   return "PENDIENTE";
 }
 
-const ICONO_ESTADO: Record<EstadoRequisito, { icono: React.ComponentType<{ className?: string }>; clase: string }> = {
-  PENDIENTE: { icono: CircleDashedIcon, clase: "text-muted-foreground/60" },
-  EMITIDO: { icono: FileTextIcon, clase: "text-foreground" },
-  ESCANEADO: { icono: FileCheck2Icon, clase: "text-emerald-600" },
-  ANULADO: { icono: SkullIcon, clase: "text-white" },
-};
+// Estado del requisito. Lo que YA existe —un folio emitido, un escaneo
+// resguardado— lleva icono Silk a color, que es lo que se busca al recorrer
+// la etapa. Lo que expresa ausencia (PENDIENTE) sigue monocromo, porque ahí
+// lo que comunica es el gris apagado; y ANULADO conserva su calavera, que es
+// una decisión de diseño explícita de este expediente.
+function IconoEstadoRequisito({ estado }: { estado: EstadoRequisito }) {
+  if (estado === "EMITIDO") return <IconoSilk nombre="documento" />;
+  if (estado === "ESCANEADO") return <IconoSilk nombre="hojaOk" />;
+  if (estado === "ANULADO") return <SkullIcon className="size-6 text-white" />;
+  return <CircleDashedIcon className="size-4 text-muted-foreground/60" />;
+}
 
 const EXPLICACION_ESTADO: Record<EstadoRequisito, string> = {
   PENDIENTE: "Todavía no existe un folio. Emitirlo crea un consecutivo permanente en la trazabilidad.",
@@ -923,7 +937,7 @@ export function LineaTiempoExpediente({
                         "border-emerald-200 bg-emerald-50 text-emerald-600",
                     )}
                   >
-                    <WalletCardsIcon className="size-4" />
+                    <IconoSilk nombre={ICONO_ETAPA_SILK[etapa.codigo] ?? "expedientes"} />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold">{etapa.etiqueta}</span>
@@ -1226,7 +1240,7 @@ function AccionExplicada({
 function AbrirWizardButton({ onOpen }: { onOpen: () => void }) {
   return (
     <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={onOpen}>
-      <ListChecksIcon className="size-3" />
+      <IconoSilk nombre="formulario" className="size-3.5" />
       Completar PDF
     </Button>
   );
@@ -1358,7 +1372,7 @@ function CalloutSolicitudPendiente({ solicitud }: { solicitud: SolicitudRiesgoPe
           type="button"
           className="mt-2 flex w-full items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 transition-colors hover:bg-amber-100"
         >
-          <ShieldAlertIcon aria-hidden="true" className="size-3.5 shrink-0 text-amber-600" />
+          <IconoSilk nombre="riesgo" tamano={14} className="shrink-0" />
           <span className="font-medium">Solicitud enviada, pendiente de aprobación N3</span>
           <InfoIcon className="ml-auto size-3 shrink-0 opacity-55" />
         </button>
@@ -1509,7 +1523,6 @@ function FilaRequisito({
   onCerrarCandado: () => void;
 }) {
   const estado = estadoDe(docs, excepcion !== null);
-  const { icono: Icono, clase } = ICONO_ESTADO[estado];
   const esExcepcionable = (TIPOS_LEGACY as readonly string[]).includes(requisito.tipo);
   const [abierta, setAbierta] = useState(true);
   const expandida = abierta || candado !== null;
@@ -1606,7 +1619,7 @@ function FilaRequisito({
                 estado === "ANULADO" && "border-zinc-950 bg-zinc-950",
               )}
             >
-              <Icono className={cn(estado === "ANULADO" ? "size-6" : "size-4", clase)} />
+              <IconoEstadoRequisito estado={estado} />
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -1745,7 +1758,7 @@ function FilaRequisito({
                                 confirmar="Elegir archivo"
                                 variant="ghost"
                                 className="h-7 px-2 text-[11px]"
-                                icono={<ScanLineIcon className="size-3" />}
+                                icono={<IconoSilk nombre="adjuntar" className="size-3.5" />}
                                 onConfirmar={() => onSubir(doc)}
                               />
                             )}
@@ -2023,7 +2036,7 @@ function DialogSubirEscaneo({
         >
           {archivos.length > 0 ? (
             <>
-              <FileCheck2Icon className="mb-1 size-7 text-emerald-600" />
+              <IconoSilk nombre="hojaOk" tamano={28} className="mb-1" />
               <span className="font-medium text-foreground">
                 {archivos.length === 1 ? archivos[0].name : `${archivos.length} archivos seleccionados`}
               </span>
@@ -2031,7 +2044,7 @@ function DialogSubirEscaneo({
             </>
           ) : (
             <>
-              <ScanLineIcon className="mb-1 size-7 text-primary" />
+              <IconoSilk nombre="adjuntar" tamano={28} className="mb-1" />
               <span>Arrastra PDFs o imágenes aquí</span>
               <span className="text-xs">o haz clic para elegir varios (PDF/JPG/PNG/WEBP, máx. 25 MB c/u)</span>
             </>
@@ -2076,7 +2089,7 @@ function DialogSubirEscaneo({
             Cancelar
           </Button>
           <Button onClick={subir} disabled={archivos.length === 0 || subiendo}>
-            {!subiendo && <ScanLineIcon className="size-4" />}
+            {!subiendo && <IconoSilk nombre="adjuntar" className="size-4" />}
             {subiendo && progreso
               ? `Subiendo ${progreso.actual} de ${progreso.total}…`
               : archivos.length > 1

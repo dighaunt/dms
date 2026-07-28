@@ -2,17 +2,26 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { BookMarkedIcon, FileTextIcon, FolderOpenIcon, SearchIcon, XIcon } from "lucide-react";
+import { SearchIcon, XIcon } from "lucide-react";
 
 import { buscarDifuso } from "@/lib/busqueda-difusa";
 import type { ResultadoBusqueda } from "@/lib/indice-busqueda";
+import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-const ICONO_TIPO: Record<ResultadoBusqueda["tipo"], React.ComponentType<{ className?: string }>> = {
-  expediente: FolderOpenIcon,
-  documento: FileTextIcon,
-  manual: BookMarkedIcon,
+/**
+ * Los tres tipos de resultado se distinguen antes de leer el encabezado: la
+ * carpeta es un expediente, la hoja un formato del juego documental y el libro
+ * un manual. Es lo que separa un bloque de otro cuando la lista viene larga.
+ *
+ * La lupa del campo y la equis de limpiar siguen siendo monocromas: son parte
+ * del control y tienen que teñirse con él.
+ */
+const ICONO_TIPO: Record<ResultadoBusqueda["tipo"], NombreIconoSilk> = {
+  expediente: "expedientes",
+  documento: "documento",
+  manual: "manuales",
 };
 
 const ETIQUETA_TIPO: Record<ResultadoBusqueda["tipo"], string> = {
@@ -71,34 +80,31 @@ export function BuscadorGlobal({ indice }: { indice: ResultadoBusqueda[] }) {
               Sin coincidencias para «{consulta}». Prueba con un VIN, un código (C-02, F-07) o un tema del manual.
             </p>
           ) : (
-            resultadosPorTipo.map(({ tipo, resultados }) => {
-              const Icono = ICONO_TIPO[tipo];
-              return (
-                <div key={tipo}>
-                  <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <Icono className="size-3.5" />
-                    {ETIQUETA_TIPO[tipo]}
-                  </p>
-                  <ul className="space-y-1">
-                    {resultados.map((resultado) => (
-                      <li key={resultado.id}>
-                        <Link
-                          href={resultado.href}
-                          className={cn(
-                            "block rounded-lg px-3 py-2 transition-colors hover:bg-accent",
-                          )}
-                        >
-                          <span className="block text-sm font-medium">{resultado.titulo}</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {resultado.detalle}
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })
+            resultadosPorTipo.map(({ tipo, resultados }) => (
+              <div key={tipo}>
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <IconoSilk nombre={ICONO_TIPO[tipo]} className="shrink-0" />
+                  {ETIQUETA_TIPO[tipo]}
+                </p>
+                <ul className="space-y-1">
+                  {resultados.map((resultado) => (
+                    <li key={resultado.id}>
+                      <Link
+                        href={resultado.href}
+                        className={cn(
+                          "block rounded-lg px-3 py-2 transition-colors hover:bg-accent",
+                        )}
+                      >
+                        <span className="block text-sm font-medium">{resultado.titulo}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {resultado.detalle}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
           )}
         </div>
       )}

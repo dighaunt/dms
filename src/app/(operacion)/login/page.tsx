@@ -3,9 +3,10 @@
 import Image from "next/image";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, LoaderCircleIcon } from "lucide-react";
+import { LoaderCircleIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
+import { CreditoIconos, IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/animate-ui/components/buttons/button";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Input } from "@/components/ui/input";
@@ -116,6 +117,7 @@ export default function LoginPage() {
               <BlurFade delay={0.1} offset={8}>
                 <div className="space-y-2.5">
                   <Label htmlFor="email" className="text-sm text-slate-700">
+                    <IconoSilk nombre="correo" tamano={14} className="shrink-0" />
                     Correo electrónico
                   </Label>
                   <Input
@@ -169,7 +171,9 @@ export default function LoginPage() {
 
               <BlurFade delay={0.16} offset={8}>
                 <div className="space-y-2.5">
+                  {/* La llave es la misma que abre «Cambiar contraseña» en Mi cuenta. */}
                   <Label htmlFor="password" className="text-sm text-slate-700">
+                    <IconoSilk nombre="llave" tamano={14} className="shrink-0" />
                     Contraseña
                   </Label>
                   <InputPassword
@@ -242,7 +246,7 @@ export default function LoginPage() {
                     transition={{ duration: 0.2 }}
                     className="flex items-start gap-2.5 overflow-hidden rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700"
                   >
-                    <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
+                    <IconoSilk nombre="alerta" className="mt-0.5 shrink-0" />
                     <span>{error}</span>
                   </motion.div>
                 )}
@@ -285,6 +289,14 @@ export default function LoginPage() {
             </div>
           </form>
         </div>
+
+        {/*
+          El login no pasa por AppShell, que es donde vive el crédito en el
+          resto del sistema, y aquí ya se usan iconos Silk (el sobre, la llave).
+          La CC-BY-SA pide que el crédito se pueda encontrar, así que va al pie
+          de la columna del formulario, fuera del camino.
+        */}
+        <CreditoIconos className="text-xs text-slate-400" />
       </section>
 
       <section className="hidden min-h-svh items-center justify-center bg-white px-8 py-12 lg:flex xl:px-16">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,7 +60,10 @@ export function VerificadorSello() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Verificar un sello</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <IconoSilk nombre="sello" className="shrink-0" />
+          Verificar un sello
+        </CardTitle>
         <CardDescription>
           Teclea el token impreso dentro del cuño para comprobar a qué folio, acción y persona
           corresponde.
@@ -80,21 +84,28 @@ export function VerificadorSello() {
         </form>
 
         {estado === "malformado" && (
-          <p className="text-sm text-destructive">
-            Ese token no está bien escrito. Revísalo: el dígito verificador no coincide, así que hay
-            al menos un carácter mal transcrito.
+          <p className="flex items-start gap-2 text-sm text-destructive">
+            <IconoSilk nombre="alerta" className="mt-0.5 shrink-0" />
+            <span>
+              Ese token no está bien escrito. Revísalo: el dígito verificador no coincide, así que
+              hay al menos un carácter mal transcrito.
+            </span>
           </p>
         )}
 
         {estado === "inexistente" && (
-          <p className="text-sm text-destructive">
-            El token está bien formado pero no corresponde a ningún sello emitido.
+          <p className="flex items-start gap-2 text-sm text-destructive">
+            <IconoSilk nombre="alerta" className="mt-0.5 shrink-0" />
+            <span>El token está bien formado pero no corresponde a ningún sello emitido.</span>
           </p>
         )}
 
         {estado === "ok" && sello && (
           <div className="space-y-1 rounded-md border p-4 text-sm">
             <p className="flex items-center gap-2">
+              {/* El sello existe y corresponde a este folio: es el resultado
+                  entero de la pantalla y se lee de un vistazo. */}
+              <IconoSilk nombre="correcto" className="shrink-0" />
               <Badge>{sello.leyenda}</Badge>
               <span className="font-mono">{sello.folioCompleto}</span>
             </p>

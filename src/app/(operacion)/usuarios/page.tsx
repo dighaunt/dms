@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { UsersIcon } from "lucide-react";
 
 import { getUsuarioSesion } from "@/lib/auth/usuario";
 import { query } from "@/lib/db";
@@ -22,7 +23,12 @@ export default async function UsuariosPage() {
     <div className="space-y-6">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
+          {/* Silk no dibuja personas —es su ausencia más notoria—, así que esta
+              pantalla se queda con el juego monocromo, igual que su entrada de menú. */}
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <UsersIcon className="size-5 shrink-0 text-muted-foreground" />
+            Usuarios
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Altas y niveles de autorización (N1 operación, N2 supervisión, N3
             administración global).

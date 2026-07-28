@@ -42,6 +42,8 @@ export function BuscadorManual() {
         Buscar en manuales
       </label>
       <div className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2 shadow-xs">
+        {/* La lupa vive DENTRO del campo: es parte del control y tiene que
+            apagarse con su texto, igual que en el buscador global. Monocroma. */}
         <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
         <input
           id="buscar-manual"

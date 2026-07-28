@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/ui/blur-fade";
@@ -37,6 +38,19 @@ const COLOR_ESTADO: Record<string, "default" | "secondary" | "destructive" | "ou
   PENDIENTE_DE_FIRMA: "secondary",
   FIRMADO: "default",
   CANCELADO: "destructive",
+};
+
+/**
+ * El estado del corte dicho también con una figura, igual que en la pantalla del
+ * folio: el candado del corte firmado es lo que se busca de un vistazo. Va junto
+ * a la etiqueta —no dentro— porque estos iconos traen su propio color, y sin
+ * `titulo` porque la etiqueta de al lado ya nombra el estado.
+ */
+const ICONO_ESTADO: Record<EstadoDocumentoFinanciero, NombreIconoSilk> = {
+  BORRADOR: "nota",
+  PENDIENTE_DE_FIRMA: "reloj",
+  FIRMADO: "candado",
+  CANCELADO: "alto",
 };
 
 /** Los incisos con los que el papel numera la ubicación final del efectivo. */
@@ -129,16 +143,26 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
       <BlurFade delay={0.05}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="font-mono text-sm text-muted-foreground">{corte.folioCompleto}</p>
-            <h1 className="text-2xl font-semibold tracking-tight">Corte de caja diario</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="flex items-center gap-1.5 font-mono text-sm text-muted-foreground">
+              <IconoSilk nombre="documento" className="shrink-0" />
+              {corte.folioCompleto}
+            </p>
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+              <IconoSilk nombre="monedas" tamano={20} className="shrink-0" />
+              Corte de caja diario
+            </h1>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <IconoSilk nombre="sucursal" className="shrink-0" />
               {corte.sucursalClave} · {corte.fechaCorte}
               {corte.turno ? ` · turno ${corte.turno}` : ""} · custodio {corte.custodioNombre}
             </p>
           </div>
-          <Badge variant={COLOR_ESTADO[estado] ?? "outline"}>
-            {ETIQUETA_ESTADO_DOCUMENTO[estado]}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <IconoSilk nombre={ICONO_ESTADO[estado]} className="shrink-0" />
+            <Badge variant={COLOR_ESTADO[estado] ?? "outline"}>
+              {ETIQUETA_ESTADO_DOCUMENTO[estado]}
+            </Badge>
+          </div>
         </div>
       </BlurFade>
 
@@ -147,6 +171,7 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
           comprobación y sería una declaración. */}
       <BlurFade delay={0.1}>
         <Alert>
+          <IconoSilk nombre="informacion" className="shrink-0" />
           <AlertTitle>Este corte jala los folios; no se recaptura nada</AlertTitle>
           <AlertDescription>
             Los ingresos y los egresos de abajo salen de los folios FIRMADOS de esta sucursal y
@@ -165,6 +190,8 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
       {bloqueantes.length > 0 && (
         <BlurFade delay={0.12}>
           <Alert variant="destructive">
+            {/* El alto: no es un aviso, es un candado que impide cerrar el día. */}
+            <IconoSilk nombre="alto" className="shrink-0" />
             <AlertTitle>
               El día no puede cerrarse: {bloqueantes.length} folio(s) del día sin firmar
             </AlertTitle>
@@ -200,7 +227,10 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
       <BlurFade delay={0.15}>
         <Card>
           <CardHeader>
-            <CardTitle>Parte I · Ingresos del día</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="dinero" className="shrink-0" />
+              Parte I · Ingresos del día
+            </CardTitle>
             <CardDescription>
               Ventas de contado (RCI-01), utilidad neta de consignas (RCI-03) e ingresos por
               servicio (RCI-04), con los folios que los respaldan.
@@ -220,7 +250,11 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
       <BlurFade delay={0.2}>
         <Card>
           <CardHeader>
-            <CardTitle>Parte II · Egresos del día</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              {/* El vale amarillo: cada salida de dinero sale por su RCI-05. */}
+              <IconoSilk nombre="nota" className="shrink-0" />
+              Parte II · Egresos del día
+            </CardTitle>
             <CardDescription>
               Nómina y comisiones, retiros de socios y pagos a proveedores salen por su vale
               RCI-05. El depósito bancario y los resguardos también restan: son efectivo que ya no
@@ -264,7 +298,10 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
       <BlurFade delay={0.25}>
         <Card>
           <CardHeader>
-            <CardTitle>Parte III · Saldo y ubicación del efectivo</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="monedas" className="shrink-0" />
+              Parte III · Saldo y ubicación del efectivo
+            </CardTitle>
             <CardDescription>¿Dónde está el dinero al cierre del día?</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -314,7 +351,10 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
 
             {corte.explicacionDiferencia && (
               <div className="rounded-md border p-3 text-sm">
-                <p className="text-xs text-muted-foreground">Explicación del custodio</p>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <IconoSilk nombre="comentario" className="shrink-0" />
+                  Explicación del custodio
+                </p>
                 <p className="mt-1">{corte.explicacionDiferencia}</p>
               </div>
             )}
@@ -382,7 +422,10 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
         <BlurFade delay={0.3}>
           <Card>
             <CardHeader>
-              <CardTitle>El día ya está cerrado</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <IconoSilk nombre="candado" className="shrink-0" />
+                El día ya está cerrado
+              </CardTitle>
               <CardDescription>
                 El arqueo quedó asentado y el corte pasó a firmas: lo elabora el Custodio
                 Financiero, lo revisa y autoriza el Gerente General y el socio queda enterado. Para
@@ -392,6 +435,7 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
             <CardContent>
               <Button asChild variant="secondary">
                 <Link href={`/finanzas/documentos/${corte.documentoId}`}>
+                  <IconoSilk nombre="sello" className="shrink-0" />
                   Ver firmas y sellos del folio
                 </Link>
               </Button>

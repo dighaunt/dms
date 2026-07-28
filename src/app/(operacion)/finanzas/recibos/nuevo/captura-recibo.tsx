@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -119,7 +120,10 @@ export function CapturaRecibo({ sucursales, empleados, conceptos }: Props) {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Parte I · Operación y vendedor</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="formulario" className="shrink-0" />
+              Parte I · Operación y vendedor
+            </CardTitle>
             <CardDescription>
               Los campos siguen el orden de la forma impresa, para que quien ya la usa no tenga que
               reaprender nada.
@@ -245,7 +249,10 @@ export function CapturaRecibo({ sucursales, empleados, conceptos }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte II · Detalle del efectivo entregado (arqueo)</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="monedas" className="shrink-0" />
+              Parte II · Detalle del efectivo entregado (arqueo)
+            </CardTitle>
             <CardDescription>
               Cuenta las piezas por denominación. La suma tiene que coincidir con el importe
               declarado o el recibo no se podrá firmar.
@@ -300,7 +307,10 @@ export function CapturaRecibo({ sucursales, empleados, conceptos }: Props) {
       <div className="lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>Arqueo</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="peso" className="shrink-0" />
+              Arqueo
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex justify-between">
@@ -315,12 +325,21 @@ export function CapturaRecibo({ sucursales, empleados, conceptos }: Props) {
               {declarado === 0n ? (
                 <p className="text-muted-foreground">Captura el importe declarado.</p>
               ) : cuadra ? (
-                <Badge className="w-full justify-center py-1">El arqueo cuadra</Badge>
+                /* El icono va FUERA de la etiqueta: dentro quedaría sobre un
+                   fondo de color propio y se perdería, porque estos iconos
+                   traen sus tintas y no se aclaran con el texto. */
+                <div className="flex items-center gap-2">
+                  <IconoSilk nombre="correcto" className="shrink-0" />
+                  <Badge className="flex-1 justify-center py-1">El arqueo cuadra</Badge>
+                </div>
               ) : (
                 <div className="space-y-1">
-                  <Badge variant="destructive" className="w-full justify-center py-1">
-                    Diferencia {importeEnCasillas(deCentavos(diferencia)).texto}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <IconoSilk nombre="alerta" className="shrink-0" />
+                    <Badge variant="destructive" className="flex-1 justify-center py-1">
+                      Diferencia {importeEnCasillas(deCentavos(diferencia)).texto}
+                    </Badge>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {diferencia > 0n
                       ? "Hay más billetes que el importe declarado."
@@ -335,7 +354,14 @@ export function CapturaRecibo({ sucursales, empleados, conceptos }: Props) {
               disabled={guardando || !cuadra || !cliente || !idNumero || !folioVenta || !vinValido}
               onClick={guardar}
             >
-              {guardando ? "Guardando…" : "Emitir folio y guardar"}
+              {guardando ? (
+                "Guardando…"
+              ) : (
+                <>
+                  <IconoSilk nombre="guardar" className="shrink-0" />
+                  Emitir folio y guardar
+                </>
+              )}
             </Button>
             <p className="text-xs text-muted-foreground">
               El folio consecutivo lo entrega la base al guardar, no esta pantalla. Después podrás

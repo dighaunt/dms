@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,23 @@ const COLOR_ESTADO: Record<string, "default" | "secondary" | "destructive" | "ou
   PENDIENTE_DE_FIRMA: "secondary",
   FIRMADO: "default",
   CANCELADO: "destructive",
+};
+
+/**
+ * El estado del folio dicho también con una figura, porque es lo primero que se
+ * busca al abrir la pantalla: el candado del folio ya firmado —inalterable— y
+ * la señal de alto del cancelado se reconocen antes de leer la palabra.
+ *
+ * Va junto a la etiqueta y no dentro: estos iconos traen su propio color y
+ * sobre el fondo teñido de la etiqueta se perderían. Y va sin `titulo` porque
+ * la etiqueta de al lado ya dice el estado con todas sus letras: repetirlo sería
+ * decírselo dos veces a quien usa lector de pantalla.
+ */
+const ICONO_ESTADO: Record<string, NombreIconoSilk> = {
+  BORRADOR: "nota",
+  PENDIENTE_DE_FIRMA: "reloj",
+  FIRMADO: "candado",
+  CANCELADO: "alto",
 };
 
 export default async function DocumentoFinancieroPage({
@@ -56,16 +74,28 @@ export default async function DocumentoFinancieroPage({
       <BlurFade delay={0.05}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="font-mono text-sm text-muted-foreground">{documento.folioCompleto}</p>
+            <p className="flex items-center gap-1.5 font-mono text-sm text-muted-foreground">
+              <IconoSilk nombre="documento" className="shrink-0" />
+              {documento.folioCompleto}
+            </p>
             <h1 className="text-2xl font-semibold tracking-tight">{documento.nombreTipo}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <IconoSilk nombre="sucursal" className="shrink-0" />
               {documento.sucursalNombre} · emitido{" "}
               {new Date(documento.creadoEn).toLocaleString("es-MX")}
             </p>
           </div>
-          <Badge variant={COLOR_ESTADO[documento.estado ?? "BORRADOR"]}>
-            {documento.estado}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {ICONO_ESTADO[documento.estado ?? "BORRADOR"] && (
+              <IconoSilk
+                nombre={ICONO_ESTADO[documento.estado ?? "BORRADOR"]}
+                className="shrink-0"
+              />
+            )}
+            <Badge variant={COLOR_ESTADO[documento.estado ?? "BORRADOR"]}>
+              {documento.estado}
+            </Badge>
+          </div>
         </div>
       </BlurFade>
 
@@ -73,7 +103,10 @@ export default async function DocumentoFinancieroPage({
         <BlurFade delay={0.1}>
           <Card>
             <CardHeader>
-              <CardTitle>Contenido</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <IconoSilk nombre="hoja" className="shrink-0" />
+                Contenido
+              </CardTitle>
               {/* Regla 1 hecha texto: mientras el custodio no firme, el dinero
                   no es de la empresa. */}
               <CardDescription>{etiquetaCustodia(custodiaConfirmada)}</CardDescription>
@@ -100,7 +133,10 @@ export default async function DocumentoFinancieroPage({
                   )}
                   {arqueo && arqueo.renglones.length > 0 && (
                     <div className="sm:col-span-2">
-                      <p className="mb-1 text-xs text-muted-foreground">Arqueo</p>
+                      <p className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <IconoSilk nombre="monedas" className="shrink-0" />
+                        Arqueo
+                      </p>
                       <ul className="space-y-0.5 font-mono text-xs">
                         {arqueo.renglones.map((r) => (
                           <li key={r.denominacion}>
@@ -126,7 +162,8 @@ export default async function DocumentoFinancieroPage({
         <BlurFade delay={0.12}>
           <Card className="border-destructive">
             <CardHeader>
-              <CardTitle className="text-destructive">
+              <CardTitle className="flex items-start gap-2 text-destructive">
+                <IconoSilk nombre="alerta" className="mt-0.5 shrink-0" />
                 Las firmas de este folio no firmaron lo mismo
               </CardTitle>
               <CardDescription>
@@ -144,7 +181,11 @@ export default async function DocumentoFinancieroPage({
       <BlurFade delay={0.15}>
         <Card>
           <CardHeader>
-            <CardTitle>Firmas</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              {/* La pluma: firmar es el acto, no el papel. */}
+              <IconoSilk nombre="editar" className="shrink-0" />
+              Firmas
+            </CardTitle>
             <CardDescription>
               Una sola persona no puede ocupar dos roles del mismo documento, y todas firman el
               mismo contenido: si cambia entre una firma y la siguiente, la segunda se rechaza.
@@ -184,7 +225,10 @@ export default async function DocumentoFinancieroPage({
         <BlurFade delay={0.2}>
           <Card>
             <CardHeader>
-              <CardTitle>Sellos</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <IconoSilk nombre="sello" className="shrink-0" />
+                Sellos
+              </CardTitle>
               <CardDescription>
                 Cada cuño lleva su token verificable. No puede existir un sello sin la firma que lo
                 justifica.

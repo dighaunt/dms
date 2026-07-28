@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { UserIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -228,7 +230,12 @@ export function CapturaIngreso({ ficha, sucursales, formasPago }: Props) {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Parte I · Datos del vehículo</CardTitle>
+            {/* Las tres partes llevan icono porque son las anclas con las que
+                se recorre una hoja larga: la ficha, quién entrega y el dinero. */}
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="formulario" className="shrink-0" />
+              Parte I · Datos del vehículo
+            </CardTitle>
             <CardDescription>
               Marca, modelo, año y VIN vienen del expediente {ficha.numeroExpediente} y por eso no
               se teclean: si se volvieran a capturar, el folio y el expediente podrían acabar
@@ -316,7 +323,10 @@ export function CapturaIngreso({ ficha, sucursales, formasPago }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte II · Quien entrega el vehículo y tipo de operación</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <UserIcon className="size-4 shrink-0" />
+              Parte II · Quien entrega el vehículo y tipo de operación
+            </CardTitle>
             <CardDescription>
               Los datos de quien entrega se toman de su identificación oficial, tal como se
               transcriben en el papel.
@@ -404,7 +414,10 @@ export function CapturaIngreso({ ficha, sucursales, formasPago }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte III · Condiciones económicas</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="peso" className="shrink-0" />
+              Parte III · Condiciones económicas
+            </CardTitle>
             <CardDescription>
               {esCompra
                 ? "Se muestra sólo el bloque de compra directa. El de consignación no aplica a una unidad propia."
@@ -560,7 +573,10 @@ export function CapturaIngreso({ ficha, sucursales, formasPago }: Props) {
       <div className="lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>Resumen</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="listado" className="shrink-0" />
+              Resumen
+            </CardTitle>
             <CardDescription>{ficha.marca} {ficha.modelo} {ficha.anio}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -618,6 +634,7 @@ export function CapturaIngreso({ ficha, sucursales, formasPago }: Props) {
               // propiedad. Decirlo en la pantalla de captura evita que la
               // unidad acabe contada como activo propio.
               <Alert>
+                <IconoSilk nombre="aviso" />
                 <AlertTitle>La unidad no pasa a ser de la empresa</AlertTitle>
                 <AlertDescription>
                   Queda en resguardo de terceros: se exhibe y se vende por cuenta del consignante, y
@@ -627,6 +644,7 @@ export function CapturaIngreso({ ficha, sucursales, formasPago }: Props) {
             )}
 
             <Button className="w-full" disabled={guardando || !listo} onClick={guardar}>
+              <IconoSilk nombre="guardar" className="shrink-0" />
               {guardando ? "Guardando…" : "Emitir folio y guardar"}
             </Button>
             <p className="text-xs text-muted-foreground">

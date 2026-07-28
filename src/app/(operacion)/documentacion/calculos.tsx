@@ -1,6 +1,5 @@
-import { CalculatorIcon, DatabaseIcon, FileCheck2Icon } from "lucide-react";
-
 import { configuracionCalculoPena } from "@/lib/calculos/pena-convencional";
+import { IconoSilk } from "@/components/iconos/silk";
 
 export function CalculosDocumentales() {
   const c01 = configuracionCalculoPena("C-01");
@@ -9,8 +8,10 @@ export function CalculosDocumentales() {
   return (
     <section className="border-t pt-8" aria-labelledby="calculos-documentales">
       <div className="max-w-3xl">
+        {/* Silk no tiene calculadora; lo que aquí se calcula son importes, así
+            que el peso dice de qué trata la sección mejor que un símbolo vacío. */}
         <div className="flex items-center gap-2">
-          <CalculatorIcon className="size-4 text-primary" />
+          <IconoSilk nombre="peso" className="shrink-0" />
           <h2 id="calculos-documentales" className="text-lg font-semibold tracking-tight">
             Cálculos automáticos
           </h2>
@@ -45,8 +46,8 @@ export function CalculosDocumentales() {
             P es la pena y R es el monto a devolver: R = A - P. La pena nunca supera OP.
           </p>
           <div className="mt-4 grid gap-2 text-xs text-muted-foreground">
-            <p className="flex gap-2"><DatabaseIcon className="mt-0.5 size-3.5 shrink-0 text-primary" />Al guardar, Neon calcula y registra el resultado con los dos importes fuente.</p>
-            <p className="flex gap-2"><FileCheck2Icon className="mt-0.5 size-3.5 shrink-0 text-primary" />El PDF recibe el porcentaje calculado; no hay un campo editable para sustituirlo.</p>
+            <p className="flex gap-2"><IconoSilk nombre="baseDatos" tamano={14} className="mt-0.5 shrink-0" />Al guardar, Neon calcula y registra el resultado con los dos importes fuente.</p>
+            <p className="flex gap-2"><IconoSilk nombre="hojaOk" tamano={14} className="mt-0.5 shrink-0" />El PDF recibe el porcentaje calculado; no hay un campo editable para sustituirlo.</p>
           </div>
         </div>
       </article>
