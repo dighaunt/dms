@@ -1,5 +1,6 @@
 import { getUsuarioSesion } from "@/lib/auth/usuario";
 import { CerrarSesion } from "@/components/cerrar-sesion";
+import { CreditoIconos } from "@/components/iconos/silk";
 import { MiCuenta } from "@/components/mi-cuenta";
 import { SidebarMovil } from "@/components/sidebar-movil";
 import { SidebarNav } from "@/components/sidebar-nav";
@@ -58,6 +59,15 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-8 sm:py-8">
           {children}
         </main>
+        {/*
+          El crédito de los iconos va aquí y no en la barra lateral por dos
+          razones: la barra se dibuja dos veces —escritorio y cajón móvil— y
+          duplicarlo sería raro, y la CC-BY-SA pide que se pueda encontrar, no
+          que estorbe. Al pie del contenido aparece en toda pantalla, una vez.
+        */}
+        <footer className="mx-auto w-full max-w-5xl px-4 pb-6 sm:px-8">
+          <CreditoIconos className="text-xs text-muted-foreground" />
+        </footer>
       </div>
     </div>
   );

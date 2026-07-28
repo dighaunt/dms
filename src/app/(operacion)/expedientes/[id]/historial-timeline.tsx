@@ -7,6 +7,7 @@ import "vis-timeline/styles/vis-timeline-graph2d.css";
 
 import type { EventoHistorial, ExcepcionDocumental } from "@/lib/db/consultas";
 import { ETIQUETA_ESTADO_F06, ETIQUETA_ESTADO_UNIDAD } from "@/lib/estados";
+import { IconoSilk } from "@/components/iconos/silk";
 
 const ESTADOS_FINALES = new Set(["ENTREGADA", "DEVUELTA_CONSIGNANTE", "BAJA"]);
 
@@ -102,9 +103,10 @@ export function HistorialTimeline({
 
   return (
     <section className="rounded-lg border bg-background p-4 shadow-xs">
-      <h2 className="mb-3 text-sm font-medium">
+      <h2 className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
+        <IconoSilk nombre="calendario" className="shrink-0" />
         Historial del ciclo de vida
-        <span className="ml-2 text-xs font-normal text-muted-foreground">
+        <span className="text-xs font-normal text-muted-foreground">
           de la apertura al cierre; arrastra y haz zoom
         </span>
       </h2>

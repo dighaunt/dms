@@ -2,47 +2,46 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BanknoteIcon,
-  BookOpenIcon,
-  CalculatorIcon,
-  ChartColumnIcon,
-  CirclePlusIcon,
-  FolderOpenIcon,
-  HomeIcon,
-  LibraryIcon,
-  ShieldAlertIcon,
-  UsersIcon,
-} from "lucide-react";
+import { UsersIcon } from "lucide-react";
 
+import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
 import { cn } from "@/lib/utils";
 
 type Item = {
   href: string;
   etiqueta: string;
-  icono: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  /**
+   * Un alias de Silk, o un componente monocromo para lo que Silk no dibuja.
+   * Silk no tiene persona ni grupo, y Usuarios es la única entrada que los
+   * necesita: ahí se queda el juego monocromo.
+   */
+  icono: NombreIconoSilk | React.ComponentType<{ className?: string; strokeWidth?: number }>;
   exacto?: boolean;
   /** Se dibuja recorrido: cuelga de la entrada inmediatamente anterior. */
   sangria?: boolean;
 };
 
 const OPERACION: Item[] = [
-  { href: "/", etiqueta: "Inicio", icono: HomeIcon, exacto: true },
-  { href: "/expedientes", etiqueta: "Expedientes", icono: FolderOpenIcon },
-  { href: "/expedientes/nuevo", etiqueta: "Abrir expediente", icono: CirclePlusIcon, exacto: true },
-  { href: "/finanzas", etiqueta: "Finanzas", icono: BanknoteIcon },
+  { href: "/", etiqueta: "Inicio", icono: "inicio", exacto: true },
+  { href: "/expedientes", etiqueta: "Expedientes", icono: "expedientes" },
+  // El más (verde) contra la carpeta de la entrada anterior: se lee «uno nuevo».
+  { href: "/expedientes/nuevo", etiqueta: "Abrir expediente", icono: "agregar", exacto: true },
+  { href: "/finanzas", etiqueta: "Finanzas", icono: "finanzas" },
   // Las tres secciones de Finanzas que tienen pantalla propia. Los siete
   // formatos NO se listan aquí: se emiten desde el panel, que es donde se ve
   // el estado del día que decide cuál toca.
-  { href: "/finanzas/cortes", etiqueta: "Corte de caja", icono: CalculatorIcon, sangria: true },
-  { href: "/finanzas/reportes", etiqueta: "Reportes", icono: ChartColumnIcon, sangria: true },
-  { href: "/finanzas/catalogos", etiqueta: "Catálogos", icono: LibraryIcon, sangria: true },
-  { href: "/documentacion", etiqueta: "Documentación", icono: BookOpenIcon },
+  //
+  // El corte lleva monedas y no «caja»: ese alias es una cesta de compra y aquí
+  // leería a tienda, no a efectivo contado.
+  { href: "/finanzas/cortes", etiqueta: "Corte de caja", icono: "monedas", sangria: true },
+  { href: "/finanzas/reportes", etiqueta: "Reportes", icono: "reportes", sangria: true },
+  { href: "/finanzas/catalogos", etiqueta: "Catálogos", icono: "catalogos", sangria: true },
+  { href: "/documentacion", etiqueta: "Documentación", icono: "manuales" },
 ];
 
 const ADMINISTRACION: Item[] = [
   { href: "/usuarios", etiqueta: "Usuarios", icono: UsersIcon },
-  { href: "/modo-riesgo", etiqueta: "Modo riesgo", icono: ShieldAlertIcon },
+  { href: "/modo-riesgo", etiqueta: "Modo riesgo", icono: "riesgo" },
 ];
 
 /**
@@ -98,7 +97,11 @@ function Seccion({
                 : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
             )}
           >
-            <Icono className="size-4" strokeWidth={esActivo ? 2.2 : 1.8} />
+            {typeof Icono === "string" ? (
+              <IconoSilk nombre={Icono} className="shrink-0" />
+            ) : (
+              <Icono className="size-4 shrink-0" strokeWidth={esActivo ? 2.2 : 1.8} />
+            )}
             {item.etiqueta}
           </Link>
         );

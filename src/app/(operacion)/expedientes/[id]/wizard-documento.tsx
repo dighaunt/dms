@@ -4,21 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangleIcon,
   CalendarDaysIcon,
-  CheckCircle2Icon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CircleDashedIcon,
   ClockIcon,
   DatabaseIcon,
-  FileDownIcon,
   LoaderCircleIcon,
   PlusIcon,
-  SaveIcon,
   SparklesIcon,
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   AvisoErrorOperacion,
@@ -442,7 +440,7 @@ export function WizardDocumento({
                         )}
                       >
                         {!pending ? (
-                          <CheckCircle2Icon className="size-4 shrink-0 text-emerald-600" />
+                          <IconoSilk nombre="correcto" className="shrink-0" />
                         ) : (
                           <CircleDashedIcon className="size-4 shrink-0 text-muted-foreground" />
                         )}
@@ -454,7 +452,7 @@ export function WizardDocumento({
 
                 <div className="mt-5 rounded-xl border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
                   <div className="flex items-center gap-2 font-medium text-foreground">
-                    <DatabaseIcon className="size-4 text-primary" />
+                    <IconoSilk nombre="baseDatos" className="shrink-0" />
                     Captura una sola vez
                   </div>
                   <p className="mt-1.5">
@@ -475,7 +473,7 @@ export function WizardDocumento({
                   />
                 ) : data.bloqueada && data.estado !== "COMPLETA" ? (
                   <CenteredState
-                    icon={<AlertTriangleIcon className="mx-auto size-11 text-amber-600" />}
+                    icon={<IconoSilk nombre="candado" tamano={44} className="mx-auto" />}
                     title="Captura cerrada por escaneo"
                     description="Este folio ya tiene un archivo firmado o escaneado. El escaneo preservado es la evidencia vigente y sus datos no pueden alterarse."
                     warning
@@ -507,7 +505,7 @@ export function WizardDocumento({
                     {issuesSinControl.length > 0 && (
                       <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4">
                         <p className="flex items-center gap-2 text-sm font-medium text-red-900">
-                          <AlertTriangleIcon className="size-4 shrink-0" />
+                          <IconoSilk nombre="advertencia" className="shrink-0" />
                           Datos que el sistema resuelve solo y no pasaron la validación
                         </p>
                         <ul className="mt-2 space-y-1 text-xs leading-relaxed text-red-800">
@@ -561,13 +559,13 @@ export function WizardDocumento({
                   {data.estado === "COMPLETA" && (
                     <Button variant="outline" asChild>
                       <a href={`/api/documentos/${data.documentoId}/formato`} download>
-                        <FileDownIcon className="size-4" />
+                        <IconoSilk nombre="documento" className="size-4" />
                         Descargar PDF
                       </a>
                     </Button>
                   )}
                   <Button variant="outline" disabled={saving !== null} onClick={() => void submit("save")}>
-                    {saving === "save" ? <LoaderCircleIcon className="size-4 animate-spin" /> : <SaveIcon className="size-4" />}
+                    {saving === "save" ? <LoaderCircleIcon className="size-4 animate-spin" /> : <IconoSilk nombre="guardar" className="size-4" />}
                     {data.estado === "COMPLETA" ? "Guardar cambios" : "Guardar borrador"}
                   </Button>
                   <Button
@@ -585,7 +583,7 @@ export function WizardDocumento({
                     </Button>
                   ) : data.estado !== "COMPLETA" ? (
                     <Button disabled={saving !== null} onClick={() => void submit("complete")}>
-                      {saving === "complete" ? <LoaderCircleIcon className="size-4 animate-spin" /> : <CheckCircle2Icon className="size-4" />}
+                      {saving === "complete" ? <LoaderCircleIcon className="size-4 animate-spin" /> : <IconoSilk nombre="correcto" className="size-4" />}
                       Validar y completar
                     </Button>
                   ) : null}

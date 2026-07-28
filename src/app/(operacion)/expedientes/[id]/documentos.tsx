@@ -13,21 +13,15 @@ import {
   CircleAlertIcon,
   CircleDashedIcon,
   ClipboardCheckIcon,
-  FileCheck2Icon,
-  FileTextIcon,
   FolderIcon,
   FolderOpenIcon,
   HandshakeIcon,
   InfoIcon,
   LandmarkIcon,
   LayersIcon,
-  ListChecksIcon,
   ListIcon,
-  ScanLineIcon,
-  ShieldAlertIcon,
   ShoppingCartIcon,
   SkullIcon,
-  WalletCardsIcon,
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -60,6 +54,7 @@ import { DEPENDENCIAS } from "@/lib/mapa-documental";
 import { canonizarNumeroCaptura, formatearNumeroCaptura } from "@/lib/numeros";
 import { cn } from "@/lib/utils";
 import { BotonCopiar } from "@/components/boton-copiar";
+import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -94,12 +89,26 @@ const TIPOS_ACEPTADOS = "application/pdf,image/jpeg,image/png,image/webp";
 const MIMES_ACEPTADOS = new Set(TIPOS_ACEPTADOS.split(","));
 const MAX_BYTES_ESCANEO = 25 * 1024 * 1024;
 
+// Riel de la línea de tiempo: es un indicador de avance, así que se queda en
+// monocromo —tiene que apagarse en gris cuando la etapa aún no llega y
+// encenderse en el color primario cuando la unidad está ahí.
 const ICONO_ETAPA: Record<string, React.ComponentType<{ className?: string }>> = {
   ADQUISICION: ShoppingCartIcon,
   INSPECCION: ClipboardCheckIcon,
   EXPEDIENTE: FolderOpenIcon,
   TRAMITES: LandmarkIcon,
   VENTA: HandshakeIcon,
+};
+
+// Encabezado de la etapa: aquí sí manda el significado de negocio —lo que
+// pasa en esa etapa del expediente—, y es donde el icono a color ayuda a
+// encontrar la etapa de un vistazo.
+const ICONO_ETAPA_SILK: Record<string, NombreIconoSilk> = {
+  ADQUISICION: "paquete",
+  INSPECCION: "listado",
+  EXPEDIENTE: "expedientes",
+  TRAMITES: "sello",
+  VENTA: "dinero",
 };
 
 // Etapa de la línea de tiempo en la que «vive» cada estado de la unidad.

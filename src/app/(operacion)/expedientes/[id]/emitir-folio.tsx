@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { postJsonDetallado } from "@/lib/cliente-api";
 import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { toast } from "sonner";
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -88,6 +89,7 @@ export function EmitirFolio({
       <Dialog open={abierto} onOpenChange={setAbierto}>
         <DialogTrigger asChild>
           <Button size="sm" variant="outline">
+            <IconoSilk nombre="sello" className="size-3.5" />
             Emitir otro folio
           </Button>
         </DialogTrigger>

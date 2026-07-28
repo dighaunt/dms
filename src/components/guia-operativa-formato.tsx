@@ -1,7 +1,6 @@
 "use client";
 
-import { ClipboardListIcon, ShieldAlertIcon } from "lucide-react";
-
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +18,7 @@ export function GuiaOperativaResumen({ tipo, className }: { tipo: string; classN
   const guia = guiaOperativaPara(tipo);
   return (
     <Alert className={cn("mt-4 bg-primary/[0.035]", className)}>
-      <ClipboardListIcon className="text-primary" />
+      <IconoSilk nombre="listado" />
       <AlertTitle>Antes de llenar · {guia.etapa}</AlertTitle>
       <AlertDescription>
         <ul className="mt-1.5 space-y-1.5 text-xs leading-relaxed">
@@ -46,7 +45,9 @@ export function GuiaOperativaSheet({ tipo, compact = false }: { tipo: string; co
     <Sheet>
       <SheetTrigger asChild>
         <Button type="button" variant="outline" size={compact ? "xs" : "sm"}>
-          <ClipboardListIcon className="size-3.5" />
+          {/* El mismo listado que encabeza el aviso: el botón que lo abre no
+              puede llevar otro icono o dejan de leerse como lo mismo. */}
+          <IconoSilk nombre="listado" className="size-3.5" />
           {compact ? "Ver guía completa" : "Guía operativa"}
         </Button>
       </SheetTrigger>
@@ -123,7 +124,12 @@ function PerfilesContraparte({
 function AlertaOperativa({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <p className={cn("mt-3 flex gap-1.5 rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium leading-relaxed text-amber-950", className)}>
-      <ShieldAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+      {/*
+        El triángulo ámbar —«error» en el juego, aunque aquí sea una advertencia
+        operativa— es el que combina con el fondo del recuadro y el que se
+        reconoce como «cuidado con esto» sin leer todavía la frase.
+      */}
+      <IconoSilk nombre="error" tamano={14} className="mt-0.5 shrink-0" />
       <span>{children}</span>
     </p>
   );
