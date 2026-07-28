@@ -9,7 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { requerirUsuario } from "@/lib/api";
 import { listarSucursales } from "@/lib/finanzas/catalogos";
-import { abrirCorte, corteDelDia, foliosPendientesDelDia } from "@/lib/finanzas/corte";
+import {
+  TURNOS_CORTE,
+  abrirCorte,
+  corteDelDia,
+  etiquetaTurno,
+  foliosPendientesDelDia,
+} from "@/lib/finanzas/corte";
 import { importeEnCasillas } from "@/lib/finanzas/formato";
 import { ETIQUETA_ESTADO_DOCUMENTO, type EstadoDocumentoFinanciero } from "@/lib/finanzas/tipos";
 
@@ -79,10 +85,10 @@ export default async function CortesPage({
   /**
    * Abre el corte del día, o lleva al que ya existe.
    *
-   * La consulta previa no es una comodidad: `corte.ts` advierte que la UNIQUE
-   * (sucursal, fecha, turno) no puede impedir un segundo corte SIN turno,
-   * porque en SQL dos NULL no son iguales. Emitir otro folio aquí partiría el
-   * día en dos rendiciones de cuentas incompletas.
+   * La consulta previa no es una comodidad: emitir otro folio cuando el corte
+   * ya está abierto partiría el día en dos rendiciones de cuentas incompletas,
+   * y quemaría un consecutivo que después nadie sabe explicar. La UNIQUE de la
+   * base es la última línea; ésta es la que evita llegar hasta ella.
    */
   async function abrirCorteDelDia(datos: FormData) {
     "use server";
@@ -92,8 +98,10 @@ export default async function CortesPage({
 
     const sucursalId = Number(datos.get("sucursal"));
     const dia = String(datos.get("fecha") ?? "");
-    const turnoCrudo = String(datos.get("turno") ?? "").trim();
-    const turno = turnoCrudo === "" ? null : turnoCrudo;
+    // El turno vacío es cadena vacía, nunca null: la columna es NOT NULL desde
+    // la migración 039, y con null la UNIQUE no distinguía dos cortes del mismo
+    // día porque en SQL dos NULL no son iguales.
+    const turno = String(datos.get("turno") ?? "").trim();
 
     const existente = await corteDelDia(sucursalId, dia, turno);
     const corte =
@@ -148,7 +156,7 @@ export default async function CortesPage({
                 </CardTitle>
                 <CardDescription>
                   {fecha}
-                  {corte?.turno ? ` · turno ${corte.turno}` : ""}
+                  {corte?.turno ? ` · ${etiquetaTurno(corte.turno)}` : ""}
                 </CardDescription>
               </CardHeader>
 
@@ -202,13 +210,22 @@ export default async function CortesPage({
                     <input type="hidden" name="sucursal" value={sucursal.id} />
                     <input type="hidden" name="fecha" value={fecha} />
                     <div className="space-y-1.5">
-                      <Label htmlFor={`turno-${sucursal.id}`}>Turno (opcional)</Label>
-                      <Input
+                      <Label htmlFor={`turno-${sucursal.id}`}>Turno</Label>
+                      {/* Lista y no texto libre: escritos a mano, "Matutino" y
+                          "matutino" serían dos turnos distintos para la UNIQUE
+                          del día, y cada variante abriría su propio corte. */}
+                      <select
                         id={`turno-${sucursal.id}`}
                         name="turno"
-                        placeholder="matutino, vespertino…"
-                        className="max-w-xs"
-                      />
+                        defaultValue=""
+                        className="h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 text-sm"
+                      >
+                        {TURNOS_CORTE.map((t) => (
+                          <option key={t.valor} value={t.valor}>
+                            {t.etiqueta}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <Button type="submit" size="sm">
                       Abrir el corte del día

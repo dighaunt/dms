@@ -141,17 +141,46 @@ const ETIQUETA_UBICACION: Record<string, string> = {
  * Turno del corte. Va a la UNIQUE (sucursal, fecha, turno), que es lo que
  * impide dos cortes del mismo día.
  *
- * CUIDADO al dejarlo vacío: Postgres considera distintos dos NULL, así que esa
- * UNIQUE no puede por sí sola impedir un segundo corte sin turno de la misma
- * fecha. Por eso la pantalla debe consultar `corteDelDia` y abrir el corte que
- * ya existe en lugar de emitir otro folio.
+ * "Sin turno" se representa con CADENA VACÍA, nunca con NULL, y eso no es una
+ * preferencia de estilo: Postgres considera distintos dos NULL, así que con
+ * NULL la UNIQUE no impedía un segundo corte sin turno de la misma fecha —dos
+ * rendiciones de cuentas del mismo día conviviendo—. La migración 039 lo
+ * normalizó a `NOT NULL DEFAULT ''` por esa razón, y este esquema tiene que
+ * hablar el mismo idioma: mandar NULL desde aquí revienta el INSERT.
  */
 const esquemaTurno = z
   .string()
   .trim()
   .max(40)
   .nullish()
-  .transform((valor) => (valor ? valor : null));
+  .transform((valor) => valor ?? "");
+
+/**
+ * Turnos que ofrece la pantalla. La cadena vacía —día completo— va primero
+ * porque es el caso de casi todas las agencias.
+ *
+ * Se ofrecen como lista y no como texto libre por una razón concreta: escritos
+ * a mano, "Matutino", "matutino" y "MAT" son tres turnos DISTINTOS para la
+ * UNIQUE (sucursal, fecha, turno), así que cada variante abriría su propio
+ * corte del mismo día y el candado que impide dos rendiciones de cuentas se
+ * esquivaría con un error de dedo.
+ *
+ * La columna sigue siendo texto libre y `esquemaTurno` no encierra los valores
+ * en esta lista a propósito: si una sucursal necesita un turno con otro nombre,
+ * debe poder tenerlo sin una migración, y los cortes viejos con un turno que ya
+ * no se ofrece tienen que seguir leyéndose.
+ */
+export const TURNOS_CORTE = [
+  { valor: "", etiqueta: "Sin turno — día completo" },
+  { valor: "MATUTINO", etiqueta: "Matutino" },
+  { valor: "VESPERTINO", etiqueta: "Vespertino" },
+  { valor: "NOCTURNO", etiqueta: "Nocturno" },
+] as const;
+
+/** Cómo se lee un turno guardado, incluido uno que ya no esté en la lista. */
+export function etiquetaTurno(turno: string): string {
+  return TURNOS_CORTE.find((t) => t.valor === turno)?.etiqueta ?? turno;
+}
 
 export const esquemaAbrirCorte = z.object({
   sucursalId: esquemaId,
@@ -262,7 +291,8 @@ export type CorteCaja = {
   sucursalClave: string;
   /** Fecha civil AAAA-MM-DD, tal como está en la columna `date`. */
   fechaCorte: string;
-  turno: string | null;
+  /** Cadena vacía cuando el corte no distingue turnos; nunca null. */
+  turno: string;
   custodioUsuarioId: number;
   custodioNombre: string;
   /** Efectivo contado en el último corte firmado: encadenado, no capturado. */
@@ -400,7 +430,7 @@ type FilaCorte = {
   sucursal_id: string | number;
   sucursal_clave: string;
   fecha_corte: string;
-  turno: string | null;
+  turno: string;
   custodio_usuario_id: string | number;
   custodio_nombre: string;
   saldo_inicial: string;
@@ -482,9 +512,10 @@ export async function obtenerCorte(corteId: number): Promise<CorteCaja | null> {
 /**
  * El corte ya abierto para esa sucursal, fecha y turno.
  *
- * `IS NOT DISTINCT FROM` y no `=` porque el turno puede ser nulo y en SQL
- * NULL = NULL no es verdadero: sin esto, el corte sin turno del día jamás se
- * encontraría y la pantalla abriría uno nuevo cada vez.
+ * El turno "vacío" es la cadena vacía y no NULL, así que basta con `=`. Cuando
+ * era NULL esta comparación necesitaba `IS NOT DISTINCT FROM`, porque en SQL
+ * NULL = NULL no es verdadero y el corte sin turno del día no se encontraba
+ * jamás: la pantalla creía que no existía y trataba de abrir otro.
  */
 export async function corteDelDia(
   sucursalId: number,
@@ -499,7 +530,7 @@ export async function corteDelDia(
     `${SELECT_CORTE}
       WHERE c.sucursal_id = $1
         AND c.fecha_corte = $2::date
-        AND c.turno IS NOT DISTINCT FROM $3`,
+        AND c.turno = $3`,
     [sucursal, dia, turnoNormalizado],
   );
   return rows[0] ? filaACorte(rows[0]) : null;
