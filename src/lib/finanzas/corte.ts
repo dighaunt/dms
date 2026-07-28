@@ -155,6 +155,33 @@ const esquemaTurno = z
   .nullish()
   .transform((valor) => valor ?? "");
 
+/**
+ * Turnos que ofrece la pantalla. La cadena vacía —día completo— va primero
+ * porque es el caso de casi todas las agencias.
+ *
+ * Se ofrecen como lista y no como texto libre por una razón concreta: escritos
+ * a mano, "Matutino", "matutino" y "MAT" son tres turnos DISTINTOS para la
+ * UNIQUE (sucursal, fecha, turno), así que cada variante abriría su propio
+ * corte del mismo día y el candado que impide dos rendiciones de cuentas se
+ * esquivaría con un error de dedo.
+ *
+ * La columna sigue siendo texto libre y `esquemaTurno` no encierra los valores
+ * en esta lista a propósito: si una sucursal necesita un turno con otro nombre,
+ * debe poder tenerlo sin una migración, y los cortes viejos con un turno que ya
+ * no se ofrece tienen que seguir leyéndose.
+ */
+export const TURNOS_CORTE = [
+  { valor: "", etiqueta: "Sin turno — día completo" },
+  { valor: "MATUTINO", etiqueta: "Matutino" },
+  { valor: "VESPERTINO", etiqueta: "Vespertino" },
+  { valor: "NOCTURNO", etiqueta: "Nocturno" },
+] as const;
+
+/** Cómo se lee un turno guardado, incluido uno que ya no esté en la lista. */
+export function etiquetaTurno(turno: string): string {
+  return TURNOS_CORTE.find((t) => t.valor === turno)?.etiqueta ?? turno;
+}
+
 export const esquemaAbrirCorte = z.object({
   sucursalId: esquemaId,
   /** Fecha civil del corte: decide qué folios jala `armar_corte_caja`. */
