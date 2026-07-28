@@ -22,8 +22,12 @@ import test from "node:test";
 
 import pg from "pg";
 
-const URL_PRUEBAS = process.env.DATABASE_URL_TEST;
-const SIN_BASE = URL_PRUEBAS ? false : "sin DATABASE_URL_TEST";
+import { centinelaDeBase, SIN_BASE, URL_PRUEBAS } from "./base-pruebas.mts";
+
+// Sin base no hay nada que probar aquí, y callarlo dejaría `npm test` en verde
+// con cero cobertura de las reglas 1 y 8. El porqué del mecanismo está en la
+// cabecera de `base-pruebas.mts`.
+centinelaDeBase("el ciclo de folio, firma y sello: reglas 1 y 8 del manual");
 
 // ===== Actores =====
 // El PIN se fija aquí y no se deriva del id: un id de seis dígitos truncaría
@@ -152,7 +156,20 @@ async function rechaza(
 
 // ===== Utilidades de armado =====
 
-/** El hash de contenido es lo que la firma acredita; basta con que sea real y estable. */
+/**
+ * El hash de contenido es la huella de lo que quien firma tuvo delante.
+ *
+ * Depende SÓLO del documento, nunca del rol ni de quién firma: dos personas
+ * que firman el mismo folio firman lo mismo, o no están firmando lo mismo.
+ * Desde la migración 039 eso no es una convención de la prueba sino un
+ * candado —el disparador `firma_exige_mismo_contenido` rechaza la segunda
+ * firma cuya huella no coincida con la de la primera—, y era el hueco que más
+ * pesaba de la auditoría: el único punto donde se podía cambiar una cifra ya
+ * consentida sin dejar rastro.
+ *
+ * Los sellos son otra cosa y su hash sí varía por acción: un sello acredita un
+ * hecho del expediente, no el consentimiento de una persona.
+ */
 function hashDe(...partes: string[]): string {
   return createHash("sha256").update(partes.join("|")).digest("hex");
 }
@@ -227,7 +244,9 @@ async function firmarInterno(
   documentoId: string,
   rol: string,
   actor: Actor,
-  opciones: { pin?: string } = {},
+  // `hash` sólo lo pasa el caso que prueba el candado de contenido: en el uso
+  // normal la huella es la del documento y no se elige.
+  opciones: { pin?: string; hash?: string } = {},
 ): Promise<string> {
   const { rows } = await esc.cx.query<{ estado: string }>(
     "SELECT firmar_documento_financiero($1, $2, $3, $4, $5, $6) AS estado",
@@ -236,7 +255,7 @@ async function firmarInterno(
       rol,
       esc.usuarios[actor],
       opciones.pin ?? ACTORES[actor].pin ?? PIN_INEXISTENTE,
-      hashDe(documentoId, rol),
+      opciones.hash ?? hashDe(documentoId),
       "prueba",
     ],
   );
@@ -258,15 +277,23 @@ async function firmarPresencial(
       nombre,
       esc.usuarios[atestigua],
       ACTORES[atestigua].pin ?? PIN_INEXISTENTE,
-      hashDe(documentoId, rol),
+      hashDe(documentoId),
     ],
   );
   return rows[0].estado;
 }
 
-/** Folio de RCI-01 con su Parte I y su arqueo cuadrado, listo para firmarse. */
-async function reciboParaFirmar(esc: Escenario): Promise<string> {
-  const documentoId = await emitirFolio(esc, "CACM-RCI-01", "vendedor");
+/**
+ * Captura la Parte I del RCI-01 y su desglose de denominaciones, dejando el
+ * folio en BORRADOR.
+ *
+ * Va aparte de `reciboParaFirmar` porque desde la migración 039 el contenido
+ * dejó de ser opcional: `cambiar_estado_documento_fin` no manda a firma un
+ * formato en blanco (hueco H10). Los casos que necesitan mirar el folio
+ * mientras todavía está en borrador tienen que capturar igual, y esto es lo
+ * que les permite hacerlo sin repetir el INSERT.
+ */
+async function capturarRecibo(esc: Escenario, documentoId: string): Promise<void> {
   await esc.cx.query(
     `INSERT INTO recibo_caja_rci01
        (documento_id, vendedor_empleado_id, vendedor_id_tipo, vendedor_id_numero,
@@ -283,7 +310,31 @@ async function reciboParaFirmar(esc: Escenario): Promise<string> {
   // Lo mismo que hace el servicio antes de mandar a firma: el desglose tiene
   // que sumar el importe declarado o el arqueo no es tal.
   await esc.cx.query("SELECT validar_arqueo_rci01($1)", [documentoId]);
+}
+
+/** Folio de RCI-01 con su Parte I y su arqueo cuadrado, listo para firmarse. */
+async function reciboParaFirmar(
+  esc: Escenario,
+  opciones: { sucursalId?: string } = {},
+): Promise<string> {
+  const documentoId = await emitirFolio(esc, "CACM-RCI-01", "vendedor", opciones);
+  await capturarRecibo(esc, documentoId);
   await mandarAFirma(esc, documentoId, "vendedor");
+  return documentoId;
+}
+
+/** Vale de egreso con su contenido capturado, listo para sus tres firmas. */
+async function valeParaFirmar(esc: Escenario): Promise<string> {
+  const documentoId = await emitirFolio(esc, "CACM-RCI-05", "custodio");
+  await esc.cx.query(
+    `INSERT INTO vale_egreso_rci05
+       (documento_id, fecha_hora, concepto_codigo, beneficiario_nombre, beneficiario_id_tipo,
+        beneficiario_id_numero, forma_pago, importe)
+     VALUES ($1, now(), 'COMISION_VENDEDOR', 'Vendedora Prueba', 'INE', 'IDMX7654321',
+             'EFECTIVO', '5000.00')`,
+    [documentoId],
+  );
+  await mandarAFirma(esc, documentoId, "custodio");
   return documentoId;
 }
 
@@ -294,13 +345,24 @@ async function firmarRecibo(esc: Escenario, documentoId: string): Promise<void> 
   assert.equal(estado, "FIRMADO", "el recibo debía quedar firmado con sus dos obligatorias");
 }
 
-/** RCI-01 firmado sin detalle: sirve cuando lo que se prueba es el folio, no el contenido. */
+/**
+ * RCI-01 completo y FIRMADO: Parte I capturada, arqueo cuadrado y las dos
+ * firmas obligatorias.
+ *
+ * Antes emitía el folio y lo mandaba a firma sin capturar nada, con el
+ * argumento de que lo que se probaba era el folio y no el contenido. Ese
+ * atajo montaba exactamente el hueco H10 de la auditoría —folio consumido,
+ * sellado y con cero contenido— y desde la migración 039 ya no se puede:
+ * `cambiar_estado_documento_fin` se niega a mandar a firma un formato en
+ * blanco. Se reutiliza `reciboParaFirmar` porque un folio firmado de verdad
+ * sirve igual para probar el folio y además no depende de un estado que la
+ * base ya declaró imposible.
+ */
 async function reciboFirmado(
   esc: Escenario,
   opciones: { sucursalId?: string } = {},
 ): Promise<string> {
-  const documentoId = await emitirFolio(esc, "CACM-RCI-01", "vendedor", opciones);
-  await mandarAFirma(esc, documentoId, "vendedor");
+  const documentoId = await reciboParaFirmar(esc, opciones);
   await firmarRecibo(esc, documentoId);
   return documentoId;
 }
@@ -522,6 +584,9 @@ test(
   async () => {
     await conEscenario(async (esc) => {
       const original = await emitirFolio(esc, "CACM-RCI-01", "vendedor");
+      // El contenido se captura desde el borrador: sin él la 039 no deja
+      // mandarlo a firma, y lo que este caso mira es el estado, no el arqueo.
+      await capturarRecibo(esc, original);
 
       // En borrador no hay nada que corregir sin tachaduras: se corrige encima.
       await rechaza(
@@ -707,6 +772,10 @@ test(
     await conEscenario(async (esc) => {
       const documentoId = await emitirFolio(esc, "CACM-RCI-01", "vendedor");
       assert.equal(await estadoDe(esc, documentoId), "BORRADOR");
+      // Capturar no cambia el estado; sólo hace posible el paso legítimo que
+      // este caso recorre más abajo.
+      await capturarRecibo(esc, documentoId);
+      assert.equal(await estadoDe(esc, documentoId), "BORRADOR");
 
       // Declarar un documento firmado sin firmas es justo lo que la máquina
       // impide: FIRMADO no se pide desde fuera, lo concede la última firma.
@@ -753,6 +822,106 @@ test(
   },
 );
 
+test(
+  "firmas: cambiar el contenido entre una firma y la siguiente frena la segunda",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      const documentoId = await reciboParaFirmar(esc);
+      const huellaOriginal = hashDe(documentoId);
+
+      // La vendedora firma un recibo de 5,000: eso es lo que consintió.
+      await firmarInterno(esc, documentoId, "ENTREGO_VENDEDOR", "vendedor");
+
+      // Y entre su firma y la del custodio alguien baja la cifra. El arqueo se
+      // deja cuadrado a propósito —tres billetes de mil para tres mil— para
+      // que la maniobra no la delate `validar_arqueo_rci01` sino el candado de
+      // contenido, que es el que se está probando.
+      await esc.cx.query(
+        "UPDATE recibo_caja_rci01 SET importe_total = '3000.00' WHERE documento_id = $1",
+        [documentoId],
+      );
+      await esc.cx.query("UPDATE denominacion_rci01 SET cantidad = 3 WHERE documento_id = $1", [
+        documentoId,
+      ]);
+      await esc.cx.query("SELECT validar_arqueo_rci01($1)", [documentoId]);
+
+      // La segunda firma se niega, y el mensaje nombra a quien ya había
+      // firmado: quien opera tiene que saber a quién se le movió el papel.
+      await rechaza(
+        esc,
+        () =>
+          firmarInterno(esc, documentoId, "RECIBIO_CUSTODIO", "custodio", {
+            hash: hashDe(documentoId, "3000.00"),
+          }),
+        { codigo: "P0001", mensaje: /no es lo que esa persona consinti/i },
+      );
+      assert.equal(await estadoDe(esc, documentoId), "PENDIENTE_DE_FIRMA");
+
+      // Restituido el contenido, el camino honesto sigue abierto: el candado
+      // detiene la cifra cambiada, no la firma que llega tarde.
+      await esc.cx.query(
+        "UPDATE recibo_caja_rci01 SET importe_total = '5000.00' WHERE documento_id = $1",
+        [documentoId],
+      );
+      await esc.cx.query("UPDATE denominacion_rci01 SET cantidad = 5 WHERE documento_id = $1", [
+        documentoId,
+      ]);
+      await esc.cx.query("SELECT validar_arqueo_rci01($1)", [documentoId]);
+      assert.equal(await firmarInterno(esc, documentoId, "RECIBIO_CUSTODIO", "custodio"), "FIRMADO");
+
+      // Las dos firmas acreditan la MISMA huella, que era todo el punto.
+      const { rows: huellas } = await esc.cx.query<{ hash_contenido: string }>(
+        "SELECT DISTINCT hash_contenido FROM firma_documento_financiero WHERE documento_id = $1",
+        [documentoId],
+      );
+      assert.deepEqual(
+        huellas.map((h) => h.hash_contenido),
+        [huellaOriginal],
+      );
+
+      // Y el folio no aparece en la vista que delata documentos consentidos en
+      // dos versiones distintas, que debe estar siempre vacía.
+      const { rows: discrepantes } = await esc.cx.query(
+        "SELECT documento_id FROM v_firma_discrepante WHERE documento_id = $1",
+        [documentoId],
+      );
+      assert.equal(discrepantes.length, 0);
+    });
+  },
+);
+
+test(
+  "firmas: un folio sin contenido capturado no se manda a firma",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      const enBlanco = await emitirFolio(esc, "CACM-RCI-01", "vendedor");
+
+      // Un folio en blanco mandado a firma consume el número y acaba en un
+      // documento sellado que no dice nada: ni cliente, ni importe, ni
+      // concepto. Todos los campos que el manual marca con (*) ausentes.
+      await rechaza(esc, () => mandarAFirma(esc, enBlanco, "vendedor"), {
+        codigo: "P0001",
+        mensaje: /no tiene contenido capturado/i,
+      });
+      assert.equal(await estadoDe(esc, enBlanco), "BORRADOR");
+
+      // La salida legítima de un folio que no se va a usar sigue siendo la
+      // cancelación con motivo, no el papel en blanco firmado.
+      await cambiarEstado(esc, enBlanco, "CANCELADO", "gerente", "Se emitio el folio por error");
+      assert.equal(await estadoDe(esc, enBlanco), "CANCELADO");
+
+      // Con su Parte I capturada, el mismo camino se abre sin más.
+      const conContenido = await emitirFolio(esc, "CACM-RCI-01", "vendedor");
+      await capturarRecibo(esc, conContenido);
+      await mandarAFirma(esc, conContenido, "vendedor");
+      await firmarRecibo(esc, conContenido);
+      assert.equal(await estadoDe(esc, conContenido), "FIRMADO");
+    });
+  },
+);
+
 // =====================================================================
 // SELLOS TOKENIZADOS — el cuño que se puede verificar contra la base
 // =====================================================================
@@ -786,8 +955,10 @@ test(
       // Y el cuño de cierre lo pone quien completó la última obligatoria.
       assert.equal(sellos[3].estampado_por, esc.usuarios.custodio);
 
-      // El sello acredita el MISMO contenido que la firma que lo produjo.
-      assert.equal(sellos[2].hash_contenido, hashDe(documentoId, "RECIBIO_CUSTODIO"));
+      // El sello acredita el MISMO contenido que la firma que lo produjo, y
+      // ese contenido es el del folio: todas las firmas del documento llevan
+      // la misma huella o la 039 rechaza la segunda.
+      assert.equal(sellos[2].hash_contenido, hashDe(documentoId));
 
       // Un documento a medio firmar no lleva el cuño del conjunto.
       const aMedias = await reciboParaFirmar(esc);
@@ -808,8 +979,7 @@ test(
       const recibo = await reciboParaFirmar(esc);
       await firmarRecibo(esc, recibo);
 
-      const vale = await emitirFolio(esc, "CACM-RCI-05", "custodio");
-      await mandarAFirma(esc, vale, "custodio");
+      const vale = await valeParaFirmar(esc);
       await firmarInterno(esc, vale, "AUTORIZO_GERENTE", "gerente");
       await firmarInterno(esc, vale, "ENTREGO_CUSTODIO", "custodio");
       await firmarInterno(esc, vale, "RECIBIO_BENEFICIARIO", "vendedor");
@@ -942,7 +1112,7 @@ test(
       assert.match(fila.rol_etiqueta ?? "", /Custodio Financiero/);
       assert.equal(fila.estampado_por_nombre, ACTORES.custodio.nombre);
       assert.equal(fila.estado_documento, "FIRMADO");
-      assert.equal(fila.hash_contenido, hashDe(documentoId, "RECIBIO_CUSTODIO"));
+      assert.equal(fila.hash_contenido, hashDe(documentoId));
 
       // De la rúbrica del tercero responde quien la atestiguó, y eso es lo que
       // ve quien teclea ese token.

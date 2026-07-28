@@ -17,8 +17,12 @@ import test from "node:test";
 
 import pg from "pg";
 
-const URL_PRUEBAS = process.env.DATABASE_URL_TEST;
-const SIN_BASE = URL_PRUEBAS ? false : "sin DATABASE_URL_TEST";
+import { centinelaDeBase, SIN_BASE, URL_PRUEBAS } from "./base-pruebas.mts";
+
+// Sin base no hay nada que probar aquí, y callarlo dejaría `npm test` en verde
+// con cero cobertura de los candados que la 038 puso. El porqué del mecanismo
+// está en la cabecera de `base-pruebas.mts`.
+centinelaDeBase("el antifraude: los siete atajos que cierra la migración 038");
 
 const HASH = "a".repeat(64);
 

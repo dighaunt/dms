@@ -90,6 +90,7 @@ const ORDEN_CONCEPTO_GRUPO = [
   "VENTAS_CONTADO",
   "UTILIDAD_CONSIGNA",
   "SERVICIO",
+  "OTROS_INGRESOS",
   "NOMINA_Y_COMISIONES",
   "RETIRO_SOCIOS",
   "PROVEEDORES_Y_GASTOS",
@@ -104,6 +105,7 @@ const ETIQUETA_CONCEPTO_GRUPO: Record<string, string> = {
   VENTAS_CONTADO: "Ventas de contado (RCI-01)",
   UTILIDAD_CONSIGNA: "Utilidad de consignas (RCI-03)",
   SERVICIO: "Ingresos por servicio (RCI-04)",
+  OTROS_INGRESOS: "Otros ingresos (sin folio)",
   NOMINA_Y_COMISIONES: "Nómina y comisiones (vale RCI-05)",
   RETIRO_SOCIOS: "Retiros de socios (vale RCI-05)",
   PROVEEDORES_Y_GASTOS: "Proveedores y gastos (vale RCI-05)",
@@ -202,6 +204,27 @@ export const esquemaResguardoCorte = z.object({
 
 export type EntradaResguardoCorte = z.input<typeof esquemaResguardoCorte>;
 
+/**
+ * El renglón "Otros ingresos" de la Parte I del RCI-07.
+ *
+ * Es el único ingreso del corte que no proviene de un folio, y por eso es el
+ * único que hay que teclear. El manual le reserva su renglón, así que negarlo
+ * no lo hace desaparecer: lo empuja a declararse como "sobrante" en la Parte
+ * III —donde se confunde con un descuadre— o a no declararse. Lo que sí se
+ * exige es que quede explicado y con nombre, porque la explicación escrita es
+ * todo lo que lo sostiene.
+ */
+export const esquemaOtroIngresoCorte = z.object({
+  concepto: z
+    .string()
+    .trim()
+    .min(10, "Explica de dónde salió ese dinero; sin folio, es lo único que lo respalda")
+    .max(300),
+  importe: esquemaImporteMonetario,
+});
+
+export type EntradaOtroIngresoCorte = z.input<typeof esquemaOtroIngresoCorte>;
+
 export const esquemaCerrarCorte = z.object({
   /**
    * El efectivo FÍSICO contado. Admite cero —una caja puede quedar vacía tras
@@ -259,15 +282,25 @@ export type CorteCaja = {
 };
 
 /** Folio que el corte jaló, con la cita de dónde salió el importe. */
+/**
+ * Un renglón del corte. Casi siempre proviene de un folio, pero no siempre: el
+ * papel reserva un renglón de "Otros ingresos" en la Parte I, y ése lo teclea
+ * una persona. Cuando no hay folio, lo que sostiene la cifra es `concepto` y el
+ * nombre de quien lo capturó; por eso ambos son obligatorios en la base
+ * justamente en ese caso.
+ */
 export type FolioDelCorte = {
   id: number;
-  origenDocumentoId: number;
-  folio: string;
-  folioCompleto: string;
-  tipoCodigo: TipoRci;
-  tipoEtiqueta: string;
+  origenDocumentoId: number | null;
+  folio: string | null;
+  folioCompleto: string | null;
+  tipoCodigo: TipoRci | null;
+  tipoEtiqueta: string | null;
   naturaleza: NaturalezaMovimiento;
   conceptoGrupo: string;
+  /** Explicación escrita; sólo la llevan los renglones sin folio. */
+  concepto: string | null;
+  capturadoPorNombre: string | null;
   importe: string;
 };
 
@@ -658,15 +691,22 @@ export async function registrarResguardo(
 
 type FilaDetalle = {
   id: string | number;
-  origen_documento_id: string | number;
-  folio: string;
-  folio_completo: string;
-  tipo_codigo: string;
+  origen_documento_id: string | number | null;
+  folio: string | null;
+  folio_completo: string | null;
+  tipo_codigo: string | null;
   naturaleza: string;
   concepto_grupo: string;
+  concepto: string | null;
+  capturado_por_nombre: string | null;
   importe: string;
 };
 
+// LEFT JOIN, no JOIN: desde la migración 039 un renglón puede no tener folio
+// —el "Otros ingresos" de la Parte I del papel— y un JOIN interno lo dejaría
+// fuera en silencio. La cabecera del corte SÍ lo cuenta, así que el detalle
+// mostraría menos de lo que suma el total: un descuadre inventado por la
+// consulta, que es la peor clase de descuadre porque no existe en el dinero.
 const SELECT_DETALLE_CORTE = `
   SELECT dc.id,
          dc.origen_documento_id,
@@ -675,11 +715,14 @@ const SELECT_DETALLE_CORTE = `
          d.tipo_codigo,
          dc.naturaleza,
          dc.concepto_grupo,
+         dc.concepto,
+         u.nombre AS capturado_por_nombre,
          dc.importe::text AS importe
     FROM traza.corte_caja_detalle dc
-    JOIN traza.v_documento_financiero d ON d.id = dc.origen_documento_id
+    LEFT JOIN traza.v_documento_financiero d ON d.id = dc.origen_documento_id
+    LEFT JOIN traza.usuario u ON u.id = dc.capturado_por
    WHERE dc.corte_documento_id = $1
-   ORDER BY dc.concepto_grupo, d.tipo_codigo, d.consecutivo`;
+   ORDER BY dc.concepto_grupo, d.tipo_codigo NULLS LAST, d.consecutivo NULLS LAST, dc.id`;
 
 /** Un solo viaje para las dos sumas que no son folios. */
 const SELECT_TOTALES_FUERA_DE_CAJA = `
@@ -699,13 +742,19 @@ async function leerDetalle(cliente: PoolClient, documentoId: number): Promise<De
   for (const fila of detalle.rows) {
     const folio: FolioDelCorte = {
       id: aNumero(fila.id),
-      origenDocumentoId: aNumero(fila.origen_documento_id),
+      origenDocumentoId:
+        fila.origen_documento_id === null ? null : aNumero(fila.origen_documento_id),
       folio: fila.folio,
       folioCompleto: fila.folio_completo,
-      tipoCodigo: fila.tipo_codigo as TipoRci,
-      tipoEtiqueta: ETIQUETA_TIPO_RCI[fila.tipo_codigo as TipoRci] ?? fila.tipo_codigo,
+      tipoCodigo: fila.tipo_codigo === null ? null : (fila.tipo_codigo as TipoRci),
+      tipoEtiqueta:
+        fila.tipo_codigo === null
+          ? null
+          : (ETIQUETA_TIPO_RCI[fila.tipo_codigo as TipoRci] ?? fila.tipo_codigo),
       naturaleza: fila.naturaleza as NaturalezaMovimiento,
       conceptoGrupo: fila.concepto_grupo,
+      concepto: fila.concepto,
+      capturadoPorNombre: fila.capturado_por_nombre,
       importe: fila.importe,
     };
 
@@ -786,6 +835,41 @@ export async function armarCorte(corteId: number, usuario: number): Promise<Cort
     if (!corte) {
       // Inalcanzable: `armar_corte_caja` ya habría levantado "El corte de caja
       // no existe" antes de llegar aquí.
+      throw new Error("El corte de caja no existe");
+    }
+    return { corte, detalle };
+  });
+}
+
+/**
+ * Asienta un ingreso del día que no tiene folio que lo respalde.
+ *
+ * `agregar_otro_ingreso_corte` rearma el corte al terminar, de modo que los
+ * totales de la cabecera incluyen el renglón nuevo sin que la pantalla tenga
+ * que pedirlo aparte. A diferencia de los demás renglones, éste NO se vuelve a
+ * leer en cada armado —no hay de dónde— y por eso `armar_corte_caja` sólo
+ * borra los que provienen de un folio.
+ */
+export async function agregarOtroIngreso(
+  corteId: number,
+  datos: EntradaOtroIngresoCorte,
+  usuario: number,
+): Promise<CorteConDetalle> {
+  const id = esquemaId.parse(corteId);
+  const usuarioId = esquemaId.parse(usuario);
+  const ingreso = esquemaOtroIngresoCorte.parse(datos);
+
+  return withTransaction(async (cliente) => {
+    await cliente.query(`SELECT traza.agregar_otro_ingreso_corte($1, $2, $3::numeric, $4)`, [
+      id,
+      ingreso.concepto,
+      ingreso.importe,
+      usuarioId,
+    ]);
+
+    const [corte, detalle] = await Promise.all([leerCorte(cliente, id), leerDetalle(cliente, id)]);
+    if (!corte) {
+      // Inalcanzable: la función ya habría fallado si el corte no existiera.
       throw new Error("El corte de caja no existe");
     }
     return { corte, detalle };

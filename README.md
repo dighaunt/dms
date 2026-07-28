@@ -42,6 +42,48 @@ Variables de entorno:
 | `DATA_API_URL` | Página **Data API** de Neon (opcional; sin ella las lecturas van por SQL directo) |
 | `BLOB_STORE_ID` | Identificador del store privado de Vercel Blob |
 | `VERCEL_OIDC_TOKEN` | Lo inyecta Vercel; para desarrollo local se obtiene con `vercel env pull` |
+| `DATABASE_URL_TEST` | Base **desechable** para las pruebas de integración de Finanzas. Ver «Pruebas» |
+| `PERMITIR_PRUEBAS_SIN_BASE` | Escotilla para correr `npm test` sin esa base. Ver «Pruebas» |
+
+## Pruebas
+
+```bash
+DATABASE_URL_TEST="postgresql://postgres@127.0.0.1:5433/finanzas_test" npm test
+```
+
+La suite tiene dos mitades y sólo una corre sin base de datos.
+
+- **Sin base**: aritmética de centavos en `BigInt`, formato del importe con
+  letra, casillas del VIN. Es TypeScript puro.
+- **Con base**: los candados del módulo de Finanzas —`CHECK`, disparadores,
+  índices únicos parciales y funciones plpgsql—, que es donde vive el control
+  interno del efectivo. Son las suites `antifraude`, `folios-firmas`,
+  `reglas-socios-corte` y `reglas-utilidad-egreso`, y **necesitan
+  `DATABASE_URL_TEST`**.
+
+Sin la variable, esas suites se saltan y `npm test` **falla** con un caso
+centinela por suite que explica qué quedó sin probar y cómo arreglarlo. Es
+deliberado: antes se saltaban en silencio y la suite salía en verde con cero
+cobertura de las reglas que sostienen el dinero.
+
+Levantar la base de pruebas, en tres comandos:
+
+```bash
+createdb -h 127.0.0.1 -p 5433 -U postgres finanzas_test
+DATABASE_URL="postgresql://postgres@127.0.0.1:5433/finanzas_test" npm run db:migrate
+DATABASE_URL_TEST="postgresql://postgres@127.0.0.1:5433/finanzas_test" npm test
+```
+
+Es desechable y puede recrearse cuando sea: cada caso siembra sus datos dentro
+de una transacción y termina en `ROLLBACK`, así que la base no acumula estado
+entre corridas. No la apuntes a una base con datos reales.
+
+Si sólo tocaste la UI y hoy no puedes levantar Postgres, el salto se autoriza de
+forma explícita —queda anunciado en la salida y las pruebas siguen sin correr—:
+
+```bash
+PERMITIR_PRUEBAS_SIN_BASE=1 npm test
+```
 
 ## Reglas duras
 

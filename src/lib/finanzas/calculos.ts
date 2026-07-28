@@ -80,11 +80,42 @@ export function utilidadConsigna(entrada: {
 
 // ===== Regla 4 — ningún egreso sin tres firmantes distintos =====
 
+/**
+ * Los tres roles que el CACM-RCI-05 exige, en el orden del papel.
+ *
+ * Espejo de `firma_requerida` para `CACM-RCI-05` (migración 034): las tres
+ * filas con `obligatoria = true`, ordenadas por su columna `orden`.
+ */
 export const FIRMANTES_VALE_EGRESO = [
   "AUTORIZO_GERENTE",
   "ENTREGO_CUSTODIO",
   "RECIBIO_BENEFICIARIO",
 ] as const;
+
+export type FirmanteValeEgreso = (typeof FIRMANTES_VALE_EGRESO)[number];
+
+/**
+ * Qué rol del vale firma con usuario y PIN, y cuál es un tercero que rubrica
+ * de forma presencial.
+ *
+ * Espejo de `rol_firmante.exige_usuario_interno` (migración 034) para estos
+ * tres roles y sólo para éstos. La autoridad es la base: `firmar_documento_
+ * externo` rechaza un rol interno con "El rol % corresponde a personal de la
+ * empresa" y `firma_documento_financiero` no admite un `usuario_id` nulo
+ * cuando el método es `PIN_USUARIO`.
+ *
+ * No se importa `CATALOGO_ROL_FIRMANTE` de `tipos.ts`, que dice lo mismo para
+ * los dieciséis roles, porque `tipos.ts` ya importa este módulo y la
+ * dependencia sería circular. La copia no se queda a la deriva: la prueba
+ * "regla 4: la base es la autoridad de qué roles pide el vale y cuáles llevan
+ * usuario" (`reglas-utilidad-egreso.test.mts`) se lo pregunta a Postgres y
+ * compara, así que si alguien cambia el catálogo, esto falla.
+ */
+export const EXIGE_USUARIO_INTERNO_VALE: Record<FirmanteValeEgreso, boolean> = {
+  AUTORIZO_GERENTE: true,
+  ENTREGO_CUSTODIO: true,
+  RECIBIO_BENEFICIARIO: false,
+};
 
 export type FirmaVale = {
   rolFirmante: string;
@@ -97,13 +128,40 @@ export type EstadoValeEgreso = {
   rolesFaltantes: string[];
   /** Dos roles ocupados por la misma persona rompen la segregación. */
   firmantesDuplicados: boolean;
+  /**
+   * Roles de personal de la empresa que figuran firmados sin usuario detrás.
+   * Una firma así no señala a nadie: es exactamente el hueco que la migración
+   * 038 cerró en la base.
+   */
+  rolesSinUsuarioAtribuible: string[];
 };
 
 /**
- * Un vale sólo autoriza una salida de efectivo cuando están las tres firmas
- * y las tres corresponden a personas distintas. La base lo impone con un
- * índice único parcial; esto permite decírselo a quien captura antes de que
- * intente firmar.
+ * Un vale sólo autoriza una salida de efectivo cuando están las tres firmas,
+ * las tres corresponden a personas distintas y las de personal de la empresa
+ * están atribuidas a un usuario.
+ *
+ * Las tres condiciones son de la base y aquí sólo se reproducen para poder
+ * decírselo a quien captura antes de que intente firmar:
+ *
+ *  · los tres roles obligatorios son las filas de `firma_requerida`;
+ *  · que sean tres personas distintas lo impone el índice único parcial
+ *    `(documento_id, usuario_id)`, parcial porque los terceros no tienen
+ *    cuenta y dos terceros distintos sí pueden firmar el mismo documento;
+ *  · que un rol interno lleve usuario lo impone `rol_firmante.
+ *    exige_usuario_interno`, que hace que `firmar_documento_externo` rechace
+ *    el rol y obliga a pasar por PIN.
+ *
+ * La tercera comprobación faltaba, y sin ella esta función daba por completo
+ * un vale donde `ENTREGO_CUSTODIO` figuraba como rúbrica presencial sin
+ * usuario: el custodio declaraba haber entregado el efectivo y no había forma
+ * de saber quién era. En la base ese vale nunca ha podido existir; lo que se
+ * corrige es el espejo, que enseñaba como válido justo el escenario que la
+ * migración 038 se escribió para cerrar.
+ *
+ * Un rol ajeno al vale se ignora: si no está en `firma_requerida` del
+ * CACM-RCI-05, la base tampoco lo admitiría y no es asunto de esta función
+ * inventar una regla sobre él.
  */
 export function estadoValeEgreso(firmas: FirmaVale[]): EstadoValeEgreso {
   const presentes = new Set(firmas.map((f) => f.rolFirmante));
@@ -112,10 +170,20 @@ export function estadoValeEgreso(firmas: FirmaVale[]): EstadoValeEgreso {
   const usuarios = firmas.map((f) => f.usuarioId).filter((id): id is number => id !== null);
   const firmantesDuplicados = new Set(usuarios).size !== usuarios.length;
 
+  // Se recorre el catálogo y no la lista de firmas para que el resultado salga
+  // en el orden del papel y sin repetir un rol que llegara dos veces.
+  const rolesSinUsuarioAtribuible = FIRMANTES_VALE_EGRESO.filter(
+    (rol) =>
+      EXIGE_USUARIO_INTERNO_VALE[rol] &&
+      firmas.some((f) => f.rolFirmante === rol && f.usuarioId === null),
+  );
+
   return {
-    completo: rolesFaltantes.length === 0 && !firmantesDuplicados,
+    completo:
+      rolesFaltantes.length === 0 && !firmantesDuplicados && rolesSinUsuarioAtribuible.length === 0,
     rolesFaltantes,
     firmantesDuplicados,
+    rolesSinUsuarioAtribuible,
   };
 }
 

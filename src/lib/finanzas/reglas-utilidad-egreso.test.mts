@@ -20,10 +20,18 @@ import test from "node:test";
 
 import pg from "pg";
 
-import { estadoValeEgreso, utilidadConsigna } from "./calculos.ts";
+import {
+  estadoValeEgreso,
+  EXIGE_USUARIO_INTERNO_VALE,
+  FIRMANTES_VALE_EGRESO,
+  utilidadConsigna,
+} from "./calculos.ts";
+import { centinelaDeBase, SIN_BASE, URL_PRUEBAS } from "./base-pruebas.mts";
 
-const URL_PRUEBAS = process.env.DATABASE_URL_TEST;
-const SIN_BASE = URL_PRUEBAS ? false : "sin DATABASE_URL_TEST";
+// Sin base no hay nada que probar aquí, y callarlo dejaría `npm test` en verde
+// con cero cobertura de las reglas 3, 4 y 6. El porqué del mecanismo está en la
+// cabecera de `base-pruebas.mts`.
+centinelaDeBase("la utilidad de consigna y el vale de egreso: reglas 3, 4 y 6 del manual");
 
 // ===== Actores =====
 // El PIN se fija aquí y no se deriva del id: un id de seis dígitos truncaría
@@ -169,7 +177,20 @@ async function rechaza(
 
 // ===== Utilidades de armado =====
 
-/** El hash de contenido es lo que la firma acredita; basta con que sea real y estable. */
+/**
+ * El hash de contenido es la huella de lo que quien firma tuvo delante.
+ *
+ * Depende SÓLO del documento, nunca del rol ni de quién firma: dos personas
+ * que firman el mismo folio firman lo mismo, o no están firmando lo mismo.
+ * Desde la migración 039 eso no es una convención de la prueba sino un
+ * candado —el disparador `firma_exige_mismo_contenido` rechaza la segunda
+ * firma cuya huella no coincida con la de la primera—, y era el hueco que más
+ * pesaba de la auditoría: el único punto donde se podía cambiar una cifra ya
+ * consentida sin dejar rastro.
+ *
+ * Los sellos son otra cosa y su hash sí varía por acción: un sello acredita un
+ * hecho del expediente, no el consentimiento de una persona.
+ */
 function hashDe(...partes: string[]): string {
   return createHash("sha256").update(partes.join("|")).digest("hex");
 }
@@ -197,7 +218,7 @@ async function firmarInterno(
 ): Promise<string> {
   const { rows } = await esc.cx.query<{ estado: string }>(
     "SELECT firmar_documento_financiero($1, $2, $3, $4, $5, $6) AS estado",
-    [documentoId, rol, esc.usuarios[actor], ACTORES[actor].pin, hashDe(documentoId, rol), "prueba"],
+    [documentoId, rol, esc.usuarios[actor], ACTORES[actor].pin, hashDe(documentoId), "prueba"],
   );
   return rows[0].estado;
 }
@@ -211,7 +232,7 @@ async function firmarPresencial(
 ): Promise<string> {
   const { rows } = await esc.cx.query<{ estado: string }>(
     `SELECT firmar_documento_externo($1, $2, $3, 'INE', 'IDMX0099887', $4, $5, $6, NULL, 'prueba') AS estado`,
-    [documentoId, rol, nombre, esc.usuarios[atestigua], ACTORES[atestigua].pin, hashDe(documentoId, rol)],
+    [documentoId, rol, nombre, esc.usuarios[atestigua], ACTORES[atestigua].pin, hashDe(documentoId)],
   );
   return rows[0].estado;
 }
@@ -583,17 +604,114 @@ test(
       );
       assert.equal(await estadoDe(esc, valeId), "FIRMADO");
 
-      const { rows: firmas } = await esc.cx.query<{ rol_firmante: string; usuario_id: string }>(
+      const { rows: firmas } = await esc.cx.query<{
+        rol_firmante: string;
+        usuario_id: string | null;
+      }>(
         "SELECT rol_firmante, usuario_id FROM firma_documento_financiero WHERE documento_id = $1",
         [valeId],
       );
       assert.equal(new Set(firmas.map((f) => f.usuario_id)).size, 3);
       assert.deepEqual(
         estadoValeEgreso(
-          firmas.map((f) => ({ rolFirmante: f.rol_firmante, usuarioId: Number(f.usuario_id) })),
+          // El nulo se conserva como nulo: `Number(null)` daría 0, un usuario
+          // que no existe, y el espejo dejaría de ver lo que la base ve.
+          firmas.map((f) => ({
+            rolFirmante: f.rol_firmante,
+            usuarioId: f.usuario_id === null ? null : Number(f.usuario_id),
+          })),
         ),
-        { completo: true, rolesFaltantes: [], firmantesDuplicados: false },
+        {
+          completo: true,
+          rolesFaltantes: [],
+          firmantesDuplicados: false,
+          rolesSinUsuarioAtribuible: [],
+        },
       );
+    });
+  },
+);
+
+test(
+  "regla 4: la base es la autoridad de qué roles pide el vale y cuáles llevan usuario",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      // `calculos.ts` copia estas dos cosas para poder anunciar en pantalla qué
+      // firma falta y con qué formulario se pide, sin un viaje a la base. La
+      // copia sólo vale mientras coincida, y quien manda es esto.
+      const { rows } = await esc.cx.query<{
+        rol_firmante: string;
+        exige_usuario_interno: boolean;
+      }>(
+        `SELECT fr.rol_firmante, rf.exige_usuario_interno
+           FROM firma_requerida fr
+           JOIN rol_firmante rf ON rf.codigo = fr.rol_firmante
+          WHERE fr.tipo_codigo = 'CACM-RCI-05' AND fr.obligatoria
+          ORDER BY fr.orden`,
+      );
+
+      assert.deepEqual(
+        rows.map((f) => f.rol_firmante),
+        [...FIRMANTES_VALE_EGRESO],
+        "el espejo del vale ya no pide los mismos roles que firma_requerida",
+      );
+      assert.deepEqual(
+        Object.fromEntries(rows.map((f) => [f.rol_firmante, f.exige_usuario_interno])),
+        EXIGE_USUARIO_INTERNO_VALE,
+        "el espejo del vale ya no coincide con rol_firmante.exige_usuario_interno",
+      );
+    });
+  },
+);
+
+test(
+  "regla 4: un rol de la empresa no se levanta como rúbrica presencial sin usuario",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      const valeId = await valeParaFirmar(esc);
+      await firmarInterno(esc, valeId, "AUTORIZO_GERENTE", "gerente");
+
+      // Es el ataque que la migración 038 cerró y que el espejo en TypeScript
+      // daba por válido: declarar al Custodio Financiero como si fuera un
+      // tercero que firmó en papel. El vale quedaría con sus tres firmas y con
+      // la entrega del efectivo atribuida a nadie.
+      await rechaza(
+        esc,
+        () => firmarPresencial(esc, valeId, "ENTREGO_CUSTODIO", "Custodio Prueba", "gerente"),
+        { codigo: "P0001", mensaje: /personal de la empresa/i },
+      );
+      await rechaza(
+        esc,
+        () => firmarPresencial(esc, valeId, "AUTORIZO_GERENTE", "Otro Gerente", "gerente"),
+        { codigo: "P0001", mensaje: /personal de la empresa/i },
+      );
+
+      // El beneficiario sí puede: es el único de los tres que no es personal de
+      // la empresa, y sin esa puerta no habría manera de pagarle a un proveedor.
+      await firmarInterno(esc, valeId, "ENTREGO_CUSTODIO", "custodio");
+      assert.equal(
+        await firmarPresencial(esc, valeId, "RECIBIO_BENEFICIARIO", "Proveedor Externo", "custodio"),
+        "FIRMADO",
+      );
+
+      // Y el espejo dice lo mismo que la base sobre el vale que sí se logró.
+      const { rows: firmas } = await esc.cx.query<{
+        rol_firmante: string;
+        usuario_id: string | null;
+      }>(
+        "SELECT rol_firmante, usuario_id FROM firma_documento_financiero WHERE documento_id = $1",
+        [valeId],
+      );
+      const estado = estadoValeEgreso(
+        firmas.map((f) => ({
+          rolFirmante: f.rol_firmante,
+          usuarioId: f.usuario_id === null ? null : Number(f.usuario_id),
+        })),
+      );
+      assert.deepEqual(estado.rolesSinUsuarioAtribuible, []);
+      assert.equal(estado.completo, true);
     });
   },
 );

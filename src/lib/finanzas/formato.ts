@@ -89,6 +89,17 @@ export function custodiaEstaVencida(
 }
 
 /**
+ * Cómo debe leerse en pantalla todo lo que la empresa tiene pero no posee: una
+ * unidad consignada, y el dinero de su venta que todavía es del consignante.
+ *
+ * Vive aquí, y no en el módulo de consignación, porque es una etiqueta de
+ * presentación que necesitan por igual el inventario y los reportes. Tenerla
+ * dos veces permitiría que una pantalla dijera "en resguardo de terceros" y
+ * otra dijera otra cosa del mismo vehículo.
+ */
+export const ETIQUETA_RESGUARDO_TERCEROS = "En resguardo de terceros";
+
+/**
  * Etiqueta de custodia para un RCI-01 / RCI-04. Mientras el custodio no firme,
  * el dinero NO se presenta como resguardado por la empresa: sigue siendo
  * responsabilidad de quien lo entregó, y así debe leerse en pantalla.
