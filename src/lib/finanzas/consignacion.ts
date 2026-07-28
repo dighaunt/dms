@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { query, withTransaction } from "@/lib/db";
 import { aCentavos, deCentavos, utilidadConsigna } from "@/lib/finanzas/calculos";
+import { ETIQUETA_RESGUARDO_TERCEROS } from "@/lib/finanzas/formato";
 import {
   esquemaFechaIso,
   esquemaId,
@@ -67,8 +68,12 @@ export const ORIGEN_A_TIPO_OPERACION: Record<OrigenUnidad, TipoOperacionIngreso>
   CONSIGNADA: "CONSIGNACION",
 };
 
-/** Etiqueta con la que se presenta una unidad ajena que está en nuestro piso. */
-export const ETIQUETA_RESGUARDO_TERCEROS = "En resguardo de terceros";
+/**
+ * Etiqueta con la que se presenta una unidad ajena que está en nuestro piso.
+ * La define `formato.ts`, que es de donde la toman también los reportes; se
+ * reexporta para no romper a quien ya la pedía a este módulo.
+ */
+export { ETIQUETA_RESGUARDO_TERCEROS };
 
 /**
  * Estados en los que la unidad consignada ya salió de nuestro resguardo: se
