@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { parseId, requerirUsuario, respuesta404 } from "@/lib/api";
 import { cuerpo, responder } from "@/lib/finanzas/api";
+import { hashDelDocumento } from "@/lib/finanzas/contenido";
 import {
   type EntradaFirmaInterna,
   type EntradaFirmaTercero,
@@ -24,6 +25,11 @@ import {
  *
  * El PIN viaja en el cuerpo y se coteja dentro de la función SQL; nunca se
  * registra ni se devuelve.
+ *
+ * El hash del contenido tampoco se acepta del cuerpo: se calcula aquí leyendo
+ * de la base el documento que la persona tiene delante. Un hash elegido por el
+ * cliente no probaría nada, porque quien alterara el documento mandaría
+ * simplemente el hash del texto alterado.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { usuario, error } = await requerirUsuario();
@@ -35,11 +41,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const datos = (await cuerpo(request)) as Record<string, unknown>;
   const origenSesion = request.headers.get("user-agent")?.slice(0, 200) ?? null;
 
+  let hashContenido: string;
+  try {
+    hashContenido = await hashDelDocumento(id);
+  } catch {
+    return respuesta404("Folio no encontrado");
+  }
+
   if (datos.metodo === "AUTOGRAFA_PRESENCIAL") {
     const entrada = {
       ...datos,
       documentoId: id,
       atestiguaUsuario: usuario.id,
+      hashContenido,
       origenSesion,
     } as EntradaFirmaTercero;
 
@@ -53,6 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ...datos,
     documentoId: id,
     usuario: usuario.id,
+    hashContenido,
     origenSesion,
   } as EntradaFirmaInterna;
 
