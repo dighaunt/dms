@@ -36,9 +36,12 @@ import {
   explicacionDiferenciaEsSuficiente,
   posicionSocio,
 } from "./calculos.ts";
+import { centinelaDeBase, SIN_BASE, URL_PRUEBAS } from "./base-pruebas.mts";
 
-const URL_PRUEBAS = process.env.DATABASE_URL_TEST;
-const SIN_BASE = URL_PRUEBAS ? false : "sin DATABASE_URL_TEST";
+// Sin base no hay nada que probar aquí, y callarlo dejaría `npm test` en verde
+// con cero cobertura de las reglas 5 y 7. El porqué del mecanismo está en la
+// cabecera de `base-pruebas.mts`.
+centinelaDeBase("los anticipos de socios y el corte de caja: reglas 5 y 7 del manual");
 
 // ===== Actores =====
 // El PIN se fija aquí y no se deriva del id: un id de seis dígitos truncaría
@@ -196,7 +199,20 @@ function importeSuma(valores: string[]): string {
 
 // ===== Utilidades de armado =====
 
-/** El hash de contenido es lo que la firma acredita; basta con que sea real y estable. */
+/**
+ * El hash de contenido es la huella de lo que quien firma tuvo delante.
+ *
+ * Depende SÓLO del documento, nunca del rol ni de quién firma: dos personas
+ * que firman el mismo folio firman lo mismo, o no están firmando lo mismo.
+ * Desde la migración 039 eso no es una convención de la prueba sino un
+ * candado —el disparador `firma_exige_mismo_contenido` rechaza la segunda
+ * firma cuya huella no coincida con la de la primera—, y era el hueco que más
+ * pesaba de la auditoría: el único punto donde se podía cambiar una cifra ya
+ * consentida sin dejar rastro.
+ *
+ * Los sellos son otra cosa y su hash sí varía por acción: un sello acredita un
+ * hecho del expediente, no el consentimiento de una persona.
+ */
 function hashDe(...partes: string[]): string {
   return createHash("sha256").update(partes.join("|")).digest("hex");
 }
@@ -237,7 +253,7 @@ async function firmarInterno(
 ): Promise<string> {
   const { rows } = await esc.cx.query<{ estado: string }>(
     "SELECT firmar_documento_financiero($1, $2, $3, $4, $5, $6) AS estado",
-    [documentoId, rol, esc.usuarios[actor], ACTORES[actor].pin, hashDe(documentoId, rol), "prueba"],
+    [documentoId, rol, esc.usuarios[actor], ACTORES[actor].pin, hashDe(documentoId), "prueba"],
   );
   return rows[0].estado;
 }
@@ -257,7 +273,7 @@ async function firmarPresencial(
       nombre,
       esc.usuarios[atestigua],
       ACTORES[atestigua].pin,
-      hashDe(documentoId, rol),
+      hashDe(documentoId),
     ],
   );
   return rows[0].estado;

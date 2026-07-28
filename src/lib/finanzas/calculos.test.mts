@@ -6,12 +6,36 @@ import {
   arqueoCorte,
   deCentavos,
   estadoValeEgreso,
+  EXIGE_USUARIO_INTERNO_VALE,
   explicacionDiferenciaEsSuficiente,
   FIRMANTES_VALE_EGRESO,
   MINIMO_EXPLICACION_DIFERENCIA,
   posicionSocio,
   utilidadConsigna,
 } from "./calculos.ts";
+
+/**
+ * QUÉ SE PRUEBA EN ESTE ARCHIVO, Y QUÉ NO.
+ *
+ * Todo lo de aquí es TypeScript puro y corre sin base de datos. Eso NO es
+ * incidental: `calculos.ts` es el ESPEJO de las reglas —la reimplementación
+ * que permite dibujar un número en pantalla antes de guardarlo—, y los
+ * candados que de verdad sostienen el dinero son columnas GENERATED,
+ * disparadores, índices únicos parciales y funciones plpgsql.
+ *
+ * Por eso los apartados de abajo no se titulan "Regla 3", "Regla 5" ni
+ * "Regla 7" a secas, como estaban antes: leerlo así hacía pensar que la regla
+ * estaba cubierta cuando lo cubierto era su copia. Si mañana alguien borrara
+ * la palabra GENERATED de `utilidad_neta`, todo este archivo seguiría en
+ * verde. La cobertura de los candados vive en `reglas-utilidad-egreso`,
+ * `reglas-socios-corte`, `folios-firmas` y `antifraude`, que necesitan
+ * `DATABASE_URL_TEST`.
+ *
+ * Probar el espejo sigue valiendo la pena: la aritmética en BigInt sobre
+ * centavos es donde se pierde un peso sin que nadie lo note, y una pantalla
+ * que anuncia un número distinto al que la base va a guardar es un problema
+ * por derecho propio.
+ */
 
 // ===== aCentavos / deCentavos =====
 
@@ -92,7 +116,11 @@ test("aCentavos devuelve null ante entradas que no son un decimal valido", () =>
   }
 });
 
-// ===== Regla 3 — utilidad de consigna =====
+// ===== Espejo de la regla 3 — `utilidadConsigna` =====
+// El candado de la regla 3 es la columna GENERATED `utilidad_neta` y el trigger
+// `gasto_rci03_recalcula`, y lo cubre `reglas-utilidad-egreso.test.mts`. Aquí
+// se prueba que el número que la pantalla enseña antes de guardar sea el mismo
+// que la base va a calcular.
 
 test("utilidadConsigna reproduce el caso del manual: 200000 - 175000 - 13000 = 12000", () => {
   const resultado = utilidadConsigna({
@@ -168,7 +196,11 @@ test("utilidadConsigna devuelve null si algun importe es ilegible", () => {
   );
 });
 
-// ===== Regla 4 — tres firmantes distintos en el vale de egreso =====
+// ===== Espejo de la regla 4 — `estadoValeEgreso` =====
+// El candado de la regla 4 son las filas de `firma_requerida`, el índice único
+// parcial (documento_id, usuario_id) y `rol_firmante.exige_usuario_interno`, y
+// lo cubre `reglas-utilidad-egreso.test.mts`. Aquí se prueba que la pantalla
+// pida las mismas tres firmas y rechace los mismos vales que la base.
 
 const VALE_COMPLETO = [
   { rolFirmante: "AUTORIZO_GERENTE", usuarioId: 1 },
@@ -181,7 +213,27 @@ test("estadoValeEgreso da por completo el vale con los tres roles y tres persona
     completo: true,
     rolesFaltantes: [],
     firmantesDuplicados: false,
+    rolesSinUsuarioAtribuible: [],
   });
+});
+
+test("el espejo de quien firma con PIN y quien firma en papel es el de rol_firmante", () => {
+  // Copia de `rol_firmante.exige_usuario_interno` (migración 034) para los tres
+  // roles del vale. Que siga coincidiendo con la base lo comprueba
+  // `reglas-utilidad-egreso.test.mts` preguntándoselo a Postgres; aquí sólo se
+  // fija lo que este archivo da por supuesto en los casos de abajo.
+  assert.deepEqual(EXIGE_USUARIO_INTERNO_VALE, {
+    AUTORIZO_GERENTE: true,
+    ENTREGO_CUSTODIO: true,
+    RECIBIO_BENEFICIARIO: false,
+  });
+
+  // El beneficiario es el único de los tres que puede no tener cuenta: un
+  // proveedor o un trabajador no son —ni deben ser— usuarios del sistema.
+  assert.deepEqual(
+    FIRMANTES_VALE_EGRESO.filter((rol) => !EXIGE_USUARIO_INTERNO_VALE[rol]),
+    ["RECIBIO_BENEFICIARIO"],
+  );
 });
 
 test("estadoValeEgreso reporta exactamente el rol que falta", () => {
@@ -200,6 +252,7 @@ test("estadoValeEgreso enumera los tres roles cuando no hay ninguna firma", () =
     completo: false,
     rolesFaltantes: ["AUTORIZO_GERENTE", "ENTREGO_CUSTODIO", "RECIBIO_BENEFICIARIO"],
     firmantesDuplicados: false,
+    rolesSinUsuarioAtribuible: [],
   });
 });
 
@@ -213,23 +266,95 @@ test("estadoValeEgreso rompe la segregacion si dos roles son la misma persona", 
   // Estan los tres roles, pero quien autoriza no puede ser quien entrega.
   assert.deepEqual(estado.rolesFaltantes, []);
   assert.equal(estado.firmantesDuplicados, true);
+  assert.deepEqual(estado.rolesSinUsuarioAtribuible, []);
   assert.equal(estado.completo, false);
 });
 
-test("estadoValeEgreso no confunde dos terceros presenciales con un firmante repetido", () => {
-  // usuarioId null es "firmo un tercero en papel": son personas distintas
-  // aunque el sistema no tenga una cuenta para ninguna de las dos.
+test("estadoValeEgreso da por completo el vale que firma en papel el beneficiario", () => {
+  // El caso corriente del formato: el gerente y el custodio ponen su PIN, y
+  // quien cobra —un proveedor, una trabajadora— rubrica de forma presencial
+  // porque no tiene cuenta. `RECIBIO_BENEFICIARIO` es el único de los tres
+  // roles con exige_usuario_interno = false, y por eso su usuarioId nulo es
+  // legítimo y el vale queda completo.
+  const estado = estadoValeEgreso([
+    { rolFirmante: "AUTORIZO_GERENTE", usuarioId: 4 },
+    { rolFirmante: "ENTREGO_CUSTODIO", usuarioId: 5 },
+    { rolFirmante: "RECIBIO_BENEFICIARIO", usuarioId: null },
+  ]);
+
+  assert.deepEqual(estado, {
+    completo: true,
+    rolesFaltantes: [],
+    firmantesDuplicados: false,
+    rolesSinUsuarioAtribuible: [],
+  });
+});
+
+test("estadoValeEgreso no completa el vale con un rol interno firmado sin usuario atribuible", () => {
+  // Éste es el caso que la prueba anterior afirmaba AL REVÉS. Decía "no
+  // confunde dos terceros presenciales con un firmante repetido" y montaba
+  // ENTREGO_CUSTODIO sin usuario dando `completo: true`, pero ese vale no
+  // puede existir: `ENTREGO_CUSTODIO` tiene exige_usuario_interno = true
+  // (migración 034) y `firmar_documento_externo` lo rechaza con "El rol %
+  // corresponde a personal de la empresa". Es decir, daba por bueno justo el
+  // escenario que la migración 038 se escribió para cerrar: el custodio
+  // declara haber entregado el efectivo y no hay forma de saber quién fue.
   const estado = estadoValeEgreso([
     { rolFirmante: "AUTORIZO_GERENTE", usuarioId: 4 },
     { rolFirmante: "ENTREGO_CUSTODIO", usuarioId: null },
     { rolFirmante: "RECIBIO_BENEFICIARIO", usuarioId: null },
   ]);
 
+  assert.deepEqual(estado.rolesFaltantes, [], "los tres roles sí están presentes");
+  // Dos nulos siguen sin ser "la misma persona firmando dos veces": eso era
+  // cierto y se conserva. Lo que faltaba era la otra comprobación.
   assert.equal(estado.firmantesDuplicados, false);
-  assert.equal(estado.completo, true);
+  assert.deepEqual(estado.rolesSinUsuarioAtribuible, ["ENTREGO_CUSTODIO"]);
+  assert.equal(estado.completo, false);
 });
 
-// ===== Regla 5 — el retiro de un socio es anticipo, no reparto =====
+test("estadoValeEgreso señala cada rol interno sin usuario, en el orden del papel", () => {
+  const estado = estadoValeEgreso([
+    { rolFirmante: "AUTORIZO_GERENTE", usuarioId: null },
+    { rolFirmante: "ENTREGO_CUSTODIO", usuarioId: null },
+    { rolFirmante: "RECIBIO_BENEFICIARIO", usuarioId: 9 },
+  ]);
+
+  assert.deepEqual(estado.rolesSinUsuarioAtribuible, ["AUTORIZO_GERENTE", "ENTREGO_CUSTODIO"]);
+  assert.equal(estado.completo, false);
+
+  // Quien autoriza el gasto tampoco puede ser un nombre sin cuenta detrás: la
+  // autorización del Gerente General es la que convierte el vale en orden de
+  // pago, y sin usuario no señala a nadie.
+  const soloGerente = estadoValeEgreso([
+    { rolFirmante: "AUTORIZO_GERENTE", usuarioId: null },
+    { rolFirmante: "ENTREGO_CUSTODIO", usuarioId: 5 },
+    { rolFirmante: "RECIBIO_BENEFICIARIO", usuarioId: 6 },
+  ]);
+  assert.deepEqual(soloGerente.rolesSinUsuarioAtribuible, ["AUTORIZO_GERENTE"]);
+  assert.equal(soloGerente.completo, false);
+});
+
+test("estadoValeEgreso no inventa reglas sobre un rol ajeno al vale", () => {
+  // Un TESTIGO no es firmante del RCI-05: no está en `firma_requerida` para
+  // este formato, así que la base ni siquiera lo admitiría. Que aparezca no
+  // debe faltar ni sobrar nada, y menos aún inventar una exigencia que la
+  // base no hace.
+  const estado = estadoValeEgreso([...VALE_COMPLETO, { rolFirmante: "TESTIGO", usuarioId: null }]);
+
+  assert.deepEqual(estado, {
+    completo: true,
+    rolesFaltantes: [],
+    firmantesDuplicados: false,
+    rolesSinUsuarioAtribuible: [],
+  });
+});
+
+// ===== Espejo de la regla 5 — `posicionSocio` =====
+// El candado de la regla 5 son la vista `v_anticipo_utilidades_socio`, el
+// trigger `avisar_retiro_socio_sin_respaldo` y las tablas append-only del
+// reparto, y lo cubre `reglas-socios-corte.test.mts`. Aquí se prueba la resta
+// y la etiqueta con la que se presenta.
 
 test("posicionSocio deja el retiro sin reparto como saldo por comprobar", () => {
   const posicion = posicionSocio({ totalAnticipos: "50000.00", totalRepartido: "0.00" });
@@ -273,7 +398,11 @@ test("posicionSocio devuelve null si alguno de los totales es ilegible", () => {
   assert.equal(posicionSocio({ totalAnticipos: "0", totalRepartido: "1.005" }), null);
 });
 
-// ===== Regla 7 — la diferencia de caja se explica o no cierra el dia =====
+// ===== Espejo de la regla 7 — `arqueoCorte` =====
+// El candado de la regla 7 son `armar_corte_caja` y `cerrar_corte_caja`, que
+// se niega a cerrar el día con una diferencia sin explicar, y lo cubre
+// `reglas-socios-corte.test.mts`. Aquí se prueba la aritmética del arqueo y la
+// severidad con que se anuncia.
 
 test("arqueoCorte cuadra cuando lo contado coincide con el saldo calculado", () => {
   const arqueo = arqueoCorte({

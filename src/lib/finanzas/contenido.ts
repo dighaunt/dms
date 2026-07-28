@@ -1,6 +1,7 @@
 import "server-only";
 
 import { obtenerDenominaciones, obtenerIngresoServicio, obtenerReciboCaja } from "@/lib/finanzas/cobranza";
+import { obtenerIngresoVehiculo, obtenerLiquidacion } from "@/lib/finanzas/consignacion";
 import { obtenerCorte, detalleCorte } from "@/lib/finanzas/corte";
 import { calcularHashContenido, obtenerDocumento } from "@/lib/finanzas/documentos";
 import { obtenerReciboNomina, obtenerValeEgreso } from "@/lib/finanzas/egresos";
@@ -13,8 +14,11 @@ import { obtenerReciboNomina, obtenerValeEgreso } from "@/lib/finanzas/egresos";
  * simplemente el hash del texto alterado. Se calcula aquí, en el servidor,
  * leyendo de la base el mismo contenido que la persona tiene delante.
  *
- * Cada tipo aporta su detalle; si alguno no lo tuviera, se firma al menos la
- * cabecera —folio, tipo, sucursal y estado—, que ya es un hecho verificable.
+ * Cada tipo aporta su detalle. El caso `default` firma sólo la cabecera, y por
+ * eso NO debe alcanzarlo ningún formato con dinero dentro: firmar la cabecera
+ * es firmar el número de folio, no la cantidad. Los siete formatos del manual
+ * están enumerados abajo precisamente para que agregar un octavo obligue a
+ * decidir qué se firma de él.
  */
 export async function hashDelDocumento(documentoId: number): Promise<string> {
   const documento = await obtenerDocumento(documentoId);
@@ -36,6 +40,23 @@ export async function hashDelDocumento(documentoId: number): Promise<string> {
         cabecera,
         recibo: await obtenerReciboCaja(documentoId),
         arqueo: await obtenerDenominaciones(documentoId),
+      });
+    // El propietario que entrega su unidad consiente un precio pactado, un
+    // mínimo de venta y una comisión. Firmar sólo la cabecera dejaba esas tres
+    // cifras fuera de la huella, que es tanto como no tenerla.
+    case "CACM-RCI-02":
+      return calcularHashContenido({
+        cabecera,
+        ingreso: await obtenerIngresoVehiculo(documentoId),
+      });
+    // El sitio donde más pesaba el hueco: es el documento en el que un tercero
+    // declara recibir una cantidad. Entran los gastos y los ajustes porque
+    // ambos mueven la utilidad neta, y quien firma después del consignante
+    // tiene que estar firmando la misma resta que él vio.
+    case "CACM-RCI-03":
+      return calcularHashContenido({
+        cabecera,
+        liquidacion: await obtenerLiquidacion(documentoId),
       });
     case "CACM-RCI-04":
       return calcularHashContenido({

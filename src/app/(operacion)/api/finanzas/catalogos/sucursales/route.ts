@@ -7,6 +7,7 @@ import {
   activarSucursal,
   crearSucursal,
   desactivarSucursal,
+  fijarZonaHorariaSucursal,
   listarSucursales,
 } from "@/lib/finanzas/catalogos";
 
@@ -18,7 +19,8 @@ import {
  * sucursal abre una serie de folios nueva, y darla de baja apaga la que ya
  * corría. Eso es administración del sistema, así que las escrituras piden N3.
  */
-const MENSAJE_N3 = "Solo un administrador global (N3) puede dar de alta o de baja sucursales";
+const MENSAJE_N3 =
+  "Solo un administrador global (N3) puede dar de alta, dar de baja o cambiar la zona horaria de una sucursal";
 
 /**
  * Por omisión sólo las que siguen operando, que es lo único que una captura
@@ -55,15 +57,30 @@ export async function POST(request: Request) {
 }
 
 /**
- * Reactiva o da de baja una sucursal. La baja no borra ni oculta nada: los
- * folios ya emitidos siguen citándola y el histórico se lee igual; lo único
- * que cambia es que deja de poder abrirse un folio nuevo en ella.
+ * Reactiva o da de baja una sucursal, o corrige su zona horaria.
+ *
+ * La baja no borra ni oculta nada: los folios ya emitidos siguen citándola y el
+ * histórico se lee igual; lo único que cambia es que deja de poder abrirse un
+ * folio nuevo en ella.
+ *
+ * La zona sí se corrige —una agencia se muda y su día cambia de frontera—, y a
+ * diferencia de la clave no está impresa en ningún folio. Los cortes ya armados
+ * no se recalculan: cada uno guarda la zona con la que se armó, que es el hecho
+ * histórico, no una preferencia.
  */
 export async function PATCH(request: Request) {
   const { error } = await requerirN3(MENSAJE_N3);
   if (error) return error;
 
   const datos = (await cuerpo(request)) as Record<string, unknown>;
+
+  if (typeof datos.zonaHoraria === "string") {
+    return responder(
+      () => fijarZonaHorariaSucursal(Number(datos.id), datos.zonaHoraria as string),
+      (sucursal) =>
+        sucursal ? NextResponse.json(sucursal) : respuesta404("La sucursal no existe"),
+    );
+  }
 
   // Se exige el booleano explícito en lugar de interpretar lo que llegue: un
   // valor ausente que se leyera como "falso" daría de baja una sucursal que

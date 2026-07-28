@@ -3,7 +3,8 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { respuesta400, respuestaError } from "@/lib/api";
+import { requerirUsuario, respuesta400, respuestaError } from "@/lib/api";
+import type { UsuarioSesion } from "@/lib/auth/usuario";
 
 /**
  * Puente entre la capa de servicios de Finanzas y las respuestas HTTP.
@@ -39,6 +40,32 @@ export async function cuerpo(request: Request): Promise<unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * Los tres niveles del sistema, ordenados: N1 opera, N2 supervisa, N3
+ * administra. `requerirN3` de "@/lib/api" resuelve el extremo de arriba, pero
+ * Finanzas tiene actos que no son administración del sistema y tampoco puede
+ * hacer cualquiera —dar por atendida la alerta de un faltante, por ejemplo, es
+ * un acto de supervisión sobre quien tenía el dinero a su cargo—, así que hace
+ * falta poder pedir "de N2 para arriba" sin cerrarlo a N3.
+ */
+const ORDEN_NIVEL: Record<UsuarioSesion["nivel"], number> = { N1: 1, N2: 2, N3: 3 };
+
+/**
+ * Exige sesión con un nivel mínimo. El mensaje se pide explícito porque un 403
+ * que no dice QUIÉN puede hacer la operación obliga a adivinarlo.
+ */
+export async function requerirNivelMinimo(
+  minimo: UsuarioSesion["nivel"],
+  mensaje: string,
+): Promise<{ usuario: UsuarioSesion; error: null } | { usuario: null; error: NextResponse }> {
+  const { usuario, error } = await requerirUsuario();
+  if (error) return { usuario: null, error };
+  if (ORDEN_NIVEL[usuario.nivel] < ORDEN_NIVEL[minimo]) {
+    return { usuario: null, error: NextResponse.json({ error: mensaje }, { status: 403 }) };
+  }
+  return { usuario, error: null };
 }
 
 /** Convierte un parámetro de consulta a número, o undefined si no viene. */

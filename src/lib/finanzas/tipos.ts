@@ -204,6 +204,12 @@ export type Sucursal = {
   clave: string;
   nombre: string;
   activa: boolean;
+  /**
+   * Zona con la que se decide a qué día pertenece un cobro de esta agencia.
+   * Es la del cajón, no la del servidor: la frontera del corte depende de
+   * dónde está el dinero, no de dónde corre el proceso.
+   */
+  zonaHoraria: string;
 };
 
 /**

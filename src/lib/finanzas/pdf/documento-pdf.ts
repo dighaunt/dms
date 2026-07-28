@@ -7,10 +7,19 @@ import {
   formasPago,
   listarEmpleados,
 } from "@/lib/finanzas/catalogos";
-import { obtenerDenominaciones, obtenerReciboCaja } from "@/lib/finanzas/cobranza";
+import {
+  obtenerDenominaciones,
+  obtenerIngresoServicio,
+  obtenerReciboCaja,
+} from "@/lib/finanzas/cobranza";
+import {
+  datosPrecargadosDeExpediente,
+  obtenerIngresoVehiculo,
+  obtenerLiquidacion,
+} from "@/lib/finanzas/consignacion";
 import { detalleCorte, obtenerCorte, ubicacionEfectivo } from "@/lib/finanzas/corte";
 import { firmasDe, firmasPendientes, obtenerDocumento } from "@/lib/finanzas/documentos";
-import { obtenerValeEgreso } from "@/lib/finanzas/egresos";
+import { obtenerReciboNomina, obtenerValeEgreso } from "@/lib/finanzas/egresos";
 import { casillasVin, importeEnCasillas } from "@/lib/finanzas/formato";
 import {
   dibujarDocumento,
@@ -39,9 +48,14 @@ import { separarMiles } from "@/lib/numeros";
  * CÓMO se dibuja no está aquí: eso lo hace `plantilla.ts`, que no sabe nada de
  * recibos ni de cortes.
  *
- * Por eso sumar el RCI-02, 03, 04 o 06 es escribir su armador —una función que
- * devuelve `Parte[]` leyendo su propio servicio— y registrarlo en `ARMADORES`.
- * No hay que tocar el motor de dibujo ni la ruta.
+ * Cada formato aporta un armador —una función que devuelve `Parte[]` leyendo su
+ * propio servicio— registrado en `ARMADORES`. Sumar o rehacer una forma es
+ * escribir esa función; no hay que tocar el motor de dibujo ni la ruta.
+ *
+ * El ORDEN de los campos dentro de cada armador es el del papel, renglón por
+ * renglón y con su numeración. No es estética: quien coteja la hoja impresa
+ * contra el formato del manual lo hace de arriba abajo, y un campo movido de
+ * sitio obliga a buscarlo.
  *
  * NADA de lo que se imprime se recalcula aquí: los importes, los totales y el
  * arqueo se leen tal como los guardó la base, porque una segunda aritmética en
@@ -99,6 +113,20 @@ function montoImpreso(monto: string | null | undefined): string {
   if (!partes) return monto;
   const [, signo, entero, decimales] = partes;
   return `${signo}$${separarMiles(entero)}.${(decimales ?? "").padEnd(2, "0")}`;
+}
+
+/**
+ * Importe de un renglón o de una casilla, partido por `importeEnCasillas()`,
+ * que es la autoridad de presentación de los importes del manual.
+ *
+ * Se toma `.texto` y no la letra porque `monedaEnLetras` —que aquélla calcula
+ * siempre— rechaza los negativos, y la utilidad neta de una consigna vendida
+ * con pérdida sí puede serlo: esa hoja tiene que poder imprimirse igual. Para
+ * ese único caso manda `montoImpreso`, que sabe escribir el signo.
+ */
+function importeImpreso(monto: string | null | undefined): string {
+  if (monto === null || monto === undefined || monto.trim() === "") return "";
+  return monto.trim().startsWith("-") ? montoImpreso(monto) : importeEnCasillas(monto).texto;
 }
 
 function identificacionImpresa(
@@ -436,6 +464,440 @@ async function armarRci01(
   };
 }
 
+/**
+ * CACM-RCI-02 — Ingreso de Vehículo a Inventario.
+ *
+ * Parte I la unidad (1–8), Parte II quien la entrega y el tipo de operación
+ * (9–13), Parte III las condiciones económicas (14–19). Los renglones 14 a 16
+ * son de la compra directa y los 17 a 19 de la consignación: el papel imprime
+ * los dos bloques y sólo se llena el del renglón 13, así que la hoja los
+ * imprime los dos y deja en blanco el que no aplica, como el formato en papel.
+ */
+async function armarRci02(
+  documento: DocumentoFinanciero,
+  catalogos: Catalogos,
+): Promise<ArmadoFormato> {
+  const [ingreso, pagos] = await Promise.all([
+    obtenerIngresoVehiculo(documento.id),
+    catalogos.formasPago(),
+  ]);
+
+  // El color es el renglón 3 del papel y no es columna del RCI-02: vive en el
+  // maestro de la unidad. Se pide a la misma función que precarga la ficha en
+  // la pantalla de captura, para que la hoja y la captura digan el mismo color.
+  const ficha = ingreso ? await datosPrecargadosDeExpediente(ingreso.expedienteId) : null;
+
+  // La comisión se pacta como monto O como porcentaje —el CHECK de la tabla no
+  // admite las dos ni ninguna—, así que se imprime la que exista.
+  const comision =
+    ingreso?.comisionMonto
+      ? importeImpreso(ingreso.comisionMonto)
+      : ingreso?.comisionPct
+        ? `${ingreso.comisionPct} %`
+        : null;
+
+  const entero = (valor: number | null | undefined): string | null =>
+    valor === null || valor === undefined ? null : String(valor);
+
+  return {
+    partes: [
+      {
+        titulo: "Parte I – Datos del Vehículo",
+        bloques: [
+          {
+            clase: "campos",
+            campos: [
+              {
+                numero: 1,
+                etiqueta: "Marca / submarca / modelo / año",
+                obligatorio: true,
+                valor: ingreso ? `${ingreso.marca} ${ingreso.modelo} ${ingreso.anio}` : null,
+              },
+              { numero: 2, etiqueta: "No. de placas", valor: ingreso?.placas ?? null },
+              { numero: 3, etiqueta: "Color", valor: ficha?.color ?? null },
+            ],
+          },
+          {
+            clase: "casillas",
+            numero: 4,
+            etiqueta: "No. de serie (VIN) * — un carácter por casilla",
+            casillas: casillasVin(ingreso?.vin),
+          },
+          {
+            clase: "campos",
+            campos: [
+              {
+                numero: 5,
+                etiqueta: "Kilometraje de ingreso",
+                valor: ingreso?.kilometraje === null || ingreso?.kilometraje === undefined
+                  ? null
+                  : `${separarMiles(ingreso.kilometraje)} km`,
+              },
+              {
+                numero: 6,
+                etiqueta: "Ubicación física / lote",
+                valor: ingreso?.ubicacionFisica ?? null,
+              },
+              {
+                numero: 7,
+                etiqueta: "Fecha de ingreso",
+                obligatorio: true,
+                valor: fechaCivilImpresa(ingreso?.fechaIngreso),
+              },
+              {
+                numero: 8,
+                etiqueta: "No. de llaves entregadas",
+                valor: entero(ingreso?.numLlaves),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        titulo: "Parte II – Quien Entrega el Vehículo y Tipo de Operación",
+        bloques: [
+          {
+            clase: "campos",
+            campos: [
+              {
+                numero: 9,
+                etiqueta: "Nombre completo o razón social",
+                obligatorio: true,
+                valor: ingreso?.propietarioNombre ?? null,
+              },
+              {
+                numero: 10,
+                etiqueta: "Identificación oficial (tipo y número)",
+                obligatorio: true,
+                valor: identificacionImpresa(
+                  ingreso?.propietarioIdTipo,
+                  ingreso?.propietarioIdNumero,
+                ),
+              },
+              { numero: 11, etiqueta: "Teléfono", valor: ingreso?.propietarioTelefono ?? null },
+              {
+                numero: 12,
+                etiqueta: "Domicilio",
+                valor: ingreso?.propietarioDomicilio ?? null,
+                ancho: 2,
+              },
+            ],
+          },
+          {
+            clase: "opciones",
+            numero: 13,
+            etiqueta: "Tipo de operación (marque lo que aplique) *",
+            opciones: [
+              {
+                texto:
+                  "a) Compra directa — la empresa adquiere la propiedad del vehículo desde este acto",
+                marcada: ingreso?.tipoOperacion === "COMPRA_DIRECTA",
+              },
+              {
+                texto:
+                  "b) Consignación — el vehículo sigue siendo del consignante; la empresa sólo lo resguarda y lo vende por su cuenta",
+                marcada: ingreso?.tipoOperacion === "CONSIGNACION",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        titulo: "Parte III – Condiciones Económicas",
+        bloques: [
+          {
+            clase: "campos",
+            campos: [
+              {
+                numero: 14,
+                etiqueta: "Precio de compra pactado",
+                obligatorio: true,
+                valor: importeImpreso(ingreso?.precioCompra) || null,
+              },
+              {
+                numero: 15,
+                etiqueta: "Forma de pago",
+                valor: etiquetaDe(pagos, ingreso?.compraFormaPago),
+              },
+              {
+                numero: 16,
+                etiqueta: "Fecha de pago",
+                valor: fechaCivilImpresa(ingreso?.compraFechaPago),
+              },
+              {
+                numero: 17,
+                etiqueta: "Precio mínimo de venta autorizado por el consignante",
+                obligatorio: true,
+                valor: importeImpreso(ingreso?.precioMinimoVenta) || null,
+              },
+              {
+                numero: 18,
+                etiqueta: "Comisión / margen pactado para la empresa (monto o %)",
+                obligatorio: true,
+                valor: comision,
+              },
+              {
+                numero: 19,
+                etiqueta: "Plazo de consignación (fecha límite)",
+                valor: fechaCivilImpresa(ingreso?.consignaFechaLimite),
+              },
+            ],
+          },
+          {
+            clase: "nota",
+            texto:
+              "Los renglones 14 a 16 corresponden a la compra directa y los renglones 17 a 19 a la consignación. Sólo se llena el bloque del tipo de operación marcado en el renglón 13; el otro queda en blanco.",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * CACM-RCI-03 — Liquidación de Venta en Consignación.
+ *
+ * Parte I las referencias (1–4) y Parte II el cálculo (5–9). El renglón 8 es la
+ * utilidad neta: columna GENERATED de la base, que aquí sólo se lee. Volver a
+ * restarla en el PDF permitiría que la hoja dijera una cifra y el expediente
+ * otra, que es justo lo que el consignante firmó para que no ocurra.
+ */
+async function armarRci03(
+  documento: DocumentoFinanciero,
+  catalogos: Catalogos,
+): Promise<ArmadoFormato> {
+  const [liquidacion, pagos] = await Promise.all([
+    obtenerLiquidacion(documento.id),
+    catalogos.formasPago(),
+  ]);
+
+  // Marca y modelo son del RCI-02 que esta liquidación cita: la cabecera del
+  // RCI-03 sólo guarda el VIN, y el renglón 2 del papel pide los tres.
+  const [ingreso, recibo] = await Promise.all([
+    liquidacion ? obtenerIngresoVehiculo(liquidacion.ingresoRci02Id) : null,
+    liquidacion?.reciboRci01Id ? obtenerDocumento(liquidacion.reciboRci01Id) : null,
+  ]);
+
+  const vehiculo = ingreso
+    ? `${ingreso.marca} ${ingreso.modelo} ${ingreso.anio} · VIN ${ingreso.vin}`
+    : liquidacion
+      ? `VIN ${liquidacion.vin}`
+      : null;
+
+  // El desglose de gastos va como sub-renglones del 7 y no como tabla aparte,
+  // para que la resta del papel —5 menos 6 menos 7 igual a 8— se pueda seguir
+  // de arriba abajo sin saltar de bloque.
+  const filasCalculo: string[][] = [
+    ["5. Precio de venta final *", importeImpreso(liquidacion?.precioVentaFinal)],
+    ["6. (–) Monto a liquidar al consignante *", importeImpreso(liquidacion?.montoConsignante)],
+    ["7. (–) Gastos asociados", importeImpreso(liquidacion?.gastosTotal)],
+    ...(liquidacion?.gastos ?? []).map((gasto) => [
+      `· ${gasto.concepto}`,
+      importeImpreso(gasto.importe),
+    ]),
+  ];
+
+  const bloquesCalculo: Bloque[] = [
+    {
+      clase: "tabla",
+      columnas: [
+        { titulo: "Cálculo de la liquidación", fraccion: 0.72 },
+        { titulo: "Importe", fraccion: 0.28, alineacion: "der" },
+      ],
+      filas: filasCalculo,
+      totales: [
+        {
+          etiqueta: "8. (=) UTILIDAD NETA DE LA EMPRESA *",
+          valor: importeImpreso(liquidacion?.utilidadNeta),
+        },
+      ],
+      vacio: "Sin cálculo de liquidación capturado.",
+    },
+  ];
+
+  // Una consigna vendida por debajo de lo que se le entrega al consignante más
+  // los gastos deja utilidad negativa. El corte de caja no la recoge, así que
+  // la hoja tiene que decirlo: es el único sitio donde la pérdida se ve.
+  if (liquidacion && liquidacion.utilidadNeta.trim().startsWith("-")) {
+    bloquesCalculo.push({
+      clase: "nota",
+      texto: `La utilidad neta de esta liquidación es negativa (${importeImpreso(liquidacion.utilidadNeta)}): la operación cerró en pérdida para la empresa. El Corte de Caja Diario (CACM-RCI-07) sólo concentra las utilidades positivas, de modo que esta pérdida no aparece en él.`,
+    });
+  }
+
+  bloquesCalculo.push({
+    clase: "campos",
+    campos: [
+      {
+        numero: 9,
+        etiqueta: "Forma en que la utilidad ingresa a tesorería",
+        obligatorio: true,
+        valor: etiquetaDe(pagos, liquidacion?.formaIngresoTesoreria),
+      },
+      { etiqueta: "Institución bancaria", valor: liquidacion?.institucionBancaria ?? null },
+      { etiqueta: "Cuenta", valor: liquidacion?.cuentaBancaria ?? null },
+    ],
+  });
+
+  // Fuera del manual, pero no se puede callar: un ajuste posterior mueve la
+  // utilidad de los reportes sin tocar la que se firmó. Se imprime aparte, con
+  // su autor y su nota, y diciendo cuál de las dos cifras es la consentida.
+  if (liquidacion && liquidacion.ajustes.length > 0) {
+    bloquesCalculo.push(
+      {
+        clase: "tabla",
+        columnas: [
+          { titulo: "Ajuste posterior a la utilidad (fuera del formato)", fraccion: 0.44 },
+          { titulo: "Nota de auditoría y autorización", fraccion: 0.38 },
+          { titulo: "Monto", fraccion: 0.18, alineacion: "der" },
+        ],
+        filas: liquidacion.ajustes.map((ajuste) => [
+          fechaHoraImpresa(ajuste.creadoEn) ?? "",
+          `${ajuste.notaAuditoria} — autorizó ${ajuste.autorizadoPorNombre}`,
+          importeImpreso(ajuste.montoAjuste),
+        ]),
+        totales: [
+          {
+            etiqueta: "Utilidad neta con los ajustes aplicados",
+            valor: importeImpreso(liquidacion.utilidadNetaAjustada),
+          },
+        ],
+      },
+      {
+        clase: "nota",
+        texto: `Un ajuste no reescribe el renglón 8. La utilidad que el consignante y el gerente firmaron sigue siendo ${importeImpreso(liquidacion.utilidadNeta)}; el ajuste se asienta aparte, con autor, fecha y explicación, y es inmutable.`,
+      },
+    );
+  }
+
+  return {
+    partes: [
+      {
+        titulo: "Parte I – Referencias de la Operación",
+        bloques: [
+          {
+            clase: "campos",
+            campos: [
+              {
+                numero: 1,
+                etiqueta: "Folio de Ingreso a Inventario (CACM-RCI-02)",
+                obligatorio: true,
+                valor: liquidacion?.ingresoFolio ?? null,
+              },
+              {
+                numero: 2,
+                etiqueta: "Vehículo (marca / modelo / VIN)",
+                valor: vehiculo,
+              },
+              {
+                numero: 3,
+                etiqueta: "Nombre del consignante",
+                obligatorio: true,
+                valor: liquidacion?.consignanteNombre ?? null,
+              },
+              {
+                numero: 4,
+                etiqueta: "Recibo de Caja Interno de la venta (CACM-RCI-01)",
+                valor: recibo?.folio ?? null,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        titulo: "Parte II – Cálculo de la Liquidación",
+        bloques: bloquesCalculo,
+      },
+    ],
+  };
+}
+
+/** CACM-RCI-04 — Recibo de Ingreso por Servicio. */
+async function armarRci04(
+  documento: DocumentoFinanciero,
+  catalogos: Catalogos,
+): Promise<ArmadoFormato> {
+  const [servicio, pagos, empleados] = await Promise.all([
+    obtenerIngresoServicio(documento.id),
+    catalogos.formasPago(),
+    catalogos.empleados(),
+  ]);
+
+  const cobrador = empleados.find((empleado) => empleado.id === servicio?.cobradorEmpleadoId);
+  const importe = importeEnCasillas(servicio?.importeTotal ?? "0.00");
+
+  return {
+    partes: [
+      {
+        titulo: "Parte I – Datos del Servicio",
+        bloques: [
+          {
+            clase: "campos",
+            campos: [
+              {
+                numero: 1,
+                etiqueta: "Nombre del cliente",
+                obligatorio: true,
+                valor: servicio?.clienteNombre ?? null,
+              },
+              {
+                numero: 2,
+                etiqueta: "Vehículo atendido (marca / modelo)",
+                valor: servicio?.vehiculoDescripcion ?? null,
+              },
+              { etiqueta: "Placas", valor: servicio?.placas ?? null },
+              {
+                numero: 3,
+                etiqueta: "No. de orden de servicio",
+                obligatorio: true,
+                valor: servicio?.ordenServicio ?? null,
+              },
+              {
+                numero: 4,
+                etiqueta: "Fecha y hora de cobro",
+                obligatorio: true,
+                valor: fechaHoraImpresa(servicio?.fechaHoraCobro),
+              },
+              {
+                numero: 5,
+                etiqueta: "Descripción del servicio realizado",
+                obligatorio: true,
+                valor: servicio?.descripcionServicio ?? null,
+                ancho: 2,
+              },
+              {
+                numero: 6,
+                etiqueta: "Nombre de quien cobra (asesor / cajero)",
+                obligatorio: true,
+                valor: cobrador?.nombre ?? null,
+              },
+              { numero: 7, etiqueta: "No. de empleado", valor: cobrador?.numEmpleado ?? null },
+            ],
+          },
+          {
+            clase: "opciones",
+            numero: 8,
+            etiqueta: "Forma de pago (marque lo que aplique) *",
+            opciones: opcionesDeCatalogo(pagos, servicio?.formaPago, null),
+          },
+        ],
+      },
+      {
+        titulo: "Parte II – Importe Cobrado",
+        bloques: [
+          {
+            clase: "importe",
+            etiqueta: "9. IMPORTE TOTAL COBRADO *",
+            pesos: importe.pesos,
+            centavos: importe.centavos,
+            letra: importe.letra,
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** CACM-RCI-05 — Vale de Egreso de Caja. */
 async function armarRci05(
   documento: DocumentoFinanciero,
@@ -530,6 +992,130 @@ async function armarRci05(
   };
 }
 
+/**
+ * CACM-RCI-06 — Recibo de Pago de Nómina.
+ *
+ * Es la hoja que el artículo 804 de la Ley Federal del Trabajo obliga al patrón
+ * a conservar y a exhibir en juicio cuando se controvierte el pago del salario,
+ * así que se imprime completa incluso en borrador: sin ella el pago existe en
+ * la base y no existe en el expediente laboral.
+ *
+ * Los tres totales —percepciones, deducciones y neto— son columnas GENERATED y
+ * se leen tal cual. Sumarlos otra vez aquí abriría la puerta a que el recibo
+ * impreso y el firmado difirieran en un centavo.
+ */
+async function armarRci06(
+  documento: DocumentoFinanciero,
+  catalogos: Catalogos,
+): Promise<ArmadoFormato> {
+  const [recibo, pagos, empleados] = await Promise.all([
+    obtenerReciboNomina(documento.id),
+    catalogos.formasPago(),
+    catalogos.empleados(),
+  ]);
+
+  const trabajador = empleados.find((empleado) => empleado.id === recibo?.empleadoId);
+  const neto = importeEnCasillas(recibo?.netoPagado ?? "0.00");
+
+  const periodo =
+    recibo === null
+      ? null
+      : `del ${fechaCivilImpresa(recibo.periodoInicio)} al ${fechaCivilImpresa(recibo.periodoFin)}`;
+
+  const columnasPartidas = (titulo: string) => [
+    { titulo, fraccion: 0.72 },
+    { titulo: "Importe", fraccion: 0.28, alineacion: "der" as const },
+  ];
+
+  return {
+    partes: [
+      {
+        titulo: "Parte I – Datos del Trabajador y Período",
+        bloques: [
+          {
+            clase: "campos",
+            campos: [
+              {
+                numero: 1,
+                etiqueta: "Nombre completo del trabajador",
+                obligatorio: true,
+                valor: trabajador?.nombre ?? null,
+              },
+              { numero: 2, etiqueta: "Puesto", valor: trabajador?.puesto ?? null },
+              { numero: 3, etiqueta: "No. de empleado", valor: trabajador?.numEmpleado ?? null },
+              {
+                numero: 4,
+                etiqueta: "Período de pago",
+                obligatorio: true,
+                valor: periodo,
+                ancho: 2,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        titulo: "Parte II – Percepciones y Deducciones",
+        bloques: [
+          {
+            clase: "tabla",
+            columnas: columnasPartidas("Percepciones"),
+            filas: [
+              ["Sueldo", importeImpreso(recibo?.percepcionSueldo)],
+              ["Comisiones", importeImpreso(recibo?.percepcionComisiones)],
+              ["Otras percepciones", importeImpreso(recibo?.percepcionOtras)],
+            ],
+            totales: [
+              {
+                etiqueta: "5. TOTAL PERCEPCIONES *",
+                valor: importeImpreso(recibo?.totalPercepciones),
+              },
+            ],
+          },
+          {
+            clase: "tabla",
+            columnas: columnasPartidas("Deducciones"),
+            filas: [
+              ["ISR", importeImpreso(recibo?.deduccionIsr)],
+              ["IMSS / INFONAVIT", importeImpreso(recibo?.deduccionImssInfonavit)],
+              ["Otras deducciones", importeImpreso(recibo?.deduccionOtras)],
+            ],
+            totales: [
+              {
+                etiqueta: "6. TOTAL DEDUCCIONES *",
+                valor: importeImpreso(recibo?.totalDeducciones),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        titulo: "Parte III – Neto Pagado",
+        bloques: [
+          {
+            clase: "importe",
+            etiqueta: "7. NETO PAGADO *",
+            pesos: neto.pesos,
+            centavos: neto.centavos,
+            letra: neto.letra,
+          },
+          {
+            clase: "opciones",
+            numero: 8,
+            etiqueta: "Forma de pago (marque lo que aplique) *",
+            opciones: opcionesDeCatalogo(pagos, recibo?.formaPago, null),
+          },
+          {
+            clase: "nota",
+            texto:
+              "Este recibo acredita el pago; no lo ejecuta. El efectivo de la nómina sale de la caja por su Vale de Egreso (CACM-RCI-05, concepto de pago de nómina) citando este folio, de modo que el Corte de Caja Diario cuente la salida una sola vez.",
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** CACM-RCI-07 — Corte de Caja Diario. */
 async function armarRci07(documento: DocumentoFinanciero): Promise<ArmadoFormato> {
   const [corte, detalle, ubicaciones] = await Promise.all([
@@ -549,7 +1135,12 @@ async function armarRci07(documento: DocumentoFinanciero): Promise<ArmadoFormato
       .filter((grupo) => grupo.naturaleza === naturaleza)
       .map((grupo) => [
         grupo.etiqueta,
-        grupo.folios.map((folio) => folio.folio).join(", "),
+        // Un renglón sin folio ocupa la misma columna con su explicación: el
+        // papel pide "Folio(s) relacionado(s)" y la respuesta honesta para un
+        // ingreso sin documento es decir de dónde salió, no dejar el hueco.
+        grupo.folios
+          .map((folio) => folio.folio ?? folio.concepto ?? "sin folio")
+          .join(", "),
         montoImpreso(grupo.subtotal),
       ]);
 
@@ -692,37 +1283,25 @@ async function armarRci07(documento: DocumentoFinanciero): Promise<ArmadoFormato
 }
 
 /**
- * Registro de armadores. Los cuatro formatos que faltan se suman aquí: escribir
- * su función `armarRciXX` y añadir su renglón es todo el trabajo.
+ * Registro de armadores: los siete formatos del manual ya tienen hoja. Sumar
+ * uno nuevo sigue siendo escribir su función `armarRciXX` y añadir su renglón,
+ * sin tocar el motor de dibujo ni la ruta.
  */
-const ARMADORES: Partial<Record<TipoRci, Armador>> = {
+const ARMADORES: Record<TipoRci, Armador> = {
   "CACM-RCI-01": armarRci01,
+  "CACM-RCI-02": armarRci02,
+  "CACM-RCI-03": armarRci03,
+  "CACM-RCI-04": armarRci04,
   "CACM-RCI-05": armarRci05,
+  "CACM-RCI-06": armarRci06,
   "CACM-RCI-07": armarRci07,
 };
 
-/**
- * Un formato sin armador todavía imprime su hoja —encabezado, folio, estado,
- * declaración, firmas y sellos— y DICE que el detalle no está: callarlo haría
- * pasar por completa una hoja a la que le faltan las cifras.
- */
-const PARTE_PENDIENTE: Parte = {
-  titulo: "Detalle capturado",
-  bloques: [
-    {
-      clase: "nota",
-      texto:
-        "El detalle de este formato todavía no se imprime en PDF; consúltalo en pantalla. El folio, su estado, sus firmas y sus sellos sí son los que constan en el expediente.",
-    },
-  ],
-};
-
-async function armarPartes(
+function armarPartes(
   documento: DocumentoFinanciero,
   catalogos: Catalogos,
 ): Promise<ArmadoFormato> {
-  const armador = ARMADORES[documento.tipoCodigo];
-  return armador ? armador(documento, catalogos) : { partes: [PARTE_PENDIENTE] };
+  return ARMADORES[documento.tipoCodigo](documento, catalogos);
 }
 
 // ===== FIRMAS Y SELLOS =====

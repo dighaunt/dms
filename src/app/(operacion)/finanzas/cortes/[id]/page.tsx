@@ -487,15 +487,27 @@ function TablaDeGrupos({
               {grupo.folios.map((folio) => (
                 <TableRow key={folio.id}>
                   <TableCell>
-                    <Link
-                      href={`/finanzas/documentos/${folio.origenDocumentoId}`}
-                      className="font-mono text-xs underline"
-                    >
-                      {folio.folio}
-                    </Link>
+                    {/* Un renglón sin folio es el "Otros ingresos" del papel:
+                        no hay documento al que ir, y lo que lo respalda es la
+                        explicación escrita y el nombre de quien la escribió. */}
+                    {folio.origenDocumentoId === null ? (
+                      <span className="text-xs text-muted-foreground">Sin folio</span>
+                    ) : (
+                      <Link
+                        href={`/finanzas/documentos/${folio.origenDocumentoId}`}
+                        className="font-mono text-xs underline"
+                      >
+                        {folio.folio}
+                      </Link>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {folio.tipoEtiqueta}
+                    {folio.tipoEtiqueta ?? folio.concepto}
+                    {folio.capturadoPorNombre && (
+                      <span className="block text-[11px]">
+                        capturado por {folio.capturadoPorNombre}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
                     {importeEnCasillas(folio.importe).texto}

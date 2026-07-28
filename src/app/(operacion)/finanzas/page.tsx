@@ -5,13 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { getUsuarioSesion } from "@/lib/auth/usuario";
 import { aCentavos, deCentavos } from "@/lib/finanzas/calculos";
 import { listarSucursales } from "@/lib/finanzas/catalogos";
 import { custodiaPendiente } from "@/lib/finanzas/cobranza";
 import { corteDelDia, foliosPendientesDelDia } from "@/lib/finanzas/corte";
-import { alertasAbiertas } from "@/lib/finanzas/egresos";
+import { ETIQUETA_ALERTA_FINANZAS, alertasAbiertas } from "@/lib/finanzas/egresos";
 import { HORAS_ALERTA_CUSTODIA, custodiaEstaVencida, importeEnCasillas } from "@/lib/finanzas/formato";
 
+import { AtenderAlerta } from "./atender-alerta";
 import { VerificadorSello } from "./verificador-sello";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +74,17 @@ const FORMATOS = [
 ] as const;
 
 export default async function FinanzasPage() {
-  const sucursales = await listarSucursales({ soloActivas: true });
+  const [sesion, sucursales] = await Promise.all([
+    getUsuarioSesion(),
+    listarSucursales({ soloActivas: true }),
+  ]);
+
+  /**
+   * Atender una alerta es supervisar a quien tenía el dinero a su cargo, así
+   * que se reserva a N2 y N3. El candado real vive en la ruta; esto sólo decide
+   * si se dibuja el botón o se explica a quién hay que ir a buscar.
+   */
+  const puedeAtenderAlertas = sesion?.nivel === "N2" || sesion?.nivel === "N3";
 
   // Sin sucursal no hay folios posibles: el consecutivo corre por sucursal y
   // tipo. Es lo primero que un administrador tiene que dar de alta.
@@ -236,20 +248,46 @@ export default async function FinanzasPage() {
                 {alertas.length > 0 && <Badge variant="destructive">{alertas.length}</Badge>}
               </CardTitle>
               <CardDescription>
-                Faltantes de caja y retiros de socio sin reparto formal que los respalde.
+                Faltantes de caja y retiros de socio sin reparto formal que los respalde. Atender
+                una alerta no la borra: la explica, con nombre, hora y nota de quien la revisó.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {alertas.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Sin alertas pendientes de atender.</p>
               ) : (
-                <ul className="space-y-2 text-sm">
+                <ul className="space-y-3 text-sm">
                   {alertas.map((a) => (
-                    <li key={a.id} className="flex gap-2">
-                      <Badge variant={a.severidad === "GRAVE" ? "destructive" : "secondary"}>
-                        {a.severidad}
-                      </Badge>
-                      <span>{a.mensaje}</span>
+                    <li key={a.id} className="space-y-1.5">
+                      <div className="flex flex-wrap items-start gap-2">
+                        <Badge variant={a.severidad === "GRAVE" ? "destructive" : "secondary"}>
+                          {a.severidad}
+                        </Badge>
+                        <span className="flex-1">{a.mensaje}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{ETIQUETA_ALERTA_FINANZAS[a.tipo] ?? a.tipo}</span>
+                        <span>·</span>
+                        <span>{new Date(a.creadaEn).toLocaleString("es-MX")}</span>
+                        {a.folio && (
+                          <>
+                            <span>·</span>
+                            <Link
+                              href={`/finanzas/documentos/${a.documentoId}`}
+                              className="font-mono hover:underline"
+                            >
+                              {a.folio}
+                            </Link>
+                          </>
+                        )}
+                        <AtenderAlerta
+                          alertaId={a.id}
+                          mensaje={a.mensaje}
+                          etiquetaTipo={ETIQUETA_ALERTA_FINANZAS[a.tipo] ?? a.tipo}
+                          severidad={a.severidad}
+                          puedeAtender={puedeAtenderAlertas}
+                        />
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -291,6 +329,12 @@ export default async function FinanzasPage() {
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="secondary" size="sm">
                 <Link href="/finanzas/cortes">Cortes de caja</Link>
+              </Button>
+              {/* No es un formato del manual, pero sin él la regla 5 no cierra:
+                  es el único hecho que convierte el anticipo de un socio en
+                  utilidad repartida. */}
+              <Button asChild variant="secondary" size="sm">
+                <Link href="/finanzas/repartos">Reparto de utilidades</Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
                 <Link href="/finanzas/reportes">Reportes</Link>

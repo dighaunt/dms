@@ -498,7 +498,12 @@ function bloqueCampos(hoja: Hoja, campos: Campo[]): void {
   while (i < campos.length) {
     const primero = campos[i];
     const doble = primero.ancho === 2;
-    const segundo = doble ? undefined : campos[i + 1];
+    // Un campo de renglón completo lo ocupa entero venga donde venga: si el
+    // siguiente pide `ancho: 2` no se le empareja, se le deja empezar su propio
+    // renglón. Sin esto, que un campo saliera ancho o angosto dependería de si
+    // le tocó posición par o impar, y el domicilio del RCI-02 o la descripción
+    // del servicio del RCI-04 acabarían apretados en media caja.
+    const segundo = doble || campos[i + 1]?.ancho === 2 ? undefined : campos[i + 1];
 
     const celdas = [
       { campo: primero, x: MARGEN_X, ancho: doble ? ANCHO_UTIL : anchoCelda },

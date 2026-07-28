@@ -37,6 +37,15 @@ export default async function DocumentoFinancieroPage({
     sellosDe(id),
   ]);
 
+  // Todas las firmas de un folio deben haber firmado el MISMO contenido. El
+  // disparador `firma_exige_mismo_contenido` (migración 039) impide que se
+  // produzca una discrepancia nueva, pero un folio firmado antes de ese
+  // candado —o restaurado de un respaldo viejo— sí puede traerla, y entonces
+  // hay un documento consentido en dos versiones distintas. Eso no se detecta
+  // solo: hay que enseñarlo.
+  const huellas = new Set(firmas.map((f) => f.hashContenido));
+  const firmasDiscrepantes = huellas.size > 1;
+
   const esRecibo = documento.tipoCodigo === "CACM-RCI-01";
   const recibo = esRecibo ? await obtenerReciboCaja(id) : null;
   const arqueo = esRecibo ? await obtenerDenominaciones(id) : null;
@@ -113,12 +122,32 @@ export default async function DocumentoFinancieroPage({
         </BlurFade>
       )}
 
+      {firmasDiscrepantes && (
+        <BlurFade delay={0.12}>
+          <Card className="border-destructive">
+            <CardHeader>
+              <CardTitle className="text-destructive">
+                Las firmas de este folio no firmaron lo mismo
+              </CardTitle>
+              <CardDescription>
+                Se registraron {huellas.size} huellas de contenido distintas. Significa que el
+                documento cambió entre una firma y otra, así que al menos una de las personas
+                consintió una versión que ya no es ésta. No lo corrijas encima: cancela el folio
+                explicando el motivo y emite un complementario, que es lo que el manual manda para
+                enmendar sin tachaduras.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </BlurFade>
+      )}
+
       <BlurFade delay={0.15}>
         <Card>
           <CardHeader>
             <CardTitle>Firmas</CardTitle>
             <CardDescription>
-              Una sola persona no puede ocupar dos roles del mismo documento.
+              Una sola persona no puede ocupar dos roles del mismo documento, y todas firman el
+              mismo contenido: si cambia entre una firma y la siguiente, la segunda se rechaza.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">

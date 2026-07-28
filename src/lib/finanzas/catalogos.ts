@@ -91,6 +91,7 @@ type FilaSucursal = {
   clave: string;
   nombre: string;
   activa: boolean;
+  zona_horaria: string;
 };
 
 function filaASucursal(fila: FilaSucursal): Sucursal {
@@ -99,10 +100,41 @@ function filaASucursal(fila: FilaSucursal): Sucursal {
     clave: fila.clave,
     nombre: fila.nombre,
     activa: fila.activa,
+    zonaHoraria: fila.zona_horaria,
   };
 }
 
-const SELECT_SUCURSAL = `SELECT s.id, s.clave, s.nombre, s.activa FROM traza.sucursal s`;
+const SELECT_SUCURSAL =
+  `SELECT s.id, s.clave, s.nombre, s.activa, s.zona_horaria FROM traza.sucursal s`;
+
+/**
+ * Zona con la que se decide a qué día pertenece un cobro.
+ *
+ * Es la del cajón, no la del servidor. Un cobro de las 19:00 en Monterrey
+ * pertenece al corte de ese día aunque en UTC ya sea el siguiente, y si la
+ * frontera se calculara con el reloj del proceso, el efectivo estaría en la
+ * caja hoy y el corte de hoy no lo contaría. México tiene tres husos vigentes,
+ * así que una constante no basta: es un dato de cada agencia.
+ *
+ * La base valida contra el catálogo IANA del servidor; esta lista sólo ofrece
+ * los usos del país para no obligar a teclear el nombre exacto.
+ */
+export const ZONAS_HORARIAS_MEXICO = [
+  { valor: "America/Mexico_City", etiqueta: "Centro (Ciudad de México, Monterrey, Guadalajara)" },
+  { valor: "America/Chihuahua", etiqueta: "Pacífico (Chihuahua)" },
+  { valor: "America/Hermosillo", etiqueta: "Sonora (Hermosillo)" },
+  { valor: "America/Tijuana", etiqueta: "Noroeste (Tijuana, Mexicali)" },
+  { valor: "America/Cancun", etiqueta: "Sureste (Cancún, Quintana Roo)" },
+] as const;
+
+export const ZONA_HORARIA_POR_OMISION = "America/Mexico_City";
+
+const esquemaZonaHoraria = z
+  .string()
+  .trim()
+  .min(3)
+  .max(64)
+  .default(ZONA_HORARIA_POR_OMISION);
 
 export const esquemaFiltroSucursales = z.object({
   /**
@@ -141,6 +173,12 @@ export const esquemaCrearSucursal = z.object({
     .trim()
     .min(3, "El nombre de la sucursal debe tener al menos 3 caracteres")
     .max(120),
+  /**
+   * Determina a qué día pertenece cada cobro de esta agencia. Se puede
+   * corregir después: es lo único de la sucursal que sí cambia si la agencia
+   * se muda, y cada corte guarda la que se usó para armarlo.
+   */
+  zonaHoraria: esquemaZonaHoraria,
   /** Id del usuario de sesión. Jamás se acepta del cuerpo de la petición. */
   usuario: esquemaId,
 });
@@ -160,10 +198,10 @@ export async function crearSucursal(entrada: EntradaCrearSucursal): Promise<Sucu
   const datos = esquemaCrearSucursal.parse(entrada);
 
   const { rows } = await query<FilaSucursal>(
-    `INSERT INTO traza.sucursal (clave, nombre, creada_por)
-     VALUES ($1, $2, $3)
-     RETURNING id, clave, nombre, activa`,
-    [datos.clave, datos.nombre, datos.usuario],
+    `INSERT INTO traza.sucursal (clave, nombre, zona_horaria, creada_por)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, clave, nombre, activa, zona_horaria`,
+    [datos.clave, datos.nombre, datos.zonaHoraria, datos.usuario],
   );
   return filaASucursal(rows[0]);
 }
@@ -185,8 +223,33 @@ async function marcarSucursal(sucursalId: number, activa: boolean): Promise<Sucu
     `UPDATE traza.sucursal
         SET activa = $2
       WHERE id = $1
-      RETURNING id, clave, nombre, activa`,
+      RETURNING id, clave, nombre, activa, zona_horaria`,
     [id, activa],
+  );
+  return rows[0] ? filaASucursal(rows[0]) : null;
+}
+
+/**
+ * Corrige la zona horaria de una sucursal.
+ *
+ * A diferencia de la clave, ésta sí se puede cambiar: una agencia se muda y su
+ * día cambia de frontera. Los cortes ya armados NO se recalculan —guardan la
+ * zona con la que se armaron, que es el hecho histórico— y un nombre que no
+ * exista en el catálogo IANA lo rechaza la base con su propio mensaje.
+ */
+export async function fijarZonaHorariaSucursal(
+  sucursalId: number,
+  zonaHoraria: string,
+): Promise<Sucursal | null> {
+  const id = esquemaId.parse(sucursalId);
+  const zona = esquemaZonaHoraria.parse(zonaHoraria);
+
+  const { rows } = await query<FilaSucursal>(
+    `UPDATE traza.sucursal
+        SET zona_horaria = $2
+      WHERE id = $1
+      RETURNING id, clave, nombre, activa, zona_horaria`,
+    [id, zona],
   );
   return rows[0] ? filaASucursal(rows[0]) : null;
 }

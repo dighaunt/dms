@@ -4,7 +4,10 @@ Revisión del 2026-07-28. Compara los siete formatos del manual contra lo modela
 `migrations/034` a `038` y lo expuesto en `src/lib/finanzas/`, `src/app/(operacion)/finanzas/`
 y `src/app/(operacion)/api/finanzas/`.
 
-Es una auditoría. No se tocó una línea de código.
+Es una auditoría. No se tocó una línea de código **al escribirla**; lo que vino después
+está en el punto 6, al final, que dice qué se cerró y qué sigue abierto. El cuerpo del
+informe se conserva tal como se levantó, sin corregir a toro pasado: un informe que se
+reescribe conforme se arregla deja de servir para saber qué tan mal estaba la cosa.
 
 ---
 
@@ -386,3 +389,62 @@ Ordenado por lo que evita perder dinero primero.
     pantalla de finanzas levanta un trazo. O se usa o se documenta que la rúbrica autógrafa vive
     en el papel.
 22. No hay política de conservación a 5 años, que el pie de las siete formas exige.
+
+---
+
+## 6. Qué se cerró después de la auditoría
+
+Añadido el 2026-07-28, después del informe. Las correcciones de base viven en
+`migrations/039_finanzas_huecos_auditoria.sql`; el resto, en el código que se cita.
+
+### Cerrados
+
+| # | Cómo quedó |
+|---|---|
+| H2 | `hashDelDocumento` cubre ya el RCI-02 y el RCI-03 (`contenido.ts`). El caso `default` sigue existiendo, pero ahora los siete formatos están enumerados antes que él, de modo que agregar un octavo obliga a decidir qué se firma de él en vez de caer en la cabecera por descuido |
+| H3 | Disparador `firma_exige_mismo_contenido` sobre `firma_documento_financiero`: la segunda firma se rechaza si la huella no coincide con la de la primera. Va como disparador y no dentro de `firmar_documento_*` por la misma razón que la 038 — el candado que sólo vive en la función protege a quien la llama |
+| H4 | Vista `v_firma_discrepante` para los folios que ya traigan la divergencia, y aviso en rojo en la pantalla del documento cuando sus firmas no comparten huella |
+| H6 | `sucursal.zona_horaria`, validada contra el catálogo IANA por disparador. `armar_corte_caja` y `folios_sin_firmar_del_dia` miden el día con `AT TIME ZONE`, y cada corte guarda en `zona_horaria` la que se usó para armarlo, así que un corte viejo se relee con su propia frontera aunque la agencia se mude |
+| H7 | `corte_caja_detalle.origen_documento_id` admite nulo, con `CHECK` que entonces exige concepto de ≥10 caracteres y quién lo capturó. `agregar_otro_ingreso_corte` + `POST /api/finanzas/cortes/[id]/otros-ingresos`. `armar_corte_caja` ya no borra los renglones sin folio al rearmar: no tendría de dónde volver a leerlos |
+| H8 | El RCI-03 entra al barrido, y las dos consultas —la que suma y la que bloquea— miden por la fecha del hecho en la zona de la sucursal. Un borrador todavía sin detalle cae de vuelta a `creado_en` para que no se escape |
+| H9 | El turno vacío se normaliza a cadena vacía y la unicidad pasa a índice sobre `(sucursal_id, fecha_corte, turno)`. Dos cortes del mismo día ya no conviven |
+| H10 | `documento_fin_tiene_detalle()`, exigida en `cambiar_estado_documento_fin` al pasar a `PENDIENTE_DE_FIRMA` y otra vez en `cerrar_si_firmas_completas`. Un folio ya no llega a firmado en blanco |
+| H12 | Los siete formatos imprimen. `ARMADORES` dejó de ser parcial: es un `Record` completo sobre `TipoRci`, así que un formato nuevo sin hoja no compila |
+| H5 | `POST /api/finanzas/repartos` y la pantalla `/finanzas/repartos`, con la posición de cada socio. La regla 5 ya puede absolver, no sólo acusar |
+| H11 | `POST /api/finanzas/alertas/[id]/atender` y la acción en el panel, con nota obligatoria |
+
+Un efecto secundario que conviene registrar, porque es el que más dice del estado en que
+estaba el módulo: al aplicar la 039 a la base de pruebas, **30 de las 109 pruebas
+empezaron a fallar**. Ninguna por un defecto de la migración. Los fixtures montaban
+exactamente los dos estados que los candados nuevos vuelven imposibles —un folio firmado
+sin detalle (`reciboFirmado`, cuyo comentario lo decía con todas sus letras) y firmas del
+mismo folio con huellas distintas (`hashDe(documentoId, rol)`, un hash por rol)—. Es decir,
+las pruebas llevaban meses describiendo como normal lo que la auditoría encontró como
+hueco. Se corrigieron los fixtures, no los candados.
+
+### El punto 4: las pruebas
+
+| Hallazgo | Cómo quedó |
+|---|---|
+| H1 · 44 pruebas saltadas en silencio | Un caso centinela por suite que **falla** cuando no hay base, con el título diciendo qué regla del manual queda sin probar y el comando exacto para levantarla. El salto sigue siendo posible, pero ya no por omisión: hay que pedirlo con `PERMITIR_PRUEBAS_SIN_BASE=1`, y aun así queda anotado. Documentado en `.env.example` y en el README |
+| 4.2 · la prueba que demostraba lo contrario de su título | `estadoValeEgreso` no implementaba la regla 4 —contaba duplicados entre `usuarioId` no nulos, y los nulos nunca colisionan—. Se le añadió `EXIGE_USUARIO_INTERNO_VALE`, espejo de la 034, y el caso engañoso se sustituyó por dos correctos. Además hay dos pruebas nuevas contra Postgres: una le pregunta a `firma_requerida` + `rol_firmante` si el espejo sigue coincidiendo, para que la copia no derive del original en silencio |
+| 4.3 · pruebas del espejo tituladas como el candado | Retituladas: cada apartado dice ahora dónde vive el candado real y qué suite lo cubre. No se borró ninguna |
+
+Cobertura después de todo esto: **117 pruebas, 117 pasan, 0 saltadas**. Las ocho nuevas
+cubren, entre otras cosas, el ataque H3+H4 completo —la vendedora firma 5 000, alguien baja
+la cifra a 3 000 *cuadrando el arqueo* para que no lo delate `validar_arqueo_rci01`, y la
+segunda firma se rechaza— y el folio en blanco de H10.
+
+### Sigue abierto
+
+De la lista del punto 5 quedan pendientes los puntos 12 a 22, más:
+- **Punto 12** —cargo e identificación oficial de los firmantes internos— no se puede
+  cerrar desde la hoja impresa, que es donde se notó: el `CHECK` de
+  `firma_documento_financiero` prohíbe `firmante_id_*` cuando el método es `PIN_USUARIO`.
+  O se modela, o se documenta por qué el usuario y el PIN los sustituyen. Es una decisión
+  de la empresa, no del código.
+- **Punto 20** sigue esperando a Tesorería: que `ENTERADO_SOCIO` sea firma opcional en el
+  RCI-07 y que un vale pagado por transferencia no aparezca en la Parte II del corte son
+  dos interpretaciones que el código tomó solo.
+- **Punto 22**, la conservación a cinco años que el pie de las siete formas exige, no
+  tiene todavía política escrita ni mecanismo.

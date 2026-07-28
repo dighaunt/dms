@@ -905,6 +905,117 @@ export async function registrarRepartoUtilidades(
   });
 }
 
+/** Un reparto ya asentado, con el nombre de quien lo autorizó. */
+export type RepartoRegistrado = RepartoUtilidades & {
+  autorizadoPorNombre: string;
+};
+
+export const esquemaFiltroRepartos = z.object({
+  /** Los repartos son pocos por naturaleza: uno por ejercicio. */
+  limite: z.number().int().positive().max(200).default(50),
+});
+
+export type FiltroRepartos = z.input<typeof esquemaFiltroRepartos>;
+
+/**
+ * Los repartos formales ya asentados, del balance más reciente al más viejo,
+ * cada uno con sus asignaciones por socio.
+ *
+ * Se lee junto a `anticiposDeSocios`: la vista dice cuánto queda por comprobar
+ * y esta lista dice contra qué balance, qué acta y qué asamblea se descargó lo
+ * que ya no lo está. Sin ella, la posición de un socio sería una cifra sin
+ * documento que la explique.
+ *
+ * Estas filas son inmutables (`bloquear_mutacion` en UPDATE y DELETE): lo que
+ * aquí se lista no se corrige, se complementa con otro reparto.
+ */
+export async function listarRepartosUtilidades(
+  filtro: FiltroRepartos = {},
+): Promise<RepartoRegistrado[]> {
+  const { limite } = esquemaFiltroRepartos.parse(filtro);
+
+  const { rows: cabeceras } = await query<{
+    id: string | number;
+    ejercicio: string;
+    fecha_balance: string;
+    utilidad_repartible: string;
+    acta_referencia: string;
+    autorizado_por: string | number;
+    autorizado_por_nombre: string;
+    creado_en: Date | string;
+  }>(
+    `SELECT r.id,
+            r.ejercicio,
+            r.fecha_balance::text AS fecha_balance,
+            r.utilidad_repartible,
+            r.acta_referencia,
+            r.autorizado_por,
+            u.nombre AS autorizado_por_nombre,
+            r.creado_en
+       FROM traza.reparto_utilidades r
+       JOIN traza.usuario u ON u.id = r.autorizado_por
+      ORDER BY r.fecha_balance DESC, r.id DESC
+      LIMIT $1`,
+    [limite],
+  );
+
+  if (cabeceras.length === 0) return [];
+
+  const { rows: renglones } = await query<{
+    reparto_id: string | number;
+    socio_usuario_id: string | number;
+    socio_nombre: string;
+    monto_asignado: string;
+  }>(
+    `SELECT rs.reparto_id,
+            rs.socio_usuario_id,
+            u.nombre AS socio_nombre,
+            rs.monto_asignado
+       FROM traza.reparto_utilidades_socio rs
+       JOIN traza.usuario u ON u.id = rs.socio_usuario_id
+      WHERE rs.reparto_id = ANY($1::bigint[])
+      ORDER BY rs.monto_asignado DESC, u.nombre`,
+    [cabeceras.map((fila) => aNumero(fila.id))],
+  );
+
+  const porReparto = new Map<number, AsignacionReparto[]>();
+  for (const fila of renglones) {
+    const repartoId = aNumero(fila.reparto_id);
+    const lista = porReparto.get(repartoId) ?? [];
+    lista.push({
+      socioUsuarioId: aNumero(fila.socio_usuario_id),
+      socioNombre: fila.socio_nombre,
+      montoAsignado: fila.monto_asignado,
+    });
+    porReparto.set(repartoId, lista);
+  }
+
+  return cabeceras.map((fila) => {
+    const id = aNumero(fila.id);
+    const asignaciones = porReparto.get(id) ?? [];
+    // En centavos enteros, igual que al guardarlo: el remanente es la parte
+    // del balance que este reparto NO descargó, y redondearla mal la volvería
+    // un descuadre entre lo aprobado y lo asignado.
+    const asignado = asignaciones.reduce(
+      (acumulado, asignacion) => acumulado + (aCentavos(asignacion.montoAsignado) ?? 0n),
+      0n,
+    );
+
+    return {
+      id,
+      ejercicio: fila.ejercicio,
+      fechaBalance: fila.fecha_balance,
+      utilidadRepartible: fila.utilidad_repartible,
+      actaReferencia: fila.acta_referencia,
+      autorizadoPor: aNumero(fila.autorizado_por),
+      autorizadoPorNombre: fila.autorizado_por_nombre,
+      creadoEn: aIso(fila.creado_en),
+      asignaciones,
+      remanenteSinAsignar: deCentavos((aCentavos(fila.utilidad_repartible) ?? 0n) - asignado),
+    };
+  });
+}
+
 // ===== ALERTAS =====
 
 /**
