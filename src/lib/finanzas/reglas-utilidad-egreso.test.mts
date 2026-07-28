@@ -66,12 +66,35 @@ INSERT INTO sucursal (clave, nombre, creada_por)
  VALUES ('MTY','Matriz Monterrey',(SELECT id FROM usuario WHERE email='gerente@t.mx'))
 ON CONFLICT (clave) DO NOTHING;
 
-INSERT INTO empleado (num_empleado, nombre, puesto, sucursal_id, usuario_id, creado_por) VALUES
- ('E-01','Vendedora Prueba','Vendedor',(SELECT id FROM sucursal WHERE clave='MTY'),
+INSERT INTO empleado (num_empleado, nombres, apellido_paterno, apellido_materno, puesto, sucursal_id, usuario_id, creado_por) VALUES
+ ('E-01','Vendedora','Prueba',NULL,'Vendedor',(SELECT id FROM sucursal WHERE clave='MTY'),
   (SELECT id FROM usuario WHERE email='vendedor@t.mx'),(SELECT id FROM usuario WHERE email='gerente@t.mx')),
- ('E-02','Asesor Servicio','Asesor de servicio',(SELECT id FROM sucursal WHERE clave='MTY'),
+ ('E-02','Asesor','Servicio',NULL,'Asesor de servicio',(SELECT id FROM sucursal WHERE clave='MTY'),
   NULL,(SELECT id FROM usuario WHERE email='gerente@t.mx'))
 ON CONFLICT (sucursal_id, num_empleado) DO NOTHING;
+
+-- Desde la migración 040 el retiro de utilidades no apunta a un usuario sino a
+-- un socio, y un socio se registra sobre una PERSONA del catálogo. Sembrarlo
+-- aquí es lo que permite que el vale de retiro exista: sin la fila de socio
+-- el CHECK vale_retiro_socio_exige_socio y la llave foránea lo rechazarían.
+-- La persona queda enlazada al usuario 'socio@t.mx' porque en esta suite ese
+-- mismo actor firma, pero el enlace es opcional por diseño: un accionista rara
+-- vez opera el DMS.
+INSERT INTO persona (nombre, id_tipo, id_numero, categoria, usuario_id, creada_por)
+SELECT 'Socio Prueba','INE','IDMX-SOCIO-UE1','SOCIO',
+       (SELECT id FROM usuario WHERE email='socio@t.mx'),
+       (SELECT id FROM usuario WHERE email='gerente@t.mx')
+WHERE NOT EXISTS (
+  SELECT 1 FROM persona WHERE upper(trim(id_tipo)) = 'INE' AND upper(trim(id_numero)) = 'IDMX-SOCIO-UE1'
+);
+
+-- La participación se deja en NULL a propósito: es opcional en el modelo y así
+-- la semilla no consume parte del 100 por ciento que otras pruebas reparten.
+INSERT INTO socio (persona_id, acta_referencia, creado_por)
+SELECT p.id, 'ACTA-CONSTITUTIVA-2019-01', (SELECT id FROM usuario WHERE email='gerente@t.mx')
+  FROM persona p
+ WHERE upper(trim(p.id_tipo)) = 'INE' AND upper(trim(p.id_numero)) = 'IDMX-SOCIO-UE1'
+   AND NOT EXISTS (SELECT 1 FROM socio s WHERE s.persona_id = p.id);
 
 INSERT INTO marca (nombre) VALUES ('Nissan') ON CONFLICT (nombre) DO NOTHING;
 INSERT INTO modelo (marca_id, nombre)
@@ -101,6 +124,8 @@ type Escenario = {
   expedienteConsignada: string;
   expedientePropia: string;
   empleadoVendedor: string;
+  /** Persona dada de alta como socio vigente: a ella se carga el retiro. */
+  socioPersonaId: string;
 };
 
 async function conEscenario(cuerpo: (esc: Escenario) => Promise<void>): Promise<void> {
@@ -127,6 +152,11 @@ async function conEscenario(cuerpo: (esc: Escenario) => Promise<void>): Promise<
     const empleado = await cx.query<{ id: string }>(
       "SELECT id FROM empleado WHERE num_empleado = 'E-01'",
     );
+    const socio = await cx.query<{ persona_id: string }>(
+      `SELECT s.persona_id FROM socio s
+         JOIN persona p ON p.id = s.persona_id
+        WHERE upper(trim(p.id_tipo)) = 'INE' AND upper(trim(p.id_numero)) = 'IDMX-SOCIO-UE1'`,
+    );
 
     await cuerpo({
       cx,
@@ -135,6 +165,7 @@ async function conEscenario(cuerpo: (esc: Escenario) => Promise<void>): Promise<
       expedienteConsignada: expedientes.rows.filter((e) => e.origen === "CONSIGNADA")[0].id,
       expedientePropia: expedientes.rows.filter((e) => e.origen === "PROPIA")[0].id,
       empleadoVendedor: empleado.rows[0].id,
+      socioPersonaId: socio.rows[0].persona_id,
     });
   } finally {
     // ROLLBACK y nunca COMMIT: es lo que hace repetible una prueba que consume
@@ -346,20 +377,21 @@ async function insertarVale(
     importe: string;
     beneficiario?: string;
     reciboNominaId?: string | null;
-    socioUsuarioId?: string | null;
+    /** Persona registrada como socio; desde la 040 el vale ya no apunta a un usuario. */
+    socioPersonaId?: string | null;
   },
 ): Promise<void> {
   await esc.cx.query(
     `INSERT INTO vale_egreso_rci05
        (documento_id, fecha_hora, concepto_codigo, beneficiario_nombre, beneficiario_id_tipo,
-        beneficiario_id_numero, recibo_nomina_id, socio_usuario_id, forma_pago, importe)
+        beneficiario_id_numero, recibo_nomina_id, socio_persona_id, forma_pago, importe)
      VALUES ($1, now(), $2, $3, 'INE', 'IDMX7654321', $4, $5, 'EFECTIVO', $6)`,
     [
       documentoId,
       opciones.concepto,
       opciones.beneficiario ?? "Vendedora Prueba",
       opciones.reciboNominaId ?? null,
-      opciones.socioUsuarioId ?? null,
+      opciones.socioPersonaId ?? null,
       opciones.importe,
     ],
   );
@@ -808,7 +840,9 @@ test(
       const valeId = await emitirFolio(esc, "CACM-RCI-05", esc.usuarios.custodio);
 
       // Sin socio no hay a quién cargarle el anticipo cuando llegue el reparto
-      // formal, y el retiro se volvería un gasto sin dueño.
+      // formal, y el retiro se volvería un gasto sin dueño. Desde la migración
+      // 040 el candado tiene nombre propio —`vale_retiro_socio_exige_socio`— y
+      // apunta al registro de socios, no a la tabla de usuarios.
       await rechaza(
         esc,
         () =>
@@ -817,20 +851,46 @@ test(
             importe: "30000.00",
             beneficiario: "Socio Prueba",
           }),
-        { codigo: "23514", restriccion: /vale_egreso_rci05/ },
+        { codigo: "23514", restriccion: /vale_retiro_socio_exige_socio/ },
+      );
+
+      // Tampoco basta con señalar a cualquiera del catálogo: la columna apunta a
+      // `socio`, no a `persona`. Estar en la libreta de a quién se le paga no
+      // convierte a nadie en dueño de parte del capital.
+      //
+      // Quien lo rechaza es el disparador `exigir_socio_vigente`, que corre
+      // ANTES que la llave foránea; por eso el error es P0001 y no un 23503.
+      // Y por eso mismo el mensaje tiene que distinguir a quien NUNCA fue socio
+      // de quien lo fue y ya no: decirle "ya no figura" a alguien que jamás
+      // figuró manda a buscar en el registro una baja que no existe.
+      const { rows: ajena } = await esc.cx.query<{ id: string }>(
+        `INSERT INTO persona (nombre, categoria, creada_por)
+         VALUES ('Proveedor Que No Es Socio', 'PROVEEDOR', $1) RETURNING id`,
+        [esc.usuarios.gerente],
+      );
+      await rechaza(
+        esc,
+        () =>
+          insertarVale(esc, valeId, {
+            concepto: "RETIRO_UTILIDADES_SOCIO",
+            importe: "30000.00",
+            beneficiario: "Socio Prueba",
+            socioPersonaId: ajena[0].id,
+          }),
+        { codigo: "P0001", mensaje: /no está registrada como socio|no esta registrada como socio/i },
       );
 
       await insertarVale(esc, valeId, {
         concepto: "RETIRO_UTILIDADES_SOCIO",
         importe: "30000.00",
         beneficiario: "Socio Prueba",
-        socioUsuarioId: esc.usuarios.socio,
+        socioPersonaId: esc.socioPersonaId,
       });
-      const { rows } = await esc.cx.query<{ socio_usuario_id: string }>(
-        "SELECT socio_usuario_id FROM vale_egreso_rci05 WHERE documento_id = $1",
+      const { rows } = await esc.cx.query<{ socio_persona_id: string }>(
+        "SELECT socio_persona_id FROM vale_egreso_rci05 WHERE documento_id = $1",
         [valeId],
       );
-      assert.equal(rows[0].socio_usuario_id, esc.usuarios.socio);
+      assert.equal(rows[0].socio_persona_id, esc.socioPersonaId);
     });
   },
 );

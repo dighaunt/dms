@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -290,22 +298,51 @@ function PanelEmpleados({
   const activas = useMemo(() => sucursales.filter((s) => s.activa), [sucursales]);
 
   const [filtro, setFiltro] = useState<string>(TODAS);
+  const [verInactivos, setVerInactivos] = useState(false);
   const [numEmpleado, setNumEmpleado] = useState("");
-  const [nombre, setNombre] = useState("");
+  const [nombres, setNombres] = useState("");
+  const [apellidoPaterno, setApellidoPaterno] = useState("");
+  const [apellidoMaterno, setApellidoMaterno] = useState("");
+  const [departamento, setDepartamento] = useState("");
   const [puesto, setPuesto] = useState("");
   const [sucursalId, setSucursalId] = useState<string>(String(activas[0]?.id ?? ""));
   const [usuarioId, setUsuarioId] = useState<string>(SIN_USUARIO);
   const [guardando, setGuardando] = useState(false);
+  /** Ficha que se está por dar de baja; null cuando no hay confirmación abierta. */
+  const [porDarDeBaja, setPorDarDeBaja] = useState<Empleado | null>(null);
+
+  /**
+   * El nombre completo NO se teclea: lo deriva la base a partir de las tres
+   * partes. Se arma aquí sólo para MOSTRARLO mientras se captura, porque es lo
+   * que va a salir impreso en cada recibo y conviene verlo antes de guardar.
+   */
+  const nombreArmado = [nombres.trim(), apellidoPaterno.trim(), apellidoMaterno.trim()]
+    .filter((parte) => parte !== "")
+    .join(" ");
 
   const porSucursal = useMemo(
     () => new Map(sucursales.map((s) => [s.id, s])),
     [sucursales],
   );
 
-  const visibles = useMemo(
-    () => (filtro === TODAS ? empleados : empleados.filter((e) => String(e.sucursalId) === filtro)),
-    [empleados, filtro],
-  );
+  /**
+   * Ordenados por apellido, que es como se busca a la gente. En esta plantilla
+   * hay tres García distintos y dos se llaman Ricardo: por nombre de pila no se
+   * encuentra a nadie.
+   */
+  const visibles = useMemo(() => {
+    const porSucursalElegida =
+      filtro === TODAS ? empleados : empleados.filter((e) => String(e.sucursalId) === filtro);
+    const conBajas = verInactivos ? porSucursalElegida : porSucursalElegida.filter((e) => e.activo);
+    return [...conBajas].sort((a, b) =>
+      `${a.apellidoPaterno} ${a.apellidoMaterno ?? ""} ${a.nombres}`.localeCompare(
+        `${b.apellidoPaterno} ${b.apellidoMaterno ?? ""} ${b.nombres}`,
+        "es",
+      ),
+    );
+  }, [empleados, filtro, verInactivos]);
+
+  const dadosDeBaja = useMemo(() => empleados.filter((e) => !e.activo).length, [empleados]);
 
   /**
    * La base declara `usuario_id` UNIQUE: un usuario no puede colgar de dos
@@ -323,14 +360,21 @@ function PanelEmpleados({
   );
 
   const listoParaGuardar =
-    numEmpleado.trim() !== "" && nombre.trim().length >= 3 && sucursalId !== "" && !numeroRepetido;
+    numEmpleado.trim() !== "" &&
+    nombres.trim().length >= 2 &&
+    apellidoPaterno.trim().length >= 2 &&
+    sucursalId !== "" &&
+    !numeroRepetido;
 
   async function darDeAlta() {
     setGuardando(true);
     try {
       const creado = await postJson<Empleado>("/api/finanzas/catalogos/empleados", {
         numEmpleado: numEmpleado.trim(),
-        nombre: nombre.trim(),
+        nombres: nombres.trim(),
+        apellidoPaterno: apellidoPaterno.trim(),
+        apellidoMaterno: apellidoMaterno.trim() || null,
+        departamento: departamento.trim() || null,
         puesto: puesto.trim() || null,
         sucursalId: Number(sucursalId),
         usuarioId: usuarioId === SIN_USUARIO ? null : Number(usuarioId),
@@ -338,9 +382,37 @@ function PanelEmpleados({
       if (!creado) return;
       toast.success(`${creado.nombre} dado de alta`);
       setNumEmpleado("");
-      setNombre("");
+      setNombres("");
+      setApellidoPaterno("");
+      setApellidoMaterno("");
       setPuesto("");
       setUsuarioId(SIN_USUARIO);
+      router.refresh();
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  /**
+   * Dar de baja NO borra: inhabilita. La ficha se queda porque cada RCI-01 que
+   * esa persona cobró la cita por su nombre, y leer un folio de hace tres años
+   * exige poder resolver quién era el vendedor. Lo único que cambia es que deja
+   * de ofrecerse en una captura nueva.
+   */
+  async function cambiarAlta(empleado: Empleado, activo: boolean) {
+    setGuardando(true);
+    try {
+      const actualizado = await patchJson<Empleado>("/api/finanzas/catalogos/empleados", {
+        id: empleado.id,
+        activo,
+      });
+      if (!actualizado) return;
+      toast.success(
+        activo
+          ? `${actualizado.nombre} vuelve a estar activo`
+          : `${actualizado.nombre} queda inhabilitado; su ficha y sus folios siguen ahí`,
+      );
+      setPorDarDeBaja(null);
       router.refresh();
     } finally {
       setGuardando(false);
@@ -358,21 +430,35 @@ function PanelEmpleados({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="max-w-xs space-y-1.5">
-            <Label htmlFor="filtro-sucursal">Ver sucursal</Label>
-            <Select value={filtro} onValueChange={setFiltro}>
-              <SelectTrigger id="filtro-sucursal" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODAS}>Todas las sucursales</SelectItem>
-                {sucursales.map((s) => (
-                  <SelectItem key={s.id} value={String(s.id)}>
-                    {s.clave} · {s.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="max-w-xs flex-1 space-y-1.5">
+              <Label htmlFor="filtro-sucursal">Ver sucursal</Label>
+              <Select value={filtro} onValueChange={setFiltro}>
+                <SelectTrigger id="filtro-sucursal" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TODAS}>Todas las sucursales</SelectItem>
+                  {sucursales.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.clave} · {s.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Los dados de baja siguen existiendo; el interruptor decide si se
+                miran, no si están. */}
+            {dadosDeBaja > 0 && (
+              <Button
+                variant={verInactivos ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setVerInactivos((v) => !v)}
+              >
+                {verInactivos ? "Ocultar" : "Ver"} {dadosDeBaja} dado(s) de baja
+              </Button>
+            )}
           </div>
 
           {visibles.length === 0 ? (
@@ -385,10 +471,12 @@ function PanelEmpleados({
                 <TableRow className="hover:bg-transparent">
                   <TableHead>No.</TableHead>
                   <TableHead>Nombre</TableHead>
+                  <TableHead>Departamento</TableHead>
                   <TableHead>Puesto</TableHead>
                   <TableHead>Sucursal</TableHead>
                   <TableHead>Usuario del sistema</TableHead>
                   <TableHead>Estado</TableHead>
+                  {esAdministrador && <TableHead className="text-right">Alta / baja</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -398,7 +486,12 @@ function PanelEmpleados({
                   return (
                     <TableRow key={e.id} className={e.activo ? undefined : "opacity-60"}>
                       <TableCell className="font-mono">{e.numEmpleado}</TableCell>
-                      <TableCell className="font-medium">{e.nombre}</TableCell>
+                      <TableCell className="font-medium">
+                        {e.apellidoPaterno} {e.apellidoMaterno ?? ""}, {e.nombres}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.departamento ?? "—"}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{e.puesto ?? "—"}</TableCell>
                       <TableCell className="font-mono text-xs">
                         {sucursal ? sucursal.clave : "—"}
@@ -410,7 +503,35 @@ function PanelEmpleados({
                         <Badge variant={e.activo ? "secondary" : "outline"}>
                           {e.activo ? "Activo" : "Baja"}
                         </Badge>
+                        {!e.activo && e.bajaEn && (
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                            desde {new Date(e.bajaEn).toLocaleDateString("es-MX")}
+                          </span>
+                        )}
                       </TableCell>
+                      {esAdministrador && (
+                        <TableCell className="text-right">
+                          {e.activo ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={guardando}
+                              onClick={() => setPorDarDeBaja(e)}
+                            >
+                              Dar de baja
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={guardando}
+                              onClick={() => cambiarAlta(e, true)}
+                            >
+                              Reactivar
+                            </Button>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -462,13 +583,54 @@ function PanelEmpleados({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="nombre-empleado">Nombre completo *</Label>
+                <Label htmlFor="nombres-empleado">Nombre(s) *</Label>
                 <Input
-                  id="nombre-empleado"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Como aparece en su identificación"
+                  id="nombres-empleado"
+                  value={nombres}
+                  onChange={(e) => setNombres(e.target.value.slice(0, 80))}
+                  placeholder="DIEGO FERNANDO"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="ap-paterno">Apellido paterno *</Label>
+                <Input
+                  id="ap-paterno"
+                  value={apellidoPaterno}
+                  onChange={(e) => setApellidoPaterno(e.target.value.slice(0, 80))}
+                  placeholder="GARCIA"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="ap-materno">Apellido materno</Label>
+                <Input
+                  id="ap-materno"
+                  value={apellidoMaterno}
+                  onChange={(e) => setApellidoMaterno(e.target.value.slice(0, 80))}
+                  placeholder="RAMOS"
+                />
+                {/* Opcional de verdad: exigirlo obliga a inventarlo a quien
+                    lleva un solo apellido. */}
+                <p className="text-xs text-muted-foreground">
+                  Déjalo vacío si esa persona lleva un solo apellido.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="departamento">Departamento</Label>
+                <Input
+                  id="departamento"
+                  value={departamento}
+                  onChange={(e) => setDepartamento(e.target.value.slice(0, 80))}
+                  placeholder="VENTAS"
+                  list="departamentos-existentes"
+                />
+                <datalist id="departamentos-existentes">
+                  {[...new Set(empleados.map((e) => e.departamento).filter(Boolean))].map((d) => (
+                    <option key={d} value={d as string} />
+                  ))}
+                </datalist>
               </div>
 
               <div className="space-y-1.5">
@@ -522,12 +684,64 @@ function PanelEmpleados({
               </p>
             )}
 
+            {/* El nombre completo no se captura: lo arma la base con las tres
+                partes. Se enseña aquí porque es exactamente lo que va a salir
+                impreso en cada recibo, y verlo antes de guardar evita tener que
+                emitir un complementario para corregir una letra. */}
+            {nombreArmado !== "" && (
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">Saldrá impreso como</p>
+                <p className="font-medium">{nombreArmado}</p>
+              </div>
+            )}
+
             <Button disabled={guardando || !listoParaGuardar} onClick={darDeAlta}>
               {guardando ? "Dando de alta…" : "Dar de alta"}
             </Button>
           </CardContent>
         </Card>
       )}
+
+      {/* La confirmación explica ANTES, no después. Quien cree estar borrando a
+          un exempleado se lleva un susto al verlo seguir en la lista, y peor
+          aún: podría intentar "borrarlo" otra vez por otra vía. */}
+      <Dialog
+        open={porDarDeBaja !== null}
+        onOpenChange={(abierto) => !abierto && setPorDarDeBaja(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Dar de baja a {porDarDeBaja?.nombre}</DialogTitle>
+            <DialogDescription>
+              Deja de aparecer en las capturas nuevas. No se borra nada.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 text-sm">
+            <p>
+              <strong>Dar de baja no borra: inhabilita.</strong> Su ficha se queda donde está, y
+              tiene que quedarse: cada recibo que esa persona cobró la cita por su nombre, y leer
+              un folio de hace tres años exige poder resolver quién era el vendedor.
+            </p>
+            <p className="text-muted-foreground">
+              Podrás verla aquí con &ldquo;ver dados de baja&rdquo;, y reactivarla en cualquier
+              momento si vuelve.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" disabled={guardando} onClick={() => setPorDarDeBaja(null)}>
+              Mejor no
+            </Button>
+            <Button
+              disabled={guardando}
+              onClick={() => porDarDeBaja && cambiarAlta(porDarDeBaja, false)}
+            >
+              {guardando ? "Dando de baja…" : "Dar de baja"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

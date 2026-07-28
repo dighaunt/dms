@@ -5,6 +5,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { query } from "@/lib/db";
 import { conceptosEgreso, formasPago, listarSucursales } from "@/lib/finanzas/catalogos";
 import { anticiposDeSocios } from "@/lib/finanzas/egresos";
+import { listarSocios } from "@/lib/finanzas/personas";
 
 import { CapturaVale } from "./captura-vale";
 
@@ -12,8 +13,6 @@ export const dynamic = "force-dynamic";
 
 /** Un selector no se lee por miles de renglones; el tope acota lo que viaja. */
 const TOPE_RECIBOS_NOMINA = 200;
-
-type FilaSocio = { id: number; nombre: string };
 
 type FilaReciboNomina = {
   documento_id: number;
@@ -34,16 +33,12 @@ export default async function NuevoValeEgresoPage() {
     formasPago(),
     anticiposDeSocios(),
 
-    // Candidatos a socio. `v_anticipo_utilidades_socio` sólo lista a quien YA
-    // retiró o ya recibió reparto, así que no sirve para poblar el selector: un
-    // socio que retira por primera vez no aparecería en ella y no habría manera
-    // de nombrarlo. La posición de anticipos se cruza después, por id.
-    query<FilaSocio>(
-      `SELECT u.id::int AS id, u.nombre
-         FROM traza.usuario u
-        WHERE u.activo
-        ORDER BY u.nombre`,
-    ),
+    // Quién puede retirar utilidades sale del REGISTRO DE SOCIOS, no del padrón
+    // de usuarios. Ser socio es tener parte del capital social —se acredita con
+    // un acta— y tener cuenta en el DMS no lo es: llenar el selector con todos
+    // los usuarios permitía cargarle el anticipo a quien no era y entregar un
+    // retiro de utilidades a quien no tiene derecho a ninguna.
+    listarSocios({ soloActivos: true }),
 
     // Recibos de nómina FIRMADOS, para no pedir que se teclee un folio.
     // Se cuentan los vales que ya los citan —sin contar los cancelados— para
@@ -99,10 +94,10 @@ export default async function NuevoValeEgresoPage() {
     );
   }
 
-  // La posición de cada socio se cruza por id: quien nunca ha retirado no
-  // aparece en la vista y por eso queda sin saldo, que es exactamente lo que
-  // hay que mostrar de él.
-  const posicionPorSocio = new Map(anticipos.map((a) => [a.socioUsuarioId, a]));
+  // La posición de cada socio se cruza por la persona: la vista ya incluye a
+  // los de saldo cero, y quien acaba de darse de alta debe poder elegirse
+  // aunque no tenga un solo movimiento.
+  const posicionPorSocio = new Map(anticipos.map((a) => [a.socioPersonaId, a]));
 
   return (
     <div className="space-y-6">
@@ -131,11 +126,12 @@ export default async function NuevoValeEgresoPage() {
             etiqueta: f.etiqueta,
             afectaCajaFisica: f.afectaCajaFisica,
           }))}
-          socios={socios.rows.map((s) => {
-            const posicion = posicionPorSocio.get(s.id);
+          socios={socios.map((s) => {
+            const posicion = posicionPorSocio.get(s.personaId);
             return {
-              usuarioId: s.id,
+              personaId: s.personaId,
               nombre: s.nombre,
+              participacionPct: s.participacionPct,
               // `etiqueta` la redacta `posicionSocio` en calculos.ts: es la
               // regla del artículo 19 dicha en palabras, y no se reescribe aquí.
               saldoPorComprobar: posicion?.saldoPorComprobar ?? "0.00",

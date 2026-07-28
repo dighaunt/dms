@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { InputMoneda } from "@/components/ui/input-moneda";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,8 +40,6 @@ type Props = {
 
 /** El importe negativo se lee mejor como "faltante de $X" que como "$-X". */
 const sinSigno = (importe: string): string => importe.replace(/^-/, "");
-
-const soloCifra = (valor: string): string => valor.replace(/[^\d.,]/g, "");
 
 /**
  * Lo que el custodio DECLARA sobre el efectivo: a dónde lo mandó (depósitos y
@@ -196,15 +195,12 @@ export function CerrarCorte({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="monto-deposito">Monto *</Label>
-                <Input
+                <InputMoneda
                   id="monto-deposito"
-                  value={deposito.monto}
-                  onChange={(e) =>
-                    setDeposito({ ...deposito, monto: soloCifra(e.target.value) })
-                  }
-                  inputMode="decimal"
+                  valor={deposito.monto}
+                  onValorChange={(valor) => setDeposito({ ...deposito, monto: valor })}
                   placeholder="0.00"
-                  className="font-mono"
+                  className="font-mono tabular-nums"
                 />
               </div>
               <div className="space-y-1.5">
@@ -270,15 +266,12 @@ export function CerrarCorte({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="monto-resguardo">Monto *</Label>
-                <Input
+                <InputMoneda
                   id="monto-resguardo"
-                  value={resguardo.monto}
-                  onChange={(e) =>
-                    setResguardo({ ...resguardo, monto: soloCifra(e.target.value) })
-                  }
-                  inputMode="decimal"
+                  valor={resguardo.monto}
+                  onValorChange={(valor) => setResguardo({ ...resguardo, monto: valor })}
                   placeholder="0.00"
-                  className="font-mono"
+                  className="font-mono tabular-nums"
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
@@ -325,13 +318,12 @@ export function CerrarCorte({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="efectivo">Efectivo físico contado al cierre *</Label>
-              <Input
+              <InputMoneda
                 id="efectivo"
-                value={efectivo}
-                onChange={(e) => setEfectivo(soloCifra(e.target.value))}
-                inputMode="decimal"
+                valor={efectivo}
+                onValorChange={setEfectivo}
                 placeholder="0.00"
-                className="max-w-xs font-mono text-lg"
+                className="max-w-xs font-mono text-lg tabular-nums"
               />
               {previa && (
                 <p className="text-xs text-muted-foreground">

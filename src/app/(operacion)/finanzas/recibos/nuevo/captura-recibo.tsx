@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { InputMoneda } from "@/components/ui/input-moneda";
 import { Label } from "@/components/ui/label";
 import { aCentavos, deCentavos } from "@/lib/finanzas/calculos";
 import { casillasVin, importeEnCasillas, vinEsValido } from "@/lib/finanzas/formato";
@@ -253,13 +254,12 @@ export function CapturaRecibo({ sucursales, empleados, conceptos }: Props) {
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="importe">10. Importe total entregado en efectivo *</Label>
-              <Input
+              <InputMoneda
                 id="importe"
-                value={importe}
-                onChange={(e) => setImporte(e.target.value.replace(/[^\d.]/g, ""))}
-                inputMode="decimal"
+                valor={importe}
+                onValorChange={setImporte}
                 placeholder="0.00"
-                className="max-w-xs text-lg"
+                className="max-w-xs font-mono text-lg tabular-nums"
               />
               {declarado > 0n && (
                 <p className="text-xs text-muted-foreground">

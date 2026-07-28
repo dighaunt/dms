@@ -213,6 +213,36 @@ export type Sucursal = {
 };
 
 /**
+ * Categorías del CHECK de `persona.categoria`. Se enumeran —a diferencia de
+ * los conceptos de cobro o de egreso, que son catálogos administrables— porque
+ * el CHECK las cierra: agregar una es una migración, no un renglón de datos.
+ *
+ * Es una PISTA para filtrar el selector, no una verdad jurídica: alguien puede
+ * estar dado de alta como PROVEEDOR y ser además socio, y el sistema debe
+ * seguir tratándolo como socio. Quién es socio lo dice la tabla `socio` y sólo
+ * ella.
+ */
+export const CATEGORIAS_PERSONA = [
+  "PROVEEDOR",
+  "EMPLEADO",
+  "SOCIO",
+  "CLIENTE",
+  "OTRO",
+] as const;
+
+export type CategoriaPersona = (typeof CATEGORIAS_PERSONA)[number];
+
+export const ETIQUETA_CATEGORIA_PERSONA: Record<CategoriaPersona, string> = {
+  PROVEEDOR: "Proveedor",
+  EMPLEADO: "Empleado",
+  SOCIO: "Socio",
+  CLIENTE: "Cliente",
+  OTRO: "Otro",
+};
+
+export const esquemaCategoriaPersona = z.enum(CATEGORIAS_PERSONA);
+
+/**
  * El trabajador que cobra un recibo de nómina no es forzosamente un usuario
  * del sistema: `usuarioId` sólo existe cuando esa persona además opera la
  * aplicación.
@@ -220,11 +250,29 @@ export type Sucursal = {
 export type Empleado = {
   id: number;
   numEmpleado: string;
+  /** Nombre o nombres de pila. */
+  nombres: string;
+  apellidoPaterno: string;
+  /** Opcional: no todo el mundo lleva dos apellidos. */
+  apellidoMaterno: string | null;
+  /**
+   * Nombre completo. Es columna DERIVADA en la base, no capturada: así no
+   * puede existir un nombre impreso que contradiga a sus apellidos. Se manda a
+   * la pantalla ya armado para que nadie lo vuelva a concatenar por su cuenta.
+   */
   nombre: string;
+  departamento: string | null;
   puesto: string | null;
   sucursalId: number;
   usuarioId: number | null;
   activo: boolean;
+  /**
+   * Cuándo se inhabilitó. Dar de baja NO borra: el vendedor que renunció sigue
+   * citado por su nombre en cada recibo que cobró, y esos folios tienen que
+   * poder leerse años después. Lo único que cambia es que deja de ofrecerse en
+   * una captura nueva.
+   */
+  bajaEn: string | null;
 };
 
 // ===== DOCUMENTO FINANCIERO =====

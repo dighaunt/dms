@@ -162,11 +162,30 @@ export const esquemaValeEgreso = z
     folioRelacionadoTexto: textoOpcional(60),
     /** Recibo de nómina del trabajador. Obligatorio si el egreso es nómina. */
     reciboNominaId: idOpcional,
+    /**
+     * EL NOMBRE Y LA IDENTIFICACIÓN SE GUARDAN COMO TEXTO, y eso no es
+     * redundancia con `beneficiarioPersonaId`. Un vale firmado es un hecho: si
+     * el documento sólo guardara la referencia al catálogo, corregir mañana el
+     * nombre de esa persona cambiaría en silencio lo que alguien ya firmó. El
+     * texto es la foto de lo que se escribió; el enlace sirve para sumar y para
+     * no volver a teclear.
+     */
     beneficiarioNombre: esquemaNombrePersona,
     beneficiarioIdTipo: esquemaIdentificacion.shape.tipo,
     beneficiarioIdNumero: esquemaIdentificacion.shape.numero,
-    /** Qué socio retira. Obligatorio si el concepto es retiro de utilidades. */
-    socioUsuarioId: idOpcional,
+    /**
+     * Enlace opcional al catálogo de personas. Opcional por regla: a veces se
+     * le paga a alguien una sola vez en la vida y darlo de alta sería un
+     * estorbo. Cuando viene, `v_pagos_por_persona` puede sumar lo que se le ha
+     * pagado a esa persona en lugar de intentar cuadrar nombres tecleados.
+     */
+    beneficiarioPersonaId: idOpcional,
+    /**
+     * Qué socio retira. Obligatorio si el concepto es retiro de utilidades.
+     * Es una persona del registro de socios, no un usuario del sistema: ser
+     * accionista es una condición jurídica y no "tener cuenta en el DMS".
+     */
+    socioPersonaId: idOpcional,
     /**
      * Sólo las formas marcadas `afecta_caja_fisica` restan del arqueo del
      * corte; el catálogo lo decide, no este módulo.
@@ -193,10 +212,10 @@ export const esquemaValeEgreso = z
         message: "Un pago de nómina debe citar el recibo del trabajador",
       });
     }
-    if (datos.conceptoCodigo === CONCEPTO_RETIRO_SOCIO && datos.socioUsuarioId === null) {
+    if (datos.conceptoCodigo === CONCEPTO_RETIRO_SOCIO && datos.socioPersonaId === null) {
       ctx.addIssue({
         code: "custom",
-        path: ["socioUsuarioId"],
+        path: ["socioPersonaId"],
         message:
           "Indica qué socio retira: sin eso no hay a quién cargarle el anticipo cuando se haga el reparto formal",
       });
@@ -216,7 +235,9 @@ export type ValeEgreso = {
   beneficiarioNombre: string;
   beneficiarioIdTipo: string;
   beneficiarioIdNumero: string;
-  socioUsuarioId: number | null;
+  /** Enlace al catálogo, cuando el beneficiario está dado de alta. */
+  beneficiarioPersonaId: number | null;
+  socioPersonaId: number | null;
   formaPago: string;
   /** Cadena, nunca number: numeric(18,2) no cabe sin perder centavos. */
   importe: string;
@@ -233,7 +254,8 @@ type FilaValeEgreso = {
   beneficiario_nombre: string;
   beneficiario_id_tipo: string;
   beneficiario_id_numero: string;
-  socio_usuario_id: string | number | null;
+  beneficiario_persona_id: string | number | null;
+  socio_persona_id: string | number | null;
   forma_pago: string;
   importe: string;
 };
@@ -241,7 +263,7 @@ type FilaValeEgreso = {
 const COLUMNAS_VALE_EGRESO = `documento_id, fecha_hora, concepto_codigo, concepto_otro,
          folio_relacionado_id, folio_relacionado_texto, recibo_nomina_id,
          beneficiario_nombre, beneficiario_id_tipo, beneficiario_id_numero,
-         socio_usuario_id, forma_pago, importe`;
+         beneficiario_persona_id, socio_persona_id, forma_pago, importe`;
 
 function filaAValeEgreso(fila: FilaValeEgreso): ValeEgreso {
   return {
@@ -255,7 +277,8 @@ function filaAValeEgreso(fila: FilaValeEgreso): ValeEgreso {
     beneficiarioNombre: fila.beneficiario_nombre,
     beneficiarioIdTipo: fila.beneficiario_id_tipo,
     beneficiarioIdNumero: fila.beneficiario_id_numero,
-    socioUsuarioId: aNumeroOpcional(fila.socio_usuario_id),
+    beneficiarioPersonaId: aNumeroOpcional(fila.beneficiario_persona_id),
+    socioPersonaId: aNumeroOpcional(fila.socio_persona_id),
     formaPago: fila.forma_pago,
     importe: fila.importe,
   };
@@ -291,8 +314,8 @@ export async function capturarValeEgreso(
          (documento_id, fecha_hora, concepto_codigo, concepto_otro,
           folio_relacionado_id, folio_relacionado_texto, recibo_nomina_id,
           beneficiario_nombre, beneficiario_id_tipo, beneficiario_id_numero,
-          socio_usuario_id, forma_pago, importe)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          beneficiario_persona_id, socio_persona_id, forma_pago, importe)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        ON CONFLICT (documento_id) DO UPDATE
           SET fecha_hora              = EXCLUDED.fecha_hora,
               concepto_codigo         = EXCLUDED.concepto_codigo,
@@ -303,7 +326,8 @@ export async function capturarValeEgreso(
               beneficiario_nombre     = EXCLUDED.beneficiario_nombre,
               beneficiario_id_tipo    = EXCLUDED.beneficiario_id_tipo,
               beneficiario_id_numero  = EXCLUDED.beneficiario_id_numero,
-              socio_usuario_id        = EXCLUDED.socio_usuario_id,
+              beneficiario_persona_id = EXCLUDED.beneficiario_persona_id,
+              socio_persona_id        = EXCLUDED.socio_persona_id,
               forma_pago              = EXCLUDED.forma_pago,
               importe                 = EXCLUDED.importe
        RETURNING ${COLUMNAS_VALE_EGRESO}`,
@@ -318,7 +342,8 @@ export async function capturarValeEgreso(
         vale.beneficiarioNombre,
         vale.beneficiarioIdTipo,
         vale.beneficiarioIdNumero,
-        vale.socioUsuarioId,
+        vale.beneficiarioPersonaId,
+        vale.socioPersonaId,
         vale.formaPago,
         vale.importe,
       ],
@@ -658,21 +683,40 @@ export async function obtenerReciboNomina(documentoId: number): Promise<ReciboNo
  * balance y acta que lo aprobó, y por eso esas filas son inmutables.
  */
 export type AnticipoSocio = PosicionSocio & {
-  socioUsuarioId: number;
+  /** El socio es una PERSONA del registro de socios, no un usuario del DMS. */
+  socioPersonaId: number;
   socioNombre: string;
+  /** Sólo si ese socio además opera el sistema. Casi nunca lo hace. */
+  socioUsuarioId: number | null;
+  participacionPct: string | null;
+  /**
+   * Falso cuando ya se dio de baja. Se devuelve en lugar de filtrarlo aquí
+   * porque un socio que salió con saldo por comprobar sigue debiendo: quitarlo
+   * de la lista escondería justo lo que quedó pendiente. Lo que un selector de
+   * captura sí debe hacer es no ofrecerlo —`exigir_socio_vigente` lo rechaza—.
+   */
+  activo: boolean;
 };
 
 type FilaAnticipoSocio = {
-  socio_usuario_id: string | number;
+  socio_persona_id: string | number;
   socio_nombre: string;
+  socio_usuario_id: string | number | null;
+  participacion_pct: string | null;
+  activo: boolean;
   total_anticipos: string;
   total_repartido: string;
 };
 
 /**
- * Posición de cada socio que ha retirado dinero o recibido reparto: cuánto
- * lleva anticipado, cuánto respalda un balance formal y cuánto queda por
- * comprobar.
+ * Posición de cada socio registrado: cuánto lleva anticipado, cuánto respalda
+ * un balance formal y cuánto queda por comprobar.
+ *
+ * Salen TODOS los del registro, incluidos los de saldo cero. Antes la vista
+ * partía de `usuario` y sólo enumeraba a quien ya tenía movimiento, de modo
+ * que un socio recién dado de alta no existía para el sistema hasta que
+ * retiraba dinero; un tablero así no permite ver que alguien no ha recibido
+ * nada.
  *
  * La resta ya la hace la vista, pero la ETIQUETA con la que esto se presenta
  * la pone `posicionSocio`: "anticipo a cuenta de utilidades — saldo por
@@ -683,8 +727,11 @@ type FilaAnticipoSocio = {
  */
 export async function anticiposDeSocios(): Promise<AnticipoSocio[]> {
   const { rows } = await query<FilaAnticipoSocio>(
-    `SELECT a.socio_usuario_id,
+    `SELECT a.socio_persona_id,
             a.socio_nombre,
+            a.socio_usuario_id,
+            a.participacion_pct::text AS participacion_pct,
+            a.activo,
             a.total_anticipos,
             a.total_repartido
        FROM traza.v_anticipo_utilidades_socio a
@@ -707,8 +754,11 @@ export async function anticiposDeSocios(): Promise<AnticipoSocio[]> {
 
     return {
       ...posicion,
-      socioUsuarioId: aNumero(fila.socio_usuario_id),
+      socioPersonaId: aNumero(fila.socio_persona_id),
       socioNombre: fila.socio_nombre,
+      socioUsuarioId: aNumeroOpcional(fila.socio_usuario_id),
+      participacionPct: fila.participacion_pct,
+      activo: fila.activo,
     };
   });
 }
@@ -737,7 +787,8 @@ export const esquemaRepartoUtilidades = z
     asignaciones: z
       .array(
         z.object({
-          socioUsuarioId: esquemaId,
+          /** Persona del registro de socios, no usuario del sistema. */
+          socioPersonaId: esquemaId,
           monto: esquemaImporteNoNegativo,
         }),
       )
@@ -747,16 +798,16 @@ export const esquemaRepartoUtilidades = z
   .superRefine((datos, ctx) => {
     const vistos = new Set<number>();
     datos.asignaciones.forEach((asignacion, indice) => {
-      if (vistos.has(asignacion.socioUsuarioId)) {
-        // La llave primaria (reparto_id, socio_usuario_id) lo impediría con un
+      if (vistos.has(asignacion.socioPersonaId)) {
+        // La llave primaria (reparto_id, socio_persona_id) lo impediría con un
         // 23505 sin contexto; aquí se puede señalar el renglón repetido.
         ctx.addIssue({
           code: "custom",
-          path: ["asignaciones", indice, "socioUsuarioId"],
+          path: ["asignaciones", indice, "socioPersonaId"],
           message: "Ese socio ya tiene un renglón en este reparto; súmalo en uno solo",
         });
       }
-      vistos.add(asignacion.socioUsuarioId);
+      vistos.add(asignacion.socioPersonaId);
     });
 
     // ESTA COMPROBACIÓN NO DUPLICA NINGÚN CANDADO: el esquema no la tiene, y
@@ -785,7 +836,7 @@ export const esquemaRepartoUtilidades = z
 export type EntradaRepartoUtilidades = z.input<typeof esquemaRepartoUtilidades>;
 
 export type AsignacionReparto = {
-  socioUsuarioId: number;
+  socioPersonaId: number;
   socioNombre: string;
   montoAsignado: string;
 };
@@ -856,28 +907,29 @@ export async function registrarRepartoUtilidades(
     const reparto = cabecera.rows[0];
 
     await cliente.query(
-      `INSERT INTO traza.reparto_utilidades_socio (reparto_id, socio_usuario_id, monto_asignado)
+      `INSERT INTO traza.reparto_utilidades_socio (reparto_id, socio_persona_id, monto_asignado)
        SELECT $1, a.socio, a.monto
          FROM unnest($2::bigint[], $3::numeric[]) AS a(socio, monto)`,
       [
         reparto.id,
-        datos.asignaciones.map((asignacion) => asignacion.socioUsuarioId),
+        datos.asignaciones.map((asignacion) => asignacion.socioPersonaId),
         datos.asignaciones.map((asignacion) => asignacion.monto),
       ],
     );
 
     // Se releen ya guardadas para devolver el nombre del socio junto al monto
-    // y en un orden estable: de mayor a menor asignación.
+    // y en un orden estable: de mayor a menor asignación. El nombre sale del
+    // catálogo de personas, que es donde vive la identidad del accionista.
     const asignaciones = await cliente.query<{
-      socio_usuario_id: string | number;
+      socio_persona_id: string | number;
       socio_nombre: string;
       monto_asignado: string;
     }>(
-      `SELECT rs.socio_usuario_id, u.nombre AS socio_nombre, rs.monto_asignado
+      `SELECT rs.socio_persona_id, p.nombre AS socio_nombre, rs.monto_asignado
          FROM traza.reparto_utilidades_socio rs
-         JOIN traza.usuario u ON u.id = rs.socio_usuario_id
+         JOIN traza.persona p ON p.id = rs.socio_persona_id
         WHERE rs.reparto_id = $1
-        ORDER BY rs.monto_asignado DESC, u.nombre`,
+        ORDER BY rs.monto_asignado DESC, p.nombre`,
       [reparto.id],
     );
 
@@ -896,7 +948,7 @@ export async function registrarRepartoUtilidades(
       autorizadoPor: aNumero(reparto.autorizado_por),
       creadoEn: aIso(reparto.creado_en),
       asignaciones: asignaciones.rows.map((fila) => ({
-        socioUsuarioId: aNumero(fila.socio_usuario_id),
+        socioPersonaId: aNumero(fila.socio_persona_id),
         socioNombre: fila.socio_nombre,
         montoAsignado: fila.monto_asignado,
       })),
@@ -963,18 +1015,18 @@ export async function listarRepartosUtilidades(
 
   const { rows: renglones } = await query<{
     reparto_id: string | number;
-    socio_usuario_id: string | number;
+    socio_persona_id: string | number;
     socio_nombre: string;
     monto_asignado: string;
   }>(
     `SELECT rs.reparto_id,
-            rs.socio_usuario_id,
-            u.nombre AS socio_nombre,
+            rs.socio_persona_id,
+            p.nombre AS socio_nombre,
             rs.monto_asignado
        FROM traza.reparto_utilidades_socio rs
-       JOIN traza.usuario u ON u.id = rs.socio_usuario_id
+       JOIN traza.persona p ON p.id = rs.socio_persona_id
       WHERE rs.reparto_id = ANY($1::bigint[])
-      ORDER BY rs.monto_asignado DESC, u.nombre`,
+      ORDER BY rs.monto_asignado DESC, p.nombre`,
     [cabeceras.map((fila) => aNumero(fila.id))],
   );
 
@@ -983,7 +1035,7 @@ export async function listarRepartosUtilidades(
     const repartoId = aNumero(fila.reparto_id);
     const lista = porReparto.get(repartoId) ?? [];
     lista.push({
-      socioUsuarioId: aNumero(fila.socio_usuario_id),
+      socioPersonaId: aNumero(fila.socio_persona_id),
       socioNombre: fila.socio_nombre,
       montoAsignado: fila.monto_asignado,
     });

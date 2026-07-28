@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { BlurFade } from "@/components/ui/blur-fade";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getUsuarioSesion } from "@/lib/auth/usuario";
 import { query } from "@/lib/db";
 import { listarEmpleados, listarSucursales, tienePinDeFirma } from "@/lib/finanzas/catalogos";
@@ -46,6 +48,38 @@ export default async function CatalogosFinanzasPage() {
             Sucursales, personal y PIN de firma. Nada del módulo puede emitirse sin esto: el folio
             corre por sucursal y ningún documento se cierra sin una rúbrica que lo respalde.
           </p>
+        </div>
+      </BlurFade>
+
+      {/* Personas y socios viven en su propia pantalla y no en una pestaña
+          más: son catálogos que se consultan mientras se captura —"¿a este
+          proveedor ya se le dio de alta?", "¿quién figura como socio?"— y
+          poder llegar a ellos con una liga es parte de que sirvan. */}
+      <BlurFade delay={0.08}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Link href="/finanzas/catalogos/personas" className="block">
+            <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/50">
+              <CardHeader>
+                <CardTitle>Personas</CardTitle>
+                <CardDescription>
+                  A quién se le paga, y cuánto se le ha pagado. Sirve para no reteclear al proveedor
+                  de todas las semanas; en el vale el nombre se puede seguir escribiendo libremente.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <Link href="/finanzas/catalogos/socios" className="block">
+            <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/50">
+              <CardHeader>
+                <CardTitle>Socios</CardTitle>
+                <CardDescription>
+                  Quién tiene parte del capital social, con el acta que lo acredita. De aquí sale el
+                  selector del retiro de utilidades: no es la lista de usuarios del sistema.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
         </div>
       </BlurFade>
 
