@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { CheckIcon, CircleDashedIcon, InfoIcon, XIcon } from "lucide-react";
+import { CircleDashedIcon, InfoIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { postJson } from "@/lib/cliente-api";
 import { NOMBRE_TIPO } from "@/lib/juego-documental";
 import { cn } from "@/lib/utils";
+import { IconoSilk } from "@/components/iconos/silk";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,9 +61,13 @@ export function PanelModoRiesgo({ solicitudes }: { solicitudes: SolicitudRiesgo[
   return (
     <div className="space-y-8">
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold tracking-tight">Pendientes</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <IconoSilk nombre="reloj" tamano={14} className="shrink-0" />
+          Pendientes
+        </h2>
         {pendientes.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+            {/* Vacío: el círculo punteado es mueble y se apaga con el texto. */}
             <CircleDashedIcon className="size-6 text-muted-foreground/50" />
             Sin solicitudes pendientes.
           </div>
@@ -97,7 +102,7 @@ export function PanelModoRiesgo({ solicitudes }: { solicitudes: SolicitudRiesgo[
                     disabled={enviandoId === s.id}
                     onClick={() => setRechazarSolicitud(s)}
                   >
-                    <XIcon className="size-4" />
+                    <IconoSilk nombre="cancelar" className="size-4" />
                     Rechazar
                   </Button>
                   <AccionAprobar
@@ -113,7 +118,10 @@ export function PanelModoRiesgo({ solicitudes }: { solicitudes: SolicitudRiesgo[
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold tracking-tight">Historial</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <IconoSilk nombre="listado" tamano={14} className="shrink-0" />
+          Historial
+        </h2>
         {historial.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aún no hay solicitudes decididas.</p>
         ) : (
@@ -133,12 +141,22 @@ export function PanelModoRiesgo({ solicitudes }: { solicitudes: SolicitudRiesgo[
                       {s.tipo_codigo} · {NOMBRE_TIPO[s.tipo_codigo] ?? s.tipo_codigo}
                     </span>
                   </div>
+                  {/* La decisión es lo que se busca al recorrer el historial:
+                      la palomita y la equis se leen antes que la palabra. */}
                   {s.autorizada ? (
-                    <Badge className="border-emerald-300 bg-emerald-50 text-emerald-700" variant="outline">
+                    <Badge
+                      className="border-emerald-300 bg-emerald-50 text-emerald-700 [&>svg]:size-3.5"
+                      variant="outline"
+                    >
+                      <IconoSilk nombre="correcto" />
                       Aprobada
                     </Badge>
                   ) : (
-                    <Badge className="border-red-300 bg-red-50 text-red-700" variant="outline">
+                    <Badge
+                      className="border-red-300 bg-red-50 text-red-700 [&>svg]:size-3.5"
+                      variant="outline"
+                    >
+                      <IconoSilk nombre="alerta" />
                       Rechazada
                     </Badge>
                   )}
@@ -188,8 +206,9 @@ function AccionAprobar({
     <Popover open={abierto} onOpenChange={setAbierto}>
       <PopoverTrigger asChild>
         <Button type="button" size="sm" disabled={enviando}>
-          <CheckIcon className="size-4" />
+          <IconoSilk nombre="correcto" className="size-4" />
           {enviando ? "Aprobando…" : "Aprobar"}
+          {/* La «i» sólo avisa que hay confirmación; se atenúa con el botón. */}
           <InfoIcon className="size-3 opacity-55" />
         </Button>
       </PopoverTrigger>

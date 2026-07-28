@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -71,7 +72,11 @@ export function AccionesDocumento({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Enviar a firma</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            {/* El mismo icono con el que la cabecera marca el borrador. */}
+            <IconoSilk nombre="nota" className="shrink-0" />
+            Enviar a firma
+          </CardTitle>
           <CardDescription>
             Hasta que se firme, el documento se puede corregir. Después sólo admite un
             complementario.
@@ -88,6 +93,7 @@ export function AccionesDocumento({
               )
             }
           >
+            <IconoSilk nombre="editar" className="shrink-0" />
             Enviar a firma
           </Button>
           <div className="flex flex-1 gap-2">
@@ -107,6 +113,9 @@ export function AccionesDocumento({
                 )
               }
             >
+              {/* Cancelar un folio es un hecho del negocio —el número queda
+                  ocupado y explicado—, no la equis de cerrar un cuadro. */}
+              <IconoSilk nombre="cancelar" className="shrink-0" />
               Cancelar folio
             </Button>
           </div>
@@ -120,7 +129,10 @@ export function AccionesDocumento({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Firmar</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <IconoSilk nombre="editar" className="shrink-0" />
+          Firmar
+        </CardTitle>
         <CardDescription>
           Cada quien firma con su propio usuario y su propio PIN. Cuando no falte ninguna firma
           obligatoria, el documento queda cerrado e inalterable.
@@ -170,7 +182,10 @@ export function AccionesDocumento({
             servidor leyendo el documento, que es lo único que hace detectable
             una alteración posterior. */}
         <div className="space-y-1.5">
-          <Label>{esExterno ? "Tu PIN (atestiguas la firma)" : "Tu PIN de firma"}</Label>
+          <Label className="gap-1.5">
+            <IconoSilk nombre="llave" className="shrink-0" />
+            {esExterno ? "Tu PIN (atestiguas la firma)" : "Tu PIN de firma"}
+          </Label>
           <PinInput valor={pin} onChange={setPin} disabled={ocupado} />
         </div>
 
@@ -193,6 +208,10 @@ export function AccionesDocumento({
             )
           }
         >
+          {/* La pluma, la misma de «Firmas» y «Enviar a firma»: firmar es el
+              acto. El sello es lo que queda después, y por eso es el icono de
+              la tarjeta «Sellos» y del verificador. */}
+          <IconoSilk nombre="editar" className="shrink-0" />
           Firmar
         </Button>
       </CardContent>

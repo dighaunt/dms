@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { listarSucursales } from "@/lib/finanzas/catalogos";
@@ -51,10 +52,16 @@ export default async function ReportesPage({
   if (sucursales.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Reportes de Finanzas</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <IconoSilk nombre="reportes" tamano={20} className="shrink-0" />
+          Reportes de Finanzas
+        </h1>
         <Card>
           <CardHeader>
-            <CardTitle>Todavía no hay nada que reportar</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="aviso" className="shrink-0" />
+              Todavía no hay nada que reportar
+            </CardTitle>
             <CardDescription>
               No existe ninguna sucursal dada de alta, así que no se ha emitido ningún folio. Los
               reportes se arman con documentos firmados.{" "}
@@ -72,7 +79,10 @@ export default async function ReportesPage({
     <div className="space-y-6">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Reportes de Finanzas</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="reportes" tamano={20} className="shrink-0" />
+            Reportes de Finanzas
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Ingresos, egresos, diferencias de caja, ubicación del efectivo y utilidades por
             repartir. Sólo se cuentan documentos firmados: un borrador no es un ingreso.

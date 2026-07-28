@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -322,7 +323,10 @@ export function CapturaVale({
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Parte I · Datos del egreso</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="formulario" className="shrink-0" />
+              Parte I · Datos del egreso
+            </CardTitle>
             <CardDescription>
               Los campos siguen el orden de la forma impresa. El concepto decide qué más hay que
               acreditar: no es una etiqueta, es lo que hace legal la salida del dinero.
@@ -402,6 +406,7 @@ export function CapturaVale({
                 </Label>
                 {recibosNomina.length === 0 ? (
                   <Alert variant="destructive">
+                    <IconoSilk nombre="alerta" />
                     <AlertTitle>No hay recibos de nómina firmados</AlertTitle>
                     <AlertDescription>
                       Un pago de nómina tiene que citar el recibo del trabajador, y sólo sirve uno
@@ -438,6 +443,7 @@ export function CapturaVale({
                   // advertencia es lo único que separa de un doble egreso que
                   // después nadie sabe explicar en el corte.
                   <Alert variant="destructive">
+                    <IconoSilk nombre="alerta" />
                     <AlertTitle>Ese recibo ya tiene un vale de egreso</AlertTitle>
                     <AlertDescription>
                       Existe otro vale no cancelado que cita el folio {recibo.folioCompleto}. Si
@@ -460,6 +466,7 @@ export function CapturaVale({
                     que no tiene parte del capital social. */}
                 {socios.length === 0 ? (
                   <Alert variant="destructive">
+                    <IconoSilk nombre="alerta" />
                     <AlertTitle>Todavía no hay ningún socio dado de alta</AlertTitle>
                     <AlertDescription className="space-y-2">
                       <p>
@@ -504,6 +511,7 @@ export function CapturaVale({
                 )}
 
                 <Alert>
+                  <IconoSilk nombre="aviso" />
                   <AlertTitle>
                     Este importe se registra como ANTICIPO A CUENTA DE UTILIDADES
                   </AlertTitle>
@@ -616,7 +624,10 @@ export function CapturaVale({
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte II · Importe entregado</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="peso" className="shrink-0" />
+              Parte II · Importe entregado
+            </CardTitle>
             <CardDescription>
               El importe con letra se arma solo a partir de la cifra, como en el papel se escribe
               debajo de ella.
@@ -670,6 +681,7 @@ export function CapturaVale({
 
             {importeDifiereDelNeto && recibo && (
               <Alert className="sm:col-span-2">
+                <IconoSilk nombre="advertencia" />
                 <AlertTitle>El importe no coincide con el neto del recibo</AlertTitle>
                 <AlertDescription>
                   El recibo {recibo.folio} de {recibo.trabajador} tiene un neto de{" "}
@@ -684,7 +696,12 @@ export function CapturaVale({
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte III · Declaración y autorización</CardTitle>
+            {/* El candado: sin las tres firmas de esta parte, ningún efectivo
+                puede salir de la caja. */}
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="candado" className="shrink-0" />
+              Parte III · Declaración y autorización
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
@@ -708,7 +725,10 @@ export function CapturaVale({
       <div className="lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>Resumen</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="listado" className="shrink-0" />
+              Resumen
+            </CardTitle>
             <CardDescription>{concepto?.etiqueta ?? "sin concepto"}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -767,6 +787,7 @@ export function CapturaVale({
 
             {esRetiroSocio && (
               <Alert>
+                <IconoSilk nombre="aviso" />
                 <AlertTitle>Anticipo, no reparto</AlertTitle>
                 <AlertDescription>
                   Al firmarse, este importe engrosará el saldo por comprobar del socio hasta que un
@@ -776,6 +797,7 @@ export function CapturaVale({
             )}
 
             <Button className="w-full" disabled={guardando || !listo} onClick={guardar}>
+              <IconoSilk nombre="guardar" className="shrink-0" />
               {guardando ? "Guardando…" : "Emitir folio y guardar"}
             </Button>
             <p className="text-xs text-muted-foreground">

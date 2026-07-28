@@ -129,7 +129,7 @@ function AlertaOperativa({ children, className }: { children: React.ReactNode; c
         operativa— es el que combina con el fondo del recuadro y el que se
         reconoce como «cuidado con esto» sin leer todavía la frase.
       */}
-      <IconoSilk nombre="error" tamano={14} className="mt-0.5 shrink-0" />
+      <IconoSilk nombre="advertencia" tamano={14} className="mt-0.5 shrink-0" />
       <span>{children}</span>
     </p>
   );

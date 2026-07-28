@@ -123,7 +123,7 @@ export function AvisoErrorOperacion({
       {error.status >= 500 ? (
         <IconoSilk nombre="servidor" />
       ) : (
-        <IconoSilk nombre="advertencia" />
+        <IconoSilk nombre="alerta" />
       )}
       <AlertTitle>{error.titulo}</AlertTitle>
       <AlertDescription className="mt-1.5 w-full">

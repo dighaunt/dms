@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { HandshakeIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,7 +84,12 @@ export default async function RepartosUtilidadesPage() {
     <div className="space-y-6">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Reparto de utilidades</h1>
+          {/* El pastel partido es lo que es un reparto de utilidades; es el
+              mismo icono con el que se llega desde el panel de Finanzas. */}
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="pastel" tamano={20} className="shrink-0" />
+            Reparto de utilidades
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             El retiro de un socio es un anticipo a cuenta de utilidades hasta que un balance
             aprobado las arroje (LGSM art. 19). El reparto formal es el único hecho que convierte
@@ -97,7 +104,8 @@ export default async function RepartosUtilidadesPage() {
       <BlurFade delay={0.1}>
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              <HandshakeIcon className="size-4 shrink-0" />
               Posición de cada socio
               {conSaldo > 0 && <Badge variant="secondary">{conSaldo} con saldo</Badge>}
             </CardTitle>
@@ -168,7 +176,10 @@ export default async function RepartosUtilidadesPage() {
       <BlurFade delay={0.2}>
         <Card>
           <CardHeader>
-            <CardTitle>Repartos registrados</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="listado" className="shrink-0" />
+              Repartos registrados
+            </CardTitle>
             <CardDescription>
               Del balance más reciente al más antiguo. Cada uno es inmutable: no admite corrección
               ni baja, sólo otro reparto que lo complemente.

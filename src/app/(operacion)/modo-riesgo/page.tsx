@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { ShieldAlertIcon } from "lucide-react";
 
 import { getUsuarioSesion } from "@/lib/auth/usuario";
 import { query } from "@/lib/db";
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { PanelModoRiesgo } from "./panel";
 
@@ -43,7 +43,7 @@ export default async function ModoRiesgoPage() {
       <BlurFade delay={0.05}>
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <ShieldAlertIcon className="size-5 text-muted-foreground" />
+            <IconoSilk nombre="riesgo" tamano={22} className="shrink-0" />
             Modo riesgo
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

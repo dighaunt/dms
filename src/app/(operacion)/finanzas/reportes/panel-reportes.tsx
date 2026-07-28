@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,8 +58,11 @@ function esCero(monto: string): boolean {
  */
 function SinDatos({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-      {children}
+    <div className="flex gap-3 rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+      {/* Un reporte vacío se distingue de uno lleno de un vistazo, sin tener
+          que leer el párrafo que lo explica. */}
+      <IconoSilk nombre="informacion" className="mt-0.5 shrink-0" />
+      <div>{children}</div>
     </div>
   );
 }
@@ -76,7 +80,13 @@ function Cifra({
 }) {
   return (
     <div className="rounded-lg border p-4">
-      <p className="text-xs text-muted-foreground">{etiqueta}</p>
+      {/* El tono ya tiñe la cifra, pero el color solo no dice de qué se trata
+          —y Silk no hereda currentColor—: el icono nombra el hallazgo. */}
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {tono === "grave" && <IconoSilk nombre="alerta" tamano={14} className="shrink-0" />}
+        {tono === "aviso" && <IconoSilk nombre="advertencia" tamano={14} className="shrink-0" />}
+        {etiqueta}
+      </p>
       <p
         className={
           tono === "grave"
@@ -118,7 +128,10 @@ export function PanelReportesUI({ sucursales, filtro, panel, rangoInvalido }: Pr
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Filtro</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="buscar" className="shrink-0" />
+            Filtro
+          </CardTitle>
           <CardDescription>
             {nombreSucursal} · del {filtro.desde} al {filtro.hasta}
             {rangoInvalido && " · el rango de la dirección no era válido y se usó el mes en curso"}
@@ -180,12 +193,30 @@ export function PanelReportesUI({ sucursales, filtro, panel, rangoInvalido }: Pr
       </Card>
 
       <Tabs defaultValue="ingresos">
+        {/* Cinco reportes que no se parecen en nada: el icono es lo que
+            distingue una pestaña de otra antes de leer su nombre, y cada uno
+            repite el de la tarjeta que se abre debajo. */}
         <TabsList className="flex-wrap">
-          <TabsTrigger value="ingresos">Ingresos</TabsTrigger>
-          <TabsTrigger value="egresos">Egresos</TabsTrigger>
-          <TabsTrigger value="diferencias">Diferencias de caja</TabsTrigger>
-          <TabsTrigger value="posicion">Posición de efectivo</TabsTrigger>
-          <TabsTrigger value="socios">Utilidades por repartir</TabsTrigger>
+          <TabsTrigger value="ingresos">
+            <IconoSilk nombre="dinero" className="shrink-0" />
+            Ingresos
+          </TabsTrigger>
+          <TabsTrigger value="egresos">
+            <IconoSilk nombre="nota" className="shrink-0" />
+            Egresos
+          </TabsTrigger>
+          <TabsTrigger value="diferencias">
+            <IconoSilk nombre="riesgo" className="shrink-0" />
+            Diferencias de caja
+          </TabsTrigger>
+          <TabsTrigger value="posicion">
+            <IconoSilk nombre="monedas" className="shrink-0" />
+            Posición de efectivo
+          </TabsTrigger>
+          <TabsTrigger value="socios">
+            <IconoSilk nombre="pastel" className="shrink-0" />
+            Utilidades por repartir
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="ingresos" className="mt-4">
@@ -218,7 +249,10 @@ function Ingresos({ datos }: { datos: PanelReportes["ingresos"] }) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Ingresos por tipo</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="dinero" className="shrink-0" />
+            Ingresos por tipo
+          </CardTitle>
           <CardDescription>
             Ventas de contado (RCI-01), utilidad neta de consignas (RCI-03) e ingresos por servicio
             (RCI-04), sólo de folios firmados. La columna «en efectivo» es la que engordó el cajón
@@ -285,6 +319,7 @@ function Ingresos({ datos }: { datos: PanelReportes["ingresos"] }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
+            <IconoSilk nombre="monedas" className="shrink-0" />
             Ventas en consignación
             <Badge variant="secondary">{consignacion.etiquetaResguardo}</Badge>
           </CardTitle>
@@ -346,7 +381,10 @@ function PorSucursal({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{titulo}</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <IconoSilk nombre="sucursal" className="shrink-0" />
+          {titulo}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -383,7 +421,10 @@ function Egresos({ datos }: { datos: PanelReportes["egresos"] }) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Egresos por tipo</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="nota" className="shrink-0" />
+            Egresos por tipo
+          </CardTitle>
           <CardDescription>
             Vales de egreso (RCI-05) firmados, agrupados por concepto: nómina, comisiones, retiros
             de socios, proveedores y gastos. La nómina se cuenta por su vale y nunca por el recibo
@@ -467,7 +508,10 @@ function Diferencias({ datos }: { datos: PanelReportes["diferencias"] }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Diferencias de caja</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="riesgo" className="shrink-0" />
+            Diferencias de caja
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <SinDatos>
@@ -484,7 +528,10 @@ function Diferencias({ datos }: { datos: PanelReportes["diferencias"] }) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Diferencias de caja</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="riesgo" className="shrink-0" />
+            Diferencias de caja
+          </CardTitle>
           <CardDescription>
             Toda diferencia se explica o el día no cierra. Se muestran también los cortes que
             cuadraron: sin ese denominador, «tres faltantes» no significa nada.
@@ -525,7 +572,10 @@ function Diferencias({ datos }: { datos: PanelReportes["diferencias"] }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Corte por corte</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="tabla" className="shrink-0" />
+            Corte por corte
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -593,7 +643,12 @@ function PatronCard({
   return (
     <Card className="h-full">
       <CardHeader>
-        <CardTitle>{titulo}</CardTitle>
+        {/* Un patrón: lo que interesa aquí no es una cifra sino que se repita
+            en la misma sucursal o con el mismo custodio. */}
+        <CardTitle className="flex items-center gap-2">
+          <IconoSilk nombre="tendencia" className="shrink-0" />
+          {titulo}
+        </CardTitle>
         <CardDescription>Ordenado de mayor a menor faltante acumulado.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -652,7 +707,10 @@ function Posicion({ datos }: { datos: PanelReportes["posicion"] }) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>¿Dónde está el dinero?</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="monedas" className="shrink-0" />
+            ¿Dónde está el dinero?
+          </CardTitle>
           <CardDescription>
             Efectivo en caja física frente a lo depositado en banco, al último corte firmado de cada
             sucursal con fecha hasta {datos.corteHasta}. No incluye inventario: las unidades en
@@ -699,7 +757,10 @@ function Posicion({ datos }: { datos: PanelReportes["posicion"] }) {
       {conCorte.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Por sucursal</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="sucursal" className="shrink-0" />
+              Por sucursal
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -749,7 +810,10 @@ function Posicion({ datos }: { datos: PanelReportes["posicion"] }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Cuentas bancarias</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="dinero" className="shrink-0" />
+            Cuentas bancarias
+          </CardTitle>
           <CardDescription>
             Depósitos declarados en el último corte firmado de cada sucursal, consolidados por
             institución y cuenta.
@@ -802,7 +866,10 @@ function Socios({ datos }: { datos: PanelReportes["socios"] }) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Utilidades pendientes de reparto</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="pastel" className="shrink-0" />
+            Utilidades pendientes de reparto
+          </CardTitle>
           <CardDescription>
             Lo retirado por cada socio frente a lo que un reparto formal respalda. Mientras no
             exista un balance que arroje utilidades repartibles, todo retiro es anticipo a cuenta:
@@ -885,7 +952,10 @@ function Socios({ datos }: { datos: PanelReportes["socios"] }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Repartos formales registrados</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="listado" className="shrink-0" />
+            Repartos formales registrados
+          </CardTitle>
           <CardDescription>
             El balance y el acta que convierten un anticipo en utilidad efectivamente repartida.
           </CardDescription>

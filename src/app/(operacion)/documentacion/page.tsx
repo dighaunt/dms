@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowRightIcon, BookMarkedIcon } from "lucide-react";
+import { ArrowRightIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { CalculosDocumentales } from "./calculos";
 import { DescargasFormatos } from "./descargas";
@@ -13,7 +14,8 @@ export default function DocumentacionPage() {
     <div className="space-y-8">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="manuales" tamano={22} className="shrink-0" />
             Documentación
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -29,7 +31,7 @@ export default function DocumentacionPage() {
           className="group flex items-center justify-between gap-4 rounded-xl border bg-background p-4 transition-colors hover:border-primary/40 hover:bg-accent/40"
         >
           <div className="flex items-center gap-3">
-            <BookMarkedIcon className="size-5 text-primary" />
+            <IconoSilk nombre="guion" tamano={20} className="shrink-0" />
             <div>
               <p className="text-sm font-semibold">Manuales M-01 / M-02</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -43,7 +45,10 @@ export default function DocumentacionPage() {
 
       <BlurFade delay={0.12}>
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Mapa documental M-01</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+            <IconoSilk nombre="capas" tamano={18} className="shrink-0" />
+            Mapa documental M-01
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Qué es cada documento, cuál es su madre y qué destraba. Pica un nodo
             para ver su ficha; las flechas animadas marcan el candado de venta.

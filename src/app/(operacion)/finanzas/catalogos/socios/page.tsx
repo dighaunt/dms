@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { HandshakeIcon } from "lucide-react";
 
 import { BlurFade } from "@/components/ui/blur-fade";
 import { getUsuarioSesion } from "@/lib/auth/usuario";
@@ -74,7 +75,13 @@ export default async function SociosFinanzasPage() {
     <div className="space-y-6">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Registro de socios</h1>
+          {/* El apretón de manos, y no un grupo de personas: un socio no es
+              cualquiera del padrón, es quien tiene parte del capital social.
+              Silk no dibuja ninguna de las dos cosas. */}
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <HandshakeIcon className="size-5 shrink-0" />
+            Registro de socios
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Quién tiene parte del capital social. No es la lista de usuarios del sistema: un
             accionista rara vez opera el DMS, y quien opera el DMS casi nunca es accionista. De

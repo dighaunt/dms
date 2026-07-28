@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formasPago, listarSucursales } from "@/lib/finanzas/catalogos";
@@ -79,7 +80,8 @@ export default async function LiquidarConsignaPage({
     <div className="space-y-6">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="peso" tamano={20} className="shrink-0" />
             Liquidación de Venta en Consignación · CACM-RCI-03
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -93,7 +95,11 @@ export default async function LiquidarConsignaPage({
         <BlurFade delay={0.08}>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Liquidaciones ya abiertas</CardTitle>
+              {/* Ya tienen folio: es un aviso, no un listado más. */}
+              <CardTitle className="flex items-center gap-2 text-base">
+                <IconoSilk nombre="advertencia" className="shrink-0" />
+                Liquidaciones ya abiertas
+              </CardTitle>
               <CardDescription>
                 Estas unidades no aparecen abajo porque ya tienen su folio: emitir otro registraría
                 dos veces la misma venta.
@@ -154,12 +160,16 @@ export default async function LiquidarConsignaPage({
 function Aviso({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
+      <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+        <IconoSilk nombre="peso" tamano={20} className="shrink-0" />
         Liquidación de Venta en Consignación · CACM-RCI-03
       </h1>
       <Card>
         <CardHeader>
-          <CardTitle>{titulo}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="aviso" className="shrink-0" />
+            {titulo}
+          </CardTitle>
           <CardDescription>{children}</CardDescription>
         </CardHeader>
         <CardContent>

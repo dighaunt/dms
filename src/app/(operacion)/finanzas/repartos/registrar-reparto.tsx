@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { HandshakeIcon, UserPlusIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -206,6 +208,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
   if (!puedeRegistrar) {
     return (
       <Alert>
+        <IconoSilk nombre="candado" />
         <AlertTitle>El reparto lo autoriza un socio o el Gerente General</AlertTitle>
         <AlertDescription>
           Asentar un reparto formal no es una captura de operación: es aplicar un acuerdo de
@@ -222,6 +225,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
   if (socios.length === 0) {
     return (
       <Alert>
+        <HandshakeIcon />
         <AlertTitle>Todavía no hay socios registrados</AlertTitle>
         <AlertDescription className="space-y-2">
           <p>
@@ -242,7 +246,10 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Registrar un reparto formal</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <IconoSilk nombre="pastel" className="shrink-0" />
+          Registrar un reparto formal
+        </CardTitle>
         <CardDescription>
           Es el único hecho que convierte el anticipo de un socio en utilidad repartida. Lo que se
           asiente aquí baja el saldo por comprobar de cada socio en la misma cantidad.
@@ -252,6 +259,8 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
         {/* La inmutabilidad se anuncia arriba del formulario, no al guardar:
             la base la impone con bloquear_mutacion y para entonces ya es tarde. */}
         <Alert>
+          {/* Inmutable por diseño: el candado dice lo mismo que el título. */}
+          <IconoSilk nombre="candado" />
           <AlertTitle>Un reparto asentado no se corrige ni se borra</AlertTitle>
           <AlertDescription className="space-y-2">
             <p>
@@ -348,12 +357,16 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-medium">Asignación por socio</h3>
+              <h3 className="flex items-center gap-1.5 text-sm font-medium">
+                <HandshakeIcon className="size-4 shrink-0" />
+                Asignación por socio
+              </h3>
               <p className="text-xs text-muted-foreground">
                 Cada renglón descarga el saldo por comprobar del socio en esa cantidad.
               </p>
             </div>
             <Button size="sm" variant="secondary" onClick={agregarRenglon}>
+              <UserPlusIcon className="size-4 shrink-0" />
               Agregar socio
             </Button>
           </div>
@@ -449,6 +462,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
 
           {hayRepetidos && (
             <Alert variant="destructive">
+              <IconoSilk nombre="alerta" />
               <AlertTitle>Un socio aparece dos veces</AlertTitle>
               <AlertDescription>
                 La llave de la tabla es (reparto, socio): súmalo en un solo renglón.
@@ -458,6 +472,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
 
           {excedeLoRepartible && (
             <Alert variant="destructive">
+              <IconoSilk nombre="alerta" />
               <AlertTitle>Las asignaciones exceden la utilidad del balance</AlertTitle>
               <AlertDescription>
                 Se están asignando {importeEnCasillas(deCentavos(asignadoCentavos)).texto} contra
@@ -492,7 +507,10 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
       <Dialog open={confirmando} onOpenChange={(estado) => !guardando && setConfirmando(estado)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Asentar el reparto del ejercicio {ejercicio.trim()}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <IconoSilk nombre="pastel" className="shrink-0" />
+              Asentar el reparto del ejercicio {ejercicio.trim()}
+            </DialogTitle>
             <DialogDescription>
               Lo que confirmes queda inmutable: la base rechaza cualquier corrección posterior sobre
               el reparto y sus asignaciones. Revísalo ahora.
@@ -546,6 +564,7 @@ export function RegistrarReparto({ socios, puedeRegistrar, ejerciciosUsados }: P
               Volver a revisar
             </Button>
             <Button disabled={guardando || !listo} onClick={guardar}>
+              <IconoSilk nombre="guardar" className="shrink-0" />
               {guardando ? "Asentando…" : "Asentar definitivamente"}
             </Button>
           </DialogFooter>

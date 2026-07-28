@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Button } from "@/components/ui/button";
@@ -57,10 +58,16 @@ export default async function CortesPage({
   if (sucursales.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Cortes de caja diarios</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <IconoSilk nombre="monedas" tamano={20} className="shrink-0" />
+          Cortes de caja diarios
+        </h1>
         <Card>
           <CardHeader>
-            <CardTitle>Todavía no hay sucursales</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="aviso" className="shrink-0" />
+              Todavía no hay sucursales
+            </CardTitle>
             <CardDescription>
               El corte se abre por sucursal y su folio es consecutivo por sucursal, así que no
               puede emitirse ninguno hasta que exista al menos una.{" "}
@@ -121,7 +128,10 @@ export default async function CortesPage({
       <BlurFade delay={0.05}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Cortes de caja diarios</h1>
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+              <IconoSilk nombre="monedas" tamano={20} className="shrink-0" />
+              Cortes de caja diarios
+            </h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
               CACM-RCI-07. Es la rendición de cuentas diaria de quien tiene el efectivo a su
               cargo: concentra los folios firmados del día y responde cuánto entró, cuánto salió y
@@ -130,10 +140,14 @@ export default async function CortesPage({
           </div>
           <form method="get" className="flex items-end gap-2">
             <div className="space-y-1.5">
-              <Label htmlFor="fecha">Fecha del corte</Label>
+              <Label htmlFor="fecha" className="gap-1.5">
+                <IconoSilk nombre="calendario" className="shrink-0" />
+                Fecha del corte
+              </Label>
               <Input id="fecha" name="fecha" type="date" defaultValue={fecha} className="w-44" />
             </div>
             <Button type="submit" variant="secondary">
+              <IconoSilk nombre="buscar" className="shrink-0" />
               Ver
             </Button>
           </form>
@@ -146,6 +160,7 @@ export default async function CortesPage({
             <Card className="h-full">
               <CardHeader>
                 <CardTitle className="flex flex-wrap items-center gap-2">
+                  <IconoSilk nombre="sucursal" className="shrink-0" />
                   {sucursal.clave} · {sucursal.nombre}
                   {corte?.estado && (
                     <Badge variant={COLOR_ESTADO[corte.estado] ?? "outline"}>
@@ -163,7 +178,8 @@ export default async function CortesPage({
               <CardContent className="space-y-4 text-sm">
                 {corte ? (
                   <>
-                    <p className="font-mono text-xs text-muted-foreground">
+                    <p className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                      <IconoSilk nombre="documento" className="shrink-0" />
                       {corte.folioCompleto}
                     </p>
                     <dl className="grid grid-cols-2 gap-y-1">
@@ -190,14 +206,29 @@ export default async function CortesPage({
                     </dl>
 
                     {corte.diferencia !== null && corte.diferencia !== "0.00" && (
-                      <Badge variant="destructive">
-                        Diferencia {importeEnCasillas(corte.diferencia).texto}
-                      </Badge>
+                      /* El icono va fuera de la etiqueta: dentro, sobre el rojo
+                         del fondo, sus propias tintas se perderían. */
+                      <div className="flex items-center gap-2">
+                        <IconoSilk nombre="alerta" className="shrink-0" />
+                        <Badge variant="destructive">
+                          Diferencia {importeEnCasillas(corte.diferencia).texto}
+                        </Badge>
+                      </div>
                     )}
 
                     <Button asChild size="sm" variant="secondary">
                       <Link href={`/finanzas/cortes/${corte.documentoId}`}>
-                        {corte.estado === "BORRADOR" ? "Contar y cerrar el día" : "Ver el corte"}
+                        {corte.estado === "BORRADOR" ? (
+                          <>
+                            <IconoSilk nombre="candado" className="shrink-0" />
+                            Contar y cerrar el día
+                          </>
+                        ) : (
+                          <>
+                            <IconoSilk nombre="monedas" className="shrink-0" />
+                            Ver el corte
+                          </>
+                        )}
                       </Link>
                     </Button>
                   </>
@@ -210,7 +241,10 @@ export default async function CortesPage({
                     <input type="hidden" name="sucursal" value={sucursal.id} />
                     <input type="hidden" name="fecha" value={fecha} />
                     <div className="space-y-1.5">
-                      <Label htmlFor={`turno-${sucursal.id}`}>Turno</Label>
+                      <Label htmlFor={`turno-${sucursal.id}`} className="gap-1.5">
+                        <IconoSilk nombre="reloj" className="shrink-0" />
+                        Turno
+                      </Label>
                       {/* Lista y no texto libre: escritos a mano, "Matutino" y
                           "matutino" serían dos turnos distintos para la UNIQUE
                           del día, y cada variante abriría su propio corte. */}
@@ -228,6 +262,7 @@ export default async function CortesPage({
                       </select>
                     </div>
                     <Button type="submit" size="sm">
+                      <IconoSilk nombre="agregar" className="shrink-0" />
                       Abrir el corte del día
                     </Button>
                   </form>
@@ -235,7 +270,8 @@ export default async function CortesPage({
 
                 {pendientes.length > 0 && (
                   <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-                    <p className="font-medium">
+                    <p className="flex items-start gap-2 font-medium">
+                      <IconoSilk nombre="advertencia" className="mt-0.5 shrink-0" />
                       {pendientes.length} folio(s) del día sin firmar
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">

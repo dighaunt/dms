@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formasPago, listarEmpleados, listarSucursales } from "@/lib/finanzas/catalogos";
@@ -21,10 +22,16 @@ export default async function NuevoReciboNominaPage() {
   if (sucursales.length === 0 || empleados.length === 0 || formas.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Recibo de Pago de Nómina</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <IconoSilk nombre="listado" tamano={20} className="shrink-0" />
+          Recibo de Pago de Nómina
+        </h1>
         <Card>
           <CardHeader>
-            <CardTitle>Falta configurar el catálogo</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="aviso" className="shrink-0" />
+              Falta configurar el catálogo
+            </CardTitle>
             <CardDescription>
               {sucursales.length === 0
                 ? "No hay ninguna sucursal dada de alta, y el folio es consecutivo por sucursal y por tipo."
@@ -46,7 +53,8 @@ export default async function NuevoReciboNominaPage() {
     <div className="space-y-6">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="listado" tamano={20} className="shrink-0" />
             Recibo de Pago de Nómina · CACM-RCI-06
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

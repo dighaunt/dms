@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { HandshakeIcon, UserMinusIcon, UserPlusIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -191,6 +193,7 @@ export function PanelSocios({
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
+            <HandshakeIcon className="size-4 shrink-0" />
             Socios
             {vigentes.length > 0 && <Badge variant="outline">{vigentes.length} vigentes</Badge>}
           </CardTitle>
@@ -312,6 +315,7 @@ export function PanelSocios({
 
       {!puedeAdministrar ? (
         <Alert>
+          <IconoSilk nombre="candado" />
           <AlertTitle>El registro de socios lo lleva la administración global</AlertTitle>
           <AlertDescription>
             Asentar quién es dueño de parte de la empresa no es capturar una operación: se acredita
@@ -321,6 +325,7 @@ export function PanelSocios({
         </Alert>
       ) : !hayPersonas ? (
         <Alert>
+          <IconoSilk nombre="aviso" />
           <AlertTitle>Primero hace falta la persona</AlertTitle>
           <AlertDescription>
             Un socio se registra sobre una persona del catálogo —así el accionista no necesita
@@ -334,7 +339,10 @@ export function PanelSocios({
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Dar de alta a un socio</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlusIcon className="size-4 shrink-0" />
+              Dar de alta a un socio
+            </CardTitle>
             <CardDescription>
               Se registra sobre una persona del catálogo, no sobre un usuario del sistema: el
               accionista rara vez opera el DMS. Si esa persona además tiene cuenta, el enlace vive
@@ -413,6 +421,7 @@ export function PanelSocios({
             </div>
 
             <Button disabled={ocupado !== null || !listo} onClick={darDeAlta}>
+              <UserPlusIcon className="size-4 shrink-0" />
               {ocupado === "alta" ? "Registrando…" : "Registrar como socio"}
             </Button>
           </CardContent>
@@ -427,7 +436,10 @@ export function PanelSocios({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Dar de baja a {dandoDeBaja?.nombre}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <UserMinusIcon className="size-4 shrink-0" />
+              Dar de baja a {dandoDeBaja?.nombre}
+            </DialogTitle>
             <DialogDescription>
               Deja de figurar como socio vigente: no volverá a aparecer en un retiro de utilidades y
               la base rechazará cualquier vale nuevo a su nombre. Lo ya firmado no se toca —sus
@@ -452,6 +464,7 @@ export function PanelSocios({
 
             {dandoDeBaja?.tieneSaldoPorComprobar && (
               <Alert variant="destructive">
+                <IconoSilk nombre="alerta" />
                 <AlertTitle>Se va debiendo comprobar dinero</AlertTitle>
                 <AlertDescription>
                   {dandoDeBaja.nombre} tiene{" "}

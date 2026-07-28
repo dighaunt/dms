@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -298,7 +299,12 @@ export function CapturaLiquidacion({
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Parte I · Referencias de la operación</CardTitle>
+            {/* La cadena de eslabones: esta hoja no existe sola, cuelga del
+                ingreso a inventario y cita el recibo de la venta. */}
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="enlace" className="shrink-0" />
+              Parte I · Referencias de la operación
+            </CardTitle>
             <CardDescription>
               La liquidación cuelga del ingreso a inventario que declaró la consignación. La ficha
               del vehículo viene de ahí y por eso no se teclea.
@@ -386,7 +392,10 @@ export function CapturaLiquidacion({
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte II · Cálculo de la liquidación</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="peso" className="shrink-0" />
+              Parte II · Cálculo de la liquidación
+            </CardTitle>
             <CardDescription>
               Se capturan tres cifras: lo que se vendió, lo que se le entrega al consignante y los
               gastos. La cuarta —la utilidad— la calcula el sistema.
@@ -433,6 +442,7 @@ export function CapturaLiquidacion({
 
             {consignanteExcedeVenta && (
               <Alert variant="destructive">
+                <IconoSilk nombre="alerta" />
                 <AlertTitle>Al consignante no puede irle más de lo que se vendió</AlertTitle>
                 <AlertDescription>
                   El renglón 6 supera al renglón 5. Si la operación dejó pérdida, tiene que
@@ -446,6 +456,7 @@ export function CapturaLiquidacion({
               // Aviso, no candado: un consignante puede aceptar menos de lo que
               // autorizó, pero quien firma tiene que verlo antes de firmar.
               <Alert>
+                <IconoSilk nombre="advertencia" />
                 <AlertTitle>La venta quedó bajo el mínimo autorizado</AlertTitle>
                 <AlertDescription>
                   El consignante autorizó {importeEnCasillas(minimoPactado ?? "0").texto} y la venta
@@ -467,6 +478,7 @@ export function CapturaLiquidacion({
                   </p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={agregarGasto}>
+                  <IconoSilk nombre="agregar" className="shrink-0" />
                   Agregar renglón
                 </Button>
               </div>
@@ -581,7 +593,10 @@ export function CapturaLiquidacion({
       <div className="lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>8. Utilidad neta de la empresa</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="peso" className="shrink-0" />
+              8. Utilidad neta de la empresa
+            </CardTitle>
             <CardDescription>
               La calcula el sistema. No es un campo: es el resultado de las tres cifras de arriba, y
               la base la vuelve a calcular al guardar.
@@ -619,6 +634,7 @@ export function CapturaLiquidacion({
               // Una consigna que deja pérdida no se esconde ni se impide: es
               // justo lo que un socio necesita ver antes de firmar.
               <Alert variant="destructive">
+                <IconoSilk nombre="alerta" />
                 <AlertTitle>Esta consigna deja pérdida</AlertTitle>
                 <AlertDescription>
                   Los gastos y lo que se entrega al consignante superan el precio de venta. Se puede
@@ -646,6 +662,7 @@ export function CapturaLiquidacion({
             </div>
 
             <Button className="w-full" disabled={guardando || !listo} onClick={guardar}>
+              <IconoSilk nombre="guardar" className="shrink-0" />
               {guardando ? "Guardando…" : "Emitir folio y guardar"}
             </Button>
             <p className="text-xs text-muted-foreground">
@@ -729,8 +746,11 @@ function PanelAjuste({
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>
-              Folio <span className="font-mono">{liquidacion.folio}</span> guardado
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              <IconoSilk nombre="correcto" className="shrink-0" />
+              <span>
+                Folio <span className="font-mono">{liquidacion.folio}</span> guardado
+              </span>
             </CardTitle>
             <CardDescription>
               Estas son las cifras tal como quedaron en la base. La utilidad no se tecleó: se
@@ -760,6 +780,7 @@ function PanelAjuste({
             </div>
             {utilidadEsNegativa && (
               <Alert variant="destructive">
+                <IconoSilk nombre="alerta" />
                 <AlertTitle>Esta consigna dejó pérdida</AlertTitle>
                 <AlertDescription>
                   Queda registrada así. Un ajuste no la borra: la explica.
@@ -771,7 +792,10 @@ function PanelAjuste({
 
         <Card>
           <CardHeader>
-            <CardTitle>Ajuste de utilidad</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="editar" className="shrink-0" />
+              Ajuste de utilidad
+            </CardTitle>
             <CardDescription>
               Un ajuste no reescribe el renglón 8. La utilidad firmada sigue siendo{" "}
               {importeEnCasillas(liquidacion.utilidadNeta).texto}, porque es la que se puede
@@ -819,6 +843,7 @@ function PanelAjuste({
               disabled={enviando || !montoValido || !notaValida}
               onClick={registrarAjuste}
             >
+              <IconoSilk nombre="guardar" className="shrink-0" />
               {enviando ? "Registrando…" : "Registrar ajuste"}
             </Button>
           </CardContent>
@@ -827,7 +852,10 @@ function PanelAjuste({
         {liquidacion.ajustes.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Ajustes registrados</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <IconoSilk nombre="listado" className="shrink-0" />
+                Ajustes registrados
+              </CardTitle>
               <CardDescription>
                 Cada uno es un hecho independiente. Ninguno modificó la utilidad firmada.
               </CardDescription>
@@ -857,7 +885,10 @@ function PanelAjuste({
       <div className="lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>Resultado</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="peso" className="shrink-0" />
+              Resultado
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <Renglon
@@ -873,6 +904,7 @@ function PanelAjuste({
               los reportes internos: dice cuánto ganó la empresa después de las correcciones.
             </p>
             <Button className="w-full" variant="secondary" onClick={alSalir}>
+              <IconoSilk nombre="documento" className="shrink-0" />
               Abrir el folio y enviarlo a firma
             </Button>
           </CardContent>

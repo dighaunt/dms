@@ -31,6 +31,15 @@
  * usuario y grupo —la ausencia que más pesa en un sistema con pantallas de
  * personal y socios—, flechas, chevrones, ojo, y salir.
  *
+ * LOS ALIAS NOMBRAN EL DIBUJO, NO EL ARCHIVO. Los nombres originales de Silk
+ * engañan en varios casos, y confiar en ellos ya costó un error: `error.svg` es
+ * un TRIÁNGULO ÁMBAR y `exclamation.svg` un CÍRCULO ROJO —al revés de lo que
+ * sugieren—. Aquí se llaman `advertencia` y `alerta` respectivamente, que es lo
+ * que se ve. Mismo criterio con `cesta` (una cesta de compra, no una caja de
+ * efectivo) y `letreroNuevo` (el cartel naranja de NEW, que no sirve para
+ * "crear"). En un sistema donde el color comunica gravedad, un alias que miente
+ * acaba poniendo ámbar en un faltante de caja.
+ *
  * LICENCIA CC-BY-SA 3.0: exige crédito visible a Mark James y a frhun, y la
  * cláusula ShareAlike alcanza a cualquier icono que se modifique. El crédito lo
  * pone `CreditoIconos`.
@@ -39,14 +48,14 @@
 /** Alias en español; el nombre original de Silk queda dentro del sprite. */
 export const ICONOS_SILK = [
   "inicio", "expedientes", "finanzas", "reportes", "catalogos", "manuales", "riesgo", "sucursal",
-  "dinero", "monedas", "peso", "caja", "documento", "copia", "hoja", "hojaOk", "hojaMal", "guion",
+  "dinero", "monedas", "peso", "cesta", "documento", "copia", "hoja", "hojaOk", "hojaMal", "guion",
   "nota", "tabla", "formulario", "listado", "calendario", "fecha", "reloj", "imprimir", "guardar",
   "paquete", "adjuntar", "enlace", "editar", "campo", "buscar", "lupa", "agregar", "quitar",
-  "cancelar", "cerrar", "correcto", "palomita", "error", "advertencia", "informacion", "ayuda",
+  "cancelar", "cerrar", "correcto", "palomita", "advertencia", "alerta", "informacion", "ayuda",
   "aviso", "idea", "enLinea", "fueraDeLinea", "alto", "candado", "llave", "baseDatos", "servidor",
   "disco", "grafica", "pastel", "tendencia", "sello", "estrella", "herramienta", "defecto",
   "etiquetaAzul", "etiquetaVerde", "etiquetaRoja", "etiquetaNaranja", "etiquetaAmarilla",
-  "comentario", "correo", "imagen", "mundo", "capas", "monitor", "caja3d", "pestana", "nuevo",
+  "comentario", "correo", "imagen", "mundo", "capas", "monitor", "caja3d", "pestana", "letreroNuevo",
 ] as const;
 
 export type NombreIconoSilk = (typeof ICONOS_SILK)[number];

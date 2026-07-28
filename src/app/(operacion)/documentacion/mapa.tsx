@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DownloadIcon } from "lucide-react";
 import {
   Background,
   Controls,
@@ -12,6 +11,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { DEPENDENCIAS, FICHAS, type FichaDocumento } from "@/lib/mapa-documental";
+import { IconoSilk } from "@/components/iconos/silk";
 import { cn } from "@/lib/utils";
 
 // Posiciones por etapa (columnas) — el flujo va de Adquisición a Venta.
@@ -129,7 +129,7 @@ export function MapaDocumental() {
           download={`${ficha.codigo} ${ficha.nombre}.pdf`}
           className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium shadow-xs hover:bg-accent"
         >
-          <DownloadIcon className="size-3.5" />
+          <IconoSilk nombre="documento" className="size-3.5" />
           Descargar {ficha.categoria === "CONTRATO" ? "contrato" : "formato"} (PDF)
         </a>
 

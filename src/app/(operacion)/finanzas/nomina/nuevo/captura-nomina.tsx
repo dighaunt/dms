@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { UserIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -218,7 +220,12 @@ export function CapturaNomina({ sucursales, empleados, formasPago }: Props) {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Parte I · Datos del trabajador y período</CardTitle>
+            {/* Silk no dibuja persona; el trabajador es justo lo que esta parte
+                identifica, así que aquí se queda el juego monocromo. */}
+            <CardTitle className="flex items-center gap-2">
+              <UserIcon className="size-4 shrink-0" />
+              Parte I · Datos del trabajador y período
+            </CardTitle>
             <CardDescription>
               Puesto y número de empleado vienen del catálogo de personal y por eso no se teclean:
               si se volvieran a capturar, el recibo y la ficha del trabajador podrían acabar
@@ -306,7 +313,10 @@ export function CapturaNomina({ sucursales, empleados, formasPago }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte II · Percepciones y deducciones</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="monedas" className="shrink-0" />
+              Parte II · Percepciones y deducciones
+            </CardTitle>
             <CardDescription>
               Los renglones que no apliquen se dejan en blanco y valen cero. Los dos totales los
               suma la base al guardar; lo que ves mientras capturas es la misma cuenta hecha en
@@ -364,7 +374,10 @@ export function CapturaNomina({ sucursales, empleados, formasPago }: Props) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Parte III · Neto pagado</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="peso" className="shrink-0" />
+              Parte III · Neto pagado
+            </CardTitle>
             <CardDescription>
               El neto no es una casilla que se teclee: es percepciones menos deducciones, y lo
               calcula la base.
@@ -421,7 +434,10 @@ export function CapturaNomina({ sucursales, empleados, formasPago }: Props) {
       <div className="lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>Cálculo en vivo</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="listado" className="shrink-0" />
+              Cálculo en vivo
+            </CardTitle>
             <CardDescription>{empleado?.nombre ?? "sin trabajador"}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -456,6 +472,7 @@ export function CapturaNomina({ sucursales, empleados, formasPago }: Props) {
               // El CHECK de la tabla lo rechazaría igual, pero después de haber
               // consumido un folio consecutivo que ya no se puede reciclar.
               <Alert variant="destructive">
+                <IconoSilk nombre="alerta" />
                 <AlertTitle>Las deducciones superan a las percepciones</AlertTitle>
                 <AlertDescription>
                   Un neto negativo significaría que el trabajador le debe a la empresa por su propio
@@ -473,6 +490,7 @@ export function CapturaNomina({ sucursales, empleados, formasPago }: Props) {
             )}
 
             <Alert>
+              <IconoSilk nombre="informacion" />
               <AlertTitle>La cifra que vale es la de la base</AlertTitle>
               <AlertDescription>
                 Totales y neto son columnas calculadas por la base de datos y no se envían desde
@@ -491,6 +509,7 @@ export function CapturaNomina({ sucursales, empleados, formasPago }: Props) {
             </div>
 
             <Button className="w-full" disabled={guardando || !listo} onClick={guardar}>
+              <IconoSilk nombre="guardar" className="shrink-0" />
               {guardando ? "Guardando…" : "Emitir folio y guardar"}
             </Button>
             <p className="text-xs text-muted-foreground">

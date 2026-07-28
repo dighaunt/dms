@@ -505,7 +505,7 @@ export function WizardDocumento({
                     {issuesSinControl.length > 0 && (
                       <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4">
                         <p className="flex items-center gap-2 text-sm font-medium text-red-900">
-                          <IconoSilk nombre="advertencia" className="shrink-0" />
+                          <IconoSilk nombre="alerta" className="shrink-0" />
                           Datos que el sistema resuelve solo y no pasaron la validación
                         </p>
                         <ul className="mt-2 space-y-1 text-xs leading-relaxed text-red-800">

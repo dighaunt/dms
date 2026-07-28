@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { UsersIcon } from "lucide-react";
 
 import { BlurFade } from "@/components/ui/blur-fade";
 import { getUsuarioSesion } from "@/lib/auth/usuario";
@@ -74,7 +75,12 @@ export default async function PersonasFinanzasPage() {
     <div className="space-y-6">
       <BlurFade delay={0.05}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Catálogo de personas</h1>
+          {/* Silk no dibuja persona ni grupo —es la ausencia que más pesa en
+              este módulo—, así que toda esta pantalla usa el juego monocromo. */}
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <UsersIcon className="size-5 shrink-0" />
+            Catálogo de personas
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             A quién se le paga. Estar aquí no obliga a nada: en el vale de egreso el nombre se
             puede seguir escribiendo libremente, y elegir la ficha sólo sirve para no volver a

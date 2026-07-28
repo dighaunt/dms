@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { UserMinusIcon, UserPlusIcon, UsersIcon } from "lucide-react";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
@@ -77,10 +79,23 @@ export function AdministrarCatalogos({
   return (
     // Quien no administra entra directo a lo único que sí es suyo: su PIN.
     <Tabs defaultValue={esAdministrador ? "sucursales" : "pin"}>
+      {/* Las tres pestañas se recorren con la vista, como las entradas de un
+          menú: el icono es lo que distingue «Personal» de «Mi PIN» antes de
+          leerlas. Personal se queda con el juego monocromo porque Silk no
+          dibuja grupo. */}
       <TabsList>
-        <TabsTrigger value="sucursales">Sucursales</TabsTrigger>
-        <TabsTrigger value="empleados">Personal</TabsTrigger>
-        <TabsTrigger value="pin">Mi PIN de firma</TabsTrigger>
+        <TabsTrigger value="sucursales">
+          <IconoSilk nombre="sucursal" className="shrink-0" />
+          Sucursales
+        </TabsTrigger>
+        <TabsTrigger value="empleados">
+          <UsersIcon className="size-4 shrink-0" />
+          Personal
+        </TabsTrigger>
+        <TabsTrigger value="pin">
+          <IconoSilk nombre="llave" className="shrink-0" />
+          Mi PIN de firma
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="sucursales">
@@ -161,7 +176,10 @@ function PanelSucursales({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Sucursales</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="sucursal" className="shrink-0" />
+            Sucursales
+          </CardTitle>
           <CardDescription>
             El consecutivo de cada formato corre por sucursal y por tipo, así que sin al menos una
             no puede emitirse ningún documento.
@@ -215,7 +233,10 @@ function PanelSucursales({
       {esAdministrador ? (
         <Card>
           <CardHeader>
-            <CardTitle>Dar de alta una sucursal</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <IconoSilk nombre="agregar" className="shrink-0" />
+              Dar de alta una sucursal
+            </CardTitle>
             <CardDescription>
               La clave se escribe dentro del folio (CACM-RCI-01-MTY-0001) y queda impresa en todo
               lo que se emita, así que no se puede cambiar después: hacerlo reescribiría la cita de
@@ -264,12 +285,14 @@ function PanelSucursales({
               disabled={ocupado !== null || !claveValida || claveRepetida || !nombreValido}
               onClick={darDeAlta}
             >
+              <IconoSilk nombre="agregar" className="shrink-0" />
               {ocupado === "alta" ? "Dando de alta…" : "Dar de alta"}
             </Button>
           </CardContent>
         </Card>
       ) : (
         <Alert>
+          <IconoSilk nombre="candado" />
           <AlertTitle>Alta reservada a la administración del sistema</AlertTitle>
           <AlertDescription>
             Abrir o cerrar una sucursal abre y cierra una serie de folios. Solicítalo a un
@@ -423,7 +446,10 @@ function PanelEmpleados({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Personal</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <UsersIcon className="size-4 shrink-0" />
+            Personal
+          </CardTitle>
           <CardDescription>
             Quien aparece como vendedor en un RCI-01 o como trabajador en un recibo de nómina sale
             de aquí.
@@ -543,6 +569,7 @@ function PanelEmpleados({
 
       {!esAdministrador ? (
         <Alert>
+          <IconoSilk nombre="candado" />
           <AlertTitle>Alta reservada a la administración del sistema</AlertTitle>
           <AlertDescription>
             El personal se da de alta desde la administración global (N3), porque de esta lista
@@ -551,6 +578,7 @@ function PanelEmpleados({
         </Alert>
       ) : activas.length === 0 ? (
         <Alert>
+          <IconoSilk nombre="aviso" />
           <AlertTitle>Primero hace falta una sucursal</AlertTitle>
           <AlertDescription>
             Cada ficha de personal pertenece a una sucursal. Da de alta al menos una en la pestaña
@@ -560,7 +588,10 @@ function PanelEmpleados({
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Dar de alta personal</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlusIcon className="size-4 shrink-0" />
+              Dar de alta personal
+            </CardTitle>
             <CardDescription>
               El usuario del sistema es opcional y casi siempre sobra: el trabajador que cobra un
               recibo de nómina no tiene por qué operar la aplicación. Sólo se enlaza cuando la
@@ -696,6 +727,7 @@ function PanelEmpleados({
             )}
 
             <Button disabled={guardando || !listoParaGuardar} onClick={darDeAlta}>
+              <UserPlusIcon className="size-4 shrink-0" />
               {guardando ? "Dando de alta…" : "Dar de alta"}
             </Button>
           </CardContent>
@@ -711,7 +743,10 @@ function PanelEmpleados({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Dar de baja a {porDarDeBaja?.nombre}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <UserMinusIcon className="size-4 shrink-0" />
+              Dar de baja a {porDarDeBaja?.nombre}
+            </DialogTitle>
             <DialogDescription>
               Deja de aparecer en las capturas nuevas. No se borra nada.
             </DialogDescription>
@@ -785,6 +820,7 @@ function PanelPin({ tienePin, miNombre }: { tienePin: boolean; miNombre: string 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="llave" className="shrink-0" />
             Mi PIN de firma
             <Badge variant={tienePin ? "secondary" : "destructive"}>
               {tienePin ? "Establecido" : "Sin establecer"}
@@ -800,6 +836,7 @@ function PanelPin({ tienePin, miNombre }: { tienePin: boolean; miNombre: string 
         <CardContent className="space-y-6">
           {!tienePin && (
             <Alert>
+              <IconoSilk nombre="aviso" />
               <AlertTitle>Todavía no puedes firmar</AlertTitle>
               <AlertDescription>
                 Establece tu PIN antes de capturar: quedarte a medias de una firma con el documento
@@ -836,6 +873,7 @@ function PanelPin({ tienePin, miNombre }: { tienePin: boolean; miNombre: string 
           </div>
 
           <Button disabled={guardando || !coinciden} onClick={guardar}>
+            <IconoSilk nombre="llave" className="shrink-0" />
             {guardando ? "Guardando…" : tienePin ? "Cambiar mi PIN" : "Establecer mi PIN"}
           </Button>
 

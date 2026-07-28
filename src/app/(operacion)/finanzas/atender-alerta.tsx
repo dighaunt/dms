@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { IconoSilk } from "@/components/iconos/silk";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -112,9 +113,17 @@ export function AtenderAlerta({
       <Dialog open={abierto} onOpenChange={(estado) => !guardando && setAbierto(estado)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              Atender la alerta · {etiquetaTipo}
-              {severidad === "GRAVE" ? " (grave)" : ""}
+            <DialogTitle className="flex items-center gap-2">
+              {/* La severidad se lee antes que el texto: una alerta grave y un
+                  aviso no se atienden con la misma prisa. */}
+              <IconoSilk
+                nombre={severidad === "GRAVE" ? "advertencia" : "aviso"}
+                className="shrink-0"
+              />
+              <span>
+                Atender la alerta · {etiquetaTipo}
+                {severidad === "GRAVE" ? " (grave)" : ""}
+              </span>
             </DialogTitle>
             <DialogDescription>
               Atender no borra la alerta: la explica. Queda registrada con tu nombre, la hora y la
@@ -149,6 +158,7 @@ export function AtenderAlerta({
               Volver
             </Button>
             <Button disabled={guardando || !suficiente} onClick={atender}>
+              <IconoSilk nombre="correcto" className="shrink-0" />
               {guardando ? "Guardando…" : "Dar por atendida"}
             </Button>
           </DialogFooter>
