@@ -82,6 +82,27 @@ INSERT INTO empleado (num_empleado, nombre, puesto, sucursal_id, usuario_id, cre
  ('E-02','Asesor Servicio','Asesor de servicio',(SELECT id FROM sucursal WHERE clave='MTY'),
   NULL,(SELECT id FROM usuario WHERE email='gerente@t.mx'))
 ON CONFLICT (sucursal_id, num_empleado) DO NOTHING;
+
+-- Desde la migración 040 ser socio es una condición que se registra, no algo que
+-- se derive de tener cuenta en el DMS: el retiro apunta a una fila de socio y
+-- ésta se monta sobre una persona del catálogo. La persona queda enlazada al
+-- usuario socio@t.mx porque en esta suite ese actor también firma, pero el
+-- enlace es opcional por diseño.
+INSERT INTO persona (nombre, id_tipo, id_numero, categoria, usuario_id, creada_por)
+SELECT 'Socio Prueba','INE','IDMX-SOCIO-SC1','SOCIO',
+       (SELECT id FROM usuario WHERE email='socio@t.mx'),
+       (SELECT id FROM usuario WHERE email='gerente@t.mx')
+WHERE NOT EXISTS (
+  SELECT 1 FROM persona WHERE upper(trim(id_tipo)) = 'INE' AND upper(trim(id_numero)) = 'IDMX-SOCIO-SC1'
+);
+
+-- Sin participación declarada a propósito: es opcional en el modelo y así la
+-- semilla no consume parte del 100 por ciento que reparten los casos del tope.
+INSERT INTO socio (persona_id, acta_referencia, creado_por)
+SELECT p.id, 'ACTA-CONSTITUTIVA-2019-01', (SELECT id FROM usuario WHERE email='gerente@t.mx')
+  FROM persona p
+ WHERE upper(trim(p.id_tipo)) = 'INE' AND upper(trim(p.id_numero)) = 'IDMX-SOCIO-SC1'
+   AND NOT EXISTS (SELECT 1 FROM socio s WHERE s.persona_id = p.id);
 `;
 
 /** Los identificadores son bigint y el driver los entrega como texto; se dejan así. */
@@ -91,6 +112,8 @@ type Escenario = {
   sucursalId: string;
   empleadoVendedor: string;
   empleadoAsesor: string;
+  /** Persona dada de alta como socio vigente: a ella se cargan los retiros. */
+  socioPersonaId: string;
   /** Las fechas salen de la base y no de Node: `current_date` y `::date` se
    *  resuelven con la zona horaria de la sesión, y dos relojes distintos
    *  harían fallar el corte de ayer un rato cada noche. */
@@ -122,6 +145,11 @@ async function conEscenario(cuerpo: (esc: Escenario) => Promise<void>): Promise<
     const fechas = await cx.query<{ hoy: string; ayer: string }>(
       "SELECT current_date::text AS hoy, (current_date - 1)::text AS ayer",
     );
+    const socio = await cx.query<{ persona_id: string }>(
+      `SELECT s.persona_id FROM socio s
+         JOIN persona p ON p.id = s.persona_id
+        WHERE upper(trim(p.id_tipo)) = 'INE' AND upper(trim(p.id_numero)) = 'IDMX-SOCIO-SC1'`,
+    );
 
     await cuerpo({
       cx,
@@ -129,6 +157,7 @@ async function conEscenario(cuerpo: (esc: Escenario) => Promise<void>): Promise<
       sucursalId: sucursal.rows[0].id,
       empleadoVendedor: empleados.rows.filter((e) => e.num_empleado === "E-01")[0].id,
       empleadoAsesor: empleados.rows.filter((e) => e.num_empleado === "E-02")[0].id,
+      socioPersonaId: socio.rows[0].persona_id,
       hoy: fechas.rows[0].hoy,
       ayer: fechas.rows[0].ayer,
     });
@@ -313,7 +342,14 @@ type Movimiento = {
   destino: "FIRMADO" | "PENDIENTE_DE_FIRMA" | "BORRADOR" | "CANCELADO";
   /** Fecha de la operación; por omisión, hoy. */
   fecha?: string;
+  /** Retiro del socio de la semilla; el vale se carga a su fila de `socio`. */
   esDeSocio?: boolean;
+  /** Otro socio distinto al de la semilla, cuando el caso lo necesita. */
+  socioPersonaId?: string;
+  /** Enlace opcional del beneficiario al catálogo, lo que permite sumarle pagos. */
+  beneficiarioPersonaId?: string;
+  /** Nombre del beneficiario; por omisión se deriva de la clave del movimiento. */
+  beneficiario?: string;
   /** Lo que el corte debe registrar de este folio; null si no toca la caja. */
   esperado: { naturaleza: "INGRESO" | "EGRESO"; grupo: string } | null;
 };
@@ -414,17 +450,21 @@ async function registrarMovimiento(esc: Escenario, mov: Movimiento): Promise<str
   }
 
   const documentoId = await emitirFolio(esc, "CACM-RCI-05", esc.usuarios.gerente);
+  const beneficiario = nombreBeneficiario(mov);
   await esc.cx.query(
     `INSERT INTO vale_egreso_rci05
        (documento_id, fecha_hora, concepto_codigo, beneficiario_nombre, beneficiario_id_tipo,
-        beneficiario_id_numero, socio_usuario_id, forma_pago, importe)
-     VALUES ($1, $2, $3, $4, 'INE', 'IDMX7654321', $5, $6, $7)`,
+        beneficiario_id_numero, socio_persona_id, beneficiario_persona_id, forma_pago, importe)
+     VALUES ($1, $2, $3, $4, 'INE', 'IDMX7654321', $5, $6, $7, $8)`,
     [
       documentoId,
       momento,
       mov.concepto ?? "GASTO_OPERATIVO",
-      mov.esDeSocio ? "Socio Prueba" : `Beneficiario de ${mov.clave}`,
-      mov.esDeSocio ? esc.usuarios.socio : null,
+      beneficiario,
+      // El vale ya no apunta a un usuario: la condición de socio vive en la
+      // tabla `socio`, montada sobre la persona del catálogo.
+      mov.socioPersonaId ?? (mov.esDeSocio ? esc.socioPersonaId : null),
+      mov.beneficiarioPersonaId ?? null,
       mov.formaPago ?? "EFECTIVO",
       mov.importe,
     ],
@@ -439,14 +479,14 @@ async function registrarMovimiento(esc: Escenario, mov: Movimiento): Promise<str
   }
   await firmarInterno(esc, documentoId, "AUTORIZO_GERENTE", "gerente");
   await firmarInterno(esc, documentoId, "ENTREGO_CUSTODIO", "custodio");
-  await firmarPresencial(
-    esc,
-    documentoId,
-    "RECIBIO_BENEFICIARIO",
-    mov.esDeSocio ? "Socio Prueba" : `Beneficiario de ${mov.clave}`,
-    "custodio",
-  );
+  await firmarPresencial(esc, documentoId, "RECIBIO_BENEFICIARIO", beneficiario, "custodio");
   return documentoId;
+}
+
+/** Quién cobra el vale, tal como se teclea en el papel. */
+function nombreBeneficiario(mov: Movimiento): string {
+  if (mov.beneficiario) return mov.beneficiario;
+  return mov.esDeSocio ? "Socio Prueba" : `Beneficiario de ${mov.clave}`;
 }
 
 async function sembrarDia(
@@ -595,16 +635,25 @@ async function saldoInicialDe(esc: Escenario, fecha: string): Promise<string> {
 // ===== Anticipos de socio =====
 
 type PosicionEnBase = {
+  socio_nombre: string;
+  socio_usuario_id: string | null;
+  participacion_pct: string | null;
+  activo: boolean;
   total_anticipos: string;
   total_repartido: string;
   saldo_por_comprobar: string;
 };
 
-async function posicionEnBase(esc: Escenario, socioId: string): Promise<PosicionEnBase | null> {
+/**
+ * La vista se consulta por la PERSONA del socio, no por su usuario: desde la
+ * 040 un socio puede no tener cuenta en el DMS y aun así tener que aparecer.
+ */
+async function posicionEnBase(esc: Escenario, personaId: string): Promise<PosicionEnBase | null> {
   const { rows } = await esc.cx.query<PosicionEnBase>(
-    `SELECT total_anticipos, total_repartido, saldo_por_comprobar
-       FROM v_anticipo_utilidades_socio WHERE socio_usuario_id = $1`,
-    [socioId],
+    `SELECT socio_nombre, socio_usuario_id, participacion_pct, activo,
+            total_anticipos, total_repartido, saldo_por_comprobar
+       FROM v_anticipo_utilidades_socio WHERE socio_persona_id = $1`,
+    [personaId],
   );
   return rows[0] ?? null;
 }
@@ -633,9 +682,9 @@ async function registrarReparto(
     [datos.ejercicio, datos.utilidadRepartible, datos.acta, esc.usuarios.gerente],
   );
   await esc.cx.query(
-    `INSERT INTO reparto_utilidades_socio (reparto_id, socio_usuario_id, monto_asignado)
+    `INSERT INTO reparto_utilidades_socio (reparto_id, socio_persona_id, monto_asignado)
      VALUES ($1, $2, $3)`,
-    [rows[0].id, esc.usuarios.socio, datos.asignadoAlSocio],
+    [rows[0].id, esc.socioPersonaId, datos.asignadoAlSocio],
   );
   return rows[0].id;
 }
@@ -649,8 +698,10 @@ test(
   { skip: SIN_BASE },
   async () => {
     await conEscenario(async (esc) => {
-      // Un vale sin firmar todavía no es dinero entregado: la vista sólo cuenta
-      // lo FIRMADO, y por eso el socio ni siquiera aparece aún.
+      // Un vale sin firmar todavía no es dinero entregado: la vista sólo suma lo
+      // FIRMADO. El socio SÍ aparece —desde la 040 la vista parte del registro
+      // de socios y los enumera a todos—, pero con la posición en ceros: lo que
+      // no está firmado no le carga nada.
       await registrarMovimiento(esc, {
         clave: "borrador-socio",
         tipo: "CACM-RCI-05",
@@ -660,12 +711,15 @@ test(
         destino: "PENDIENTE_DE_FIRMA",
         esperado: null,
       });
-      assert.equal(await posicionEnBase(esc, esc.usuarios.socio), null);
+      const sinFirmar = await posicionEnBase(esc, esc.socioPersonaId);
+      assert.ok(sinFirmar, "el socio registrado debe aparecer aunque no tenga movimiento firmado");
+      assert.equal(importe(sinFirmar.total_anticipos), "0.00");
+      assert.equal(importe(sinFirmar.saldo_por_comprobar), "0.00");
 
       const valeId = await retiroDeSocio(esc, "retiro-1", "30000.00");
       assert.equal(await estadoDe(esc, valeId), "FIRMADO");
 
-      const fila = await posicionEnBase(esc, esc.usuarios.socio);
+      const fila = await posicionEnBase(esc, esc.socioPersonaId);
       assert.ok(fila, "el socio con retiro firmado debe aparecer en la vista de anticipos");
       assert.equal(importe(fila.total_anticipos), "30000.00");
       assert.equal(importe(fila.total_repartido), "0.00");
@@ -723,7 +777,7 @@ test(
     await conEscenario(async (esc) => {
       await retiroDeSocio(esc, "retiro-1", "30000.00");
       assert.equal(
-        importe((await posicionEnBase(esc, esc.usuarios.socio))?.saldo_por_comprobar),
+        importe((await posicionEnBase(esc, esc.socioPersonaId))?.saldo_por_comprobar),
         "30000.00",
       );
 
@@ -735,7 +789,7 @@ test(
         acta: "ACTA-ASAMBLEA-2026-01",
         asignadoAlSocio: "20000.00",
       });
-      const parcial = await posicionEnBase(esc, esc.usuarios.socio);
+      const parcial = await posicionEnBase(esc, esc.socioPersonaId);
       assert.equal(importe(parcial?.total_repartido), "20000.00");
       assert.equal(importe(parcial?.saldo_por_comprobar), "10000.00");
       assert.equal(
@@ -753,7 +807,7 @@ test(
         acta: "ACTA-ASAMBLEA-2026-02",
         asignadoAlSocio: "10000.00",
       });
-      const cubierto = await posicionEnBase(esc, esc.usuarios.socio);
+      const cubierto = await posicionEnBase(esc, esc.socioPersonaId);
       assert.equal(importe(cubierto?.total_anticipos), "30000.00");
       assert.equal(importe(cubierto?.total_repartido), "30000.00");
       assert.equal(importe(cubierto?.saldo_por_comprobar), "0.00");
@@ -796,7 +850,7 @@ test(
       assert.equal(alertas.length, 1);
       assert.equal(alertas[0].tipo, "RETIRO_SOCIO_SIN_RESPALDO");
 
-      const posicion = await posicionEnBase(esc, esc.usuarios.socio);
+      const posicion = await posicionEnBase(esc, esc.socioPersonaId);
       assert.equal(importe(posicion?.total_anticipos), "50000.00");
       assert.equal(importe(posicion?.total_repartido), "40000.00");
       assert.equal(importe(posicion?.saldo_por_comprobar), "10000.00");
@@ -862,9 +916,424 @@ test(
       );
 
       // Nada se movió: el saldo por comprobar sigue contando lo mismo.
-      const posicion = await posicionEnBase(esc, esc.usuarios.socio);
+      const posicion = await posicionEnBase(esc, esc.socioPersonaId);
       assert.equal(importe(posicion?.total_repartido), "20000.00");
       assert.equal(importe(posicion?.saldo_por_comprobar), "10000.00");
+    });
+  },
+);
+
+// =====================================================================
+// EL REGISTRO DE SOCIOS Y EL CATÁLOGO DE PERSONAS (migración 040)
+// =====================================================================
+//
+// Hasta la 040 «ser socio» se leía de la tabla de usuarios: el selector del
+// retiro se llenaba con TODOS los que tenían cuenta en el DMS. Eso permitía
+// entregarle un retiro de utilidades a quien no tiene parte del capital, y el
+// sistema lo asentaba sin objetar. Lo que se prueba aquí son los candados que
+// cierran ese hueco, y ninguno vive en TypeScript: son un disparador de
+// aritmética elemental, otro de vigencia, un CHECK y un índice único parcial
+// que normaliza mayúsculas y espacios.
+
+/** Alta en el catálogo. La identificación es opcional aquí y obligatoria en el vale. */
+async function altaDePersona(
+  esc: Escenario,
+  datos: {
+    nombre: string;
+    idTipo?: string;
+    idNumero?: string;
+    categoria?: string;
+    usuarioId?: string;
+  },
+): Promise<string> {
+  const { rows } = await esc.cx.query<{ id: string }>(
+    `INSERT INTO persona (nombre, id_tipo, id_numero, categoria, usuario_id, creada_por)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [
+      datos.nombre,
+      datos.idTipo ?? null,
+      datos.idNumero ?? null,
+      datos.categoria ?? "OTRO",
+      datos.usuarioId ?? null,
+      esc.usuarios.gerente,
+    ],
+  );
+  return rows[0].id;
+}
+
+/**
+ * Alta de un socio con su persona. Devuelve el `persona_id`, que es la llave con
+ * la que lo nombran el vale, el reparto y la vista.
+ *
+ * El acta es obligatoria por diseño: un socio que nadie puede acreditar con un
+ * documento no debería poder retirar utilidades a cuenta de nada.
+ */
+async function altaDeSocio(
+  esc: Escenario,
+  datos: { nombre: string; participacion?: string; acta?: string; usuarioId?: string },
+): Promise<string> {
+  const personaId = await altaDePersona(esc, {
+    nombre: datos.nombre,
+    categoria: "SOCIO",
+    usuarioId: datos.usuarioId,
+  });
+  await esc.cx.query(
+    `INSERT INTO socio (persona_id, participacion_pct, acta_referencia, creado_por)
+     VALUES ($1, $2, $3, $4)`,
+    [
+      personaId,
+      datos.participacion ?? null,
+      datos.acta ?? "ACTA-ASAMBLEA-ALTA-DE-SOCIO",
+      esc.usuarios.gerente,
+    ],
+  );
+  return personaId;
+}
+
+async function darDeBaja(esc: Escenario, personaId: string, fecha?: string): Promise<void> {
+  await esc.cx.query("UPDATE socio SET fecha_baja = $2 WHERE persona_id = $1", [
+    personaId,
+    fecha ?? esc.hoy,
+  ]);
+}
+
+test(
+  "registro de socios: las participaciones de los vigentes suman 100 como máximo",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      // Exactamente 100 es el reparto completo del capital y tiene que caber: el
+      // tope es «no más de una vez», no «menos de una vez».
+      await altaDeSocio(esc, { nombre: "Socia Mayoritaria", participacion: "60.00" });
+      const minoritario = await altaDeSocio(esc, {
+        nombre: "Socio Minoritario",
+        participacion: "40.00",
+      });
+
+      const { rows } = await esc.cx.query<{ total: string }>(
+        "SELECT COALESCE(sum(participacion_pct), 0)::text AS total FROM socio WHERE fecha_baja IS NULL",
+      );
+      assert.equal(rows[0].total, "100.00");
+
+      // Un centésimo de más ya reparte dinero que no existe. El mensaje dice
+      // cuánto sumaría, que es lo que permite corregir sin adivinar.
+      const error = await rechaza(
+        esc,
+        () => altaDeSocio(esc, { nombre: "Socio Sobrante", participacion: "0.01" }),
+        { codigo: "P0001", mensaje: /capital social no puede repartirse mas de una vez/i },
+      );
+      assert.match(error.message, /100\.01/);
+
+      // Tampoco por la puerta de atrás: subirle el porcentaje a un socio ya
+      // registrado pasa por el mismo disparador.
+      await rechaza(
+        esc,
+        () =>
+          esc.cx.query("UPDATE socio SET participacion_pct = $2 WHERE persona_id = $1", [
+            minoritario,
+            "40.01",
+          ]),
+        { codigo: "P0001", mensaje: /capital social/i },
+      );
+
+      // Y bajarlo sí se puede: lo que el candado impide es pasarse, no moverse.
+      await esc.cx.query("UPDATE socio SET participacion_pct = $2 WHERE persona_id = $1", [
+        minoritario,
+        "30.00",
+      ]);
+      const { rows: tras } = await esc.cx.query<{ total: string }>(
+        "SELECT COALESCE(sum(participacion_pct), 0)::text AS total FROM socio WHERE fecha_baja IS NULL",
+      );
+      assert.equal(tras[0].total, "90.00");
+    });
+  },
+);
+
+test(
+  "registro de socios: un socio dado de baja deja de contar para el tope de participación",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      await altaDeSocio(esc, { nombre: "Socia Fundadora", participacion: "60.00" });
+      const saliente = await altaDeSocio(esc, { nombre: "Socio Saliente", participacion: "40.00" });
+
+      // Con los dos vigentes no cabe nadie más: 60 + 40 + 40 serían 140.
+      await rechaza(
+        esc,
+        () => altaDeSocio(esc, { nombre: "Socio Entrante", participacion: "40.00" }),
+        { codigo: "P0001", mensaje: /140\.00/ },
+      );
+
+      // Quien vendió su parte deja de contar en la suma —su participación ya no
+      // es de nadie— y el hueco que dejó puede volver a ocuparse.
+      await darDeBaja(esc, saliente);
+      const entrante = await altaDeSocio(esc, {
+        nombre: "Socio Entrante",
+        participacion: "40.00",
+      });
+
+      const { rows } = await esc.cx.query<{ total: string }>(
+        "SELECT COALESCE(sum(participacion_pct), 0)::text AS total FROM socio WHERE fecha_baja IS NULL",
+      );
+      assert.equal(rows[0].total, "100.00");
+
+      // La baja no borra al socio: sigue en el registro y en la vista, marcado
+      // como no vigente. Un socio que desaparece se lleva su historial consigo.
+      const posicionSaliente = await posicionEnBase(esc, saliente);
+      assert.ok(posicionSaliente, "el socio dado de baja debe seguir apareciendo en la vista");
+      assert.equal(posicionSaliente.activo, false);
+      assert.equal((await posicionEnBase(esc, entrante))?.activo, true);
+    });
+  },
+);
+
+test(
+  "registro de socios: un socio dado de baja no puede recibir un retiro de utilidades",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      const saliente = await altaDeSocio(esc, {
+        nombre: "Socio Saliente",
+        participacion: "25.00",
+      });
+
+      // Mientras es socio vigente el retiro entra sin problema: así queda claro
+      // que lo que rechaza el intento de después es la baja y no otra cosa.
+      const vigente = await registrarMovimiento(esc, {
+        clave: "retiro-vigente",
+        tipo: "CACM-RCI-05",
+        concepto: "RETIRO_UTILIDADES_SOCIO",
+        importe: "5000.00",
+        socioPersonaId: saliente,
+        beneficiario: "Socio Saliente",
+        destino: "FIRMADO",
+        esperado: { naturaleza: "EGRESO", grupo: "RETIRO_SOCIOS" },
+      });
+      assert.equal(await estadoDe(esc, vigente), "FIRMADO");
+
+      await darDeBaja(esc, saliente);
+
+      // Ya no hay utilidad a la que tenga derecho: el retiro no se sostiene en
+      // nada y el disparador lo dice con su nombre, no con un código.
+      const error = await rechaza(
+        esc,
+        () =>
+          registrarMovimiento(esc, {
+            clave: "retiro-tras-la-baja",
+            tipo: "CACM-RCI-05",
+            concepto: "RETIRO_UTILIDADES_SOCIO",
+            importe: "5000.00",
+            socioPersonaId: saliente,
+            beneficiario: "Socio Saliente",
+            destino: "BORRADOR",
+            esperado: null,
+          }),
+        { codigo: "P0001", mensaje: /ya no figura como socio vigente/i },
+      );
+      assert.match(error.message, /Socio Saliente/);
+
+      // Lo que ya se firmó no se toca: la baja mira hacia adelante y el retiro
+      // que el socio recibió cuando lo era sigue contando en su posición.
+      const posicion = await posicionEnBase(esc, saliente);
+      assert.equal(importe(posicion?.total_anticipos), "5000.00");
+      assert.equal(importe(posicion?.saldo_por_comprobar), "5000.00");
+    });
+  },
+);
+
+test(
+  "regla 5: la vista de anticipos lista al socio recién dado de alta con la posición en cero",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      // Éste es el cambio de conducta de la 040. Antes la vista partía de los
+      // movimientos y un socio sin retiros no existía para el sistema: el
+      // tablero sólo enumeraba a los que debían, así que no había forma de ver
+      // que a alguien no se le había entregado nada.
+      const recien = await altaDeSocio(esc, {
+        nombre: "Socia Sin Movimiento",
+        participacion: "25.00",
+        acta: "ACTA-ASAMBLEA-2026-07",
+      });
+
+      const fila = await posicionEnBase(esc, recien);
+      assert.ok(fila, "un socio sin movimiento tiene que aparecer en la vista");
+      assert.equal(fila.socio_nombre, "Socia Sin Movimiento");
+      assert.equal(fila.participacion_pct, "25.00");
+      assert.equal(fila.activo, true);
+      assert.equal(importe(fila.total_anticipos), "0.00");
+      assert.equal(importe(fila.total_repartido), "0.00");
+      assert.equal(importe(fila.saldo_por_comprobar), "0.00");
+
+      // Y sin cuenta en el DMS: un accionista rara vez opera el sistema, y el
+      // registro tiene que poder verlo igual.
+      assert.equal(fila.socio_usuario_id, null);
+
+      // El espejo de pantalla no lo confunde con alguien que deba dinero.
+      const espejo = posicionSocio({
+        totalAnticipos: fila.total_anticipos,
+        totalRepartido: fila.total_repartido,
+      });
+      assert.equal(espejo?.tieneSaldoPorComprobar, false);
+
+      // El socio de la semilla, con cuenta de usuario, sigue enlazado: el
+      // enlace es opcional, no inexistente.
+      assert.equal(
+        (await posicionEnBase(esc, esc.socioPersonaId))?.socio_usuario_id,
+        esc.usuarios.socio,
+      );
+    });
+  },
+);
+
+test(
+  "catálogo de personas: dos personas no pueden compartir la misma identificación oficial",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      await altaDePersona(esc, {
+        nombre: "Refaccionaria del Norte",
+        idTipo: "INE",
+        idNumero: "IDMX-A1",
+        categoria: "PROVEEDOR",
+      });
+
+      // El duplicado que se cuela en la práctica no es una copia exacta: es el
+      // mismo documento tecleado en minúsculas y con un espacio de más, con el
+      // nombre escrito de otra manera. El índice normaliza con upper(trim(...))
+      // justo para eso; sin ello el catálogo deja de servir para lo que se creó,
+      // que es saber cuánto se le ha pagado a alguien.
+      await rechaza(
+        esc,
+        () =>
+          altaDePersona(esc, {
+            nombre: "Refaccionaria del Nte.",
+            idTipo: "ine",
+            idNumero: " idmx-a1 ",
+            categoria: "PROVEEDOR",
+          }),
+        { codigo: "23505", restriccion: /persona_identificacion_unica/ },
+      );
+
+      // Otra identificación del mismo tipo sí entra: lo que designa a una sola
+      // persona es el documento completo, no el tipo.
+      await altaDePersona(esc, {
+        nombre: "Refaccionaria del Sur",
+        idTipo: "INE",
+        idNumero: "IDMX-A2",
+        categoria: "PROVEEDOR",
+      });
+
+      // Y el índice es parcial: a quien se le paga una sola vez en la vida se le
+      // puede dar de alta sin identificación, cuantas veces haga falta.
+      await altaDePersona(esc, { nombre: "Servicio Ocasional Uno" });
+      await altaDePersona(esc, { nombre: "Servicio Ocasional Dos" });
+    });
+  },
+);
+
+test(
+  "catálogo de personas: v_pagos_por_persona suma sólo los vales firmados",
+  { skip: SIN_BASE },
+  async () => {
+    await conEscenario(async (esc) => {
+      const proveedor = await altaDePersona(esc, {
+        nombre: "Refaccionaria del Norte",
+        idTipo: "INE",
+        idNumero: "IDMX-PROV-01",
+        categoria: "PROVEEDOR",
+      });
+      const sinPagos = await altaDePersona(esc, {
+        nombre: "Proveedor Recien Dado de Alta",
+        categoria: "PROVEEDOR",
+      });
+
+      const pagoDe = async (
+        clave: string,
+        importePagado: string,
+        destino: Movimiento["destino"],
+      ) =>
+        registrarMovimiento(esc, {
+          clave,
+          tipo: "CACM-RCI-05",
+          concepto: "PAGO_PROVEEDOR",
+          importe: importePagado,
+          formaPago: "EFECTIVO",
+          beneficiario: "Refaccionaria del Norte",
+          beneficiarioPersonaId: proveedor,
+          destino,
+          esperado: null,
+        });
+
+      await pagoDe("pago-firmado-1", "5000.00", "FIRMADO");
+      await pagoDe("pago-firmado-2", "7000.00", "FIRMADO");
+      // Un borrador es una intención y un cancelado es un error corregido:
+      // ninguno de los dos movió dinero, y sumarlos inflaría lo que se cree
+      // haberle pagado al proveedor.
+      await pagoDe("pago-borrador", "9999.00", "BORRADOR");
+      await pagoDe("pago-cancelado", "8888.00", "CANCELADO");
+
+      const { rows } = await esc.cx.query<{
+        vales: string;
+        total_pagado: string;
+        ultimo_pago: Date | null;
+      }>(
+        "SELECT vales::text AS vales, total_pagado, ultimo_pago FROM v_pagos_por_persona WHERE persona_id = $1",
+        [proveedor],
+      );
+      assert.equal(rows[0].vales, "2", "sólo los dos vales firmados cuentan como pago");
+      assert.equal(importe(rows[0].total_pagado), "12000.00");
+      assert.ok(rows[0].ultimo_pago, "el último pago debe salir del vale firmado más reciente");
+
+      // Quien todavía no ha cobrado nada aparece en ceros y no desaparece del
+      // catálogo: es la misma razón por la que la vista de socios lista a los de
+      // saldo cero.
+      const { rows: nuevo } = await esc.cx.query<{ vales: string; total_pagado: string }>(
+        "SELECT vales::text AS vales, total_pagado FROM v_pagos_por_persona WHERE persona_id = $1",
+        [sinPagos],
+      );
+      assert.equal(nuevo[0].vales, "0");
+      assert.equal(importe(nuevo[0].total_pagado), "0.00");
+
+      // Y quien SÓLO tiene vales que no movieron dinero tiene que aparecer
+      // igual que quien no tiene ninguno. Es el caso que la primera versión de
+      // la vista perdía: al filtrar el estado en un WHERE en vez de en los
+      // agregados, la persona se quedaba sin renglones, y sin renglones no hay
+      // grupo. Desaparecía entera del catálogo mientras que otra sin un solo
+      // vale sí salía en ceros: dos personas igual de "sin pagos", una visible
+      // y la otra no.
+      const soloBorrador = await altaDePersona(esc, {
+        nombre: "Taller Con Vale En Borrador",
+        categoria: "PROVEEDOR",
+      });
+      await registrarMovimiento(esc, {
+        clave: "pago-solo-borrador",
+        tipo: "CACM-RCI-05",
+        concepto: "PAGO_PROVEEDOR",
+        importe: "4321.00",
+        formaPago: "EFECTIVO",
+        beneficiario: "Taller Con Vale En Borrador",
+        beneficiarioPersonaId: soloBorrador,
+        destino: "BORRADOR",
+        esperado: null,
+      });
+
+      const { rows: enBorrador } = await esc.cx.query<{
+        vales: string;
+        total_pagado: string;
+        ultimo_pago: Date | null;
+      }>(
+        "SELECT vales::text AS vales, total_pagado, ultimo_pago FROM v_pagos_por_persona WHERE persona_id = $1",
+        [soloBorrador],
+      );
+      assert.equal(
+        enBorrador.length,
+        1,
+        "una persona cuyo único vale sigue en borrador no puede desaparecer del catálogo",
+      );
+      assert.equal(enBorrador[0].vales, "0");
+      assert.equal(importe(enBorrador[0].total_pagado), "0.00");
+      assert.equal(enBorrador[0].ultimo_pago, null, "un borrador no es un pago con fecha");
     });
   },
 );

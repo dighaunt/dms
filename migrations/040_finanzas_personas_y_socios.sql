@@ -274,6 +274,11 @@ END $$;
 
 -- ===== UN SOCIO DADO DE BAJA NO RETIRA UTILIDADES =====
 
+-- Distingue dos casos que NO son el mismo, aunque ambos impidan el retiro:
+-- quien nunca fue socio, y quien lo fue y ya no. El disparador corre BEFORE
+-- INSERT, o sea antes que la llave foranea, asi que es el unico que llega a
+-- hablar: si dijera "ya no figura" de alguien que jamas figuro, mandaria a
+-- buscar en el registro una baja que no existe.
 CREATE OR REPLACE FUNCTION exigir_socio_vigente()
 RETURNS trigger LANGUAGE plpgsql SET search_path = traza AS $$
 DECLARE
@@ -283,14 +288,22 @@ BEGIN
     IF NEW.socio_persona_id IS NULL THEN
         RETURN NEW;
     END IF;
+
     SELECT s.activo, p.nombre INTO v_activo, v_nombre
       FROM socio s JOIN persona p ON p.id = s.persona_id
      WHERE s.persona_id = NEW.socio_persona_id;
 
-    IF NOT COALESCE(v_activo, false) THEN
+    IF NOT FOUND THEN
+        SELECT p.nombre INTO v_nombre FROM persona p WHERE p.id = NEW.socio_persona_id;
+        RAISE EXCEPTION
+            '% no esta registrada como socio; da de alta su participacion con el acta que la acredita antes de entregarle un retiro de utilidades',
+            COALESCE(v_nombre, 'La persona indicada');
+    END IF;
+
+    IF NOT v_activo THEN
         RAISE EXCEPTION
             '% ya no figura como socio vigente; un retiro de utilidades a su nombre no tiene en que sostenerse',
-            COALESCE(v_nombre, 'La persona indicada');
+            v_nombre;
     END IF;
     RETURN NEW;
 END $$;
@@ -304,19 +317,24 @@ CREATE TRIGGER vale_exige_socio_vigente
 
 -- La razon de ser del catalogo: poder sumar. Solo cuenta vales FIRMADOS, que
 -- son los unicos que movieron dinero.
+--
+-- El filtro de estado va en los agregados y NO en un WHERE. Con un WHERE, una
+-- persona cuyo unico vale sigue en borrador se queda sin renglones, y sin
+-- renglones no hay grupo: desaparecia entera del catalogo, mientras que otra
+-- sin vale alguno si aparecia en ceros. Dos personas igual de "sin pagos" y
+-- una visible y la otra no.
 CREATE OR REPLACE VIEW v_pagos_por_persona AS
 SELECT p.id            AS persona_id,
        p.nombre,
        p.categoria,
        p.activa,
-       count(v.documento_id)                     AS vales,
-       COALESCE(sum(v.importe), 0)               AS total_pagado,
-       max(v.fecha_hora)                         AS ultimo_pago
+       count(v.documento_id) FILTER (WHERE d.id IS NOT NULL)          AS vales,
+       COALESCE(sum(v.importe) FILTER (WHERE d.id IS NOT NULL), 0)    AS total_pagado,
+       max(v.fecha_hora) FILTER (WHERE d.id IS NOT NULL)              AS ultimo_pago
   FROM persona p
   LEFT JOIN vale_egreso_rci05 v ON v.beneficiario_persona_id = p.id
   LEFT JOIN v_documento_financiero d
          ON d.id = v.documento_id AND d.estado = 'FIRMADO'
- WHERE v.documento_id IS NULL OR d.id IS NOT NULL
  GROUP BY p.id, p.nombre, p.categoria, p.activa;
 
 COMMENT ON VIEW v_pagos_por_persona IS
