@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Ayuda } from "@/components/ui/ayuda";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Button } from "@/components/ui/button";
@@ -173,15 +174,15 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
         <Alert>
           <IconoSilk nombre="informacion" className="shrink-0" />
           <AlertTitle>Este corte jala los folios; no se recaptura nada</AlertTitle>
-          <AlertDescription>
-            Los ingresos y los egresos de abajo salen de los folios FIRMADOS de esta sucursal y
-            esta fecha, y no se pueden editar aquí: para corregir un importe se corrige su folio.
-            El saldo inicial viene encadenado del corte anterior. El único dato que teclea el
-            custodio es el efectivo físico contado.
+          <AlertDescription className="flex flex-wrap items-center gap-2 text-xs">
+            <Ayuda titulo="Cómo se arma este corte" etiqueta="Cómo se arma esto">
+              Los ingresos y los egresos de abajo salen de los folios FIRMADOS de esta sucursal y
+              esta fecha, y no se pueden editar aquí: para corregir un importe se corrige su
+              folio. El saldo inicial viene encadenado del corte anterior. El único dato que
+              teclea el custodio es el efectivo físico contado.
+            </Ayuda>
             {corte.armadoEn && (
-              <span className="block text-xs">
-                Último armado: {new Date(corte.armadoEn).toLocaleString("es-MX")}
-              </span>
+              <span>Último armado: {new Date(corte.armadoEn).toLocaleString("es-MX")}</span>
             )}
           </AlertDescription>
         </Alert>
@@ -230,11 +231,11 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
             <CardTitle className="flex items-center gap-2">
               <IconoSilk nombre="dinero" className="shrink-0" />
               Parte I · Ingresos del día
+              <Ayuda titulo="Qué entra en los ingresos del día">
+                Ventas de contado (RCI-01), utilidad neta de consignas (RCI-03) e ingresos por
+                servicio (RCI-04), con los folios que los respaldan.
+              </Ayuda>
             </CardTitle>
-            <CardDescription>
-              Ventas de contado (RCI-01), utilidad neta de consignas (RCI-03) e ingresos por
-              servicio (RCI-04), con los folios que los respaldan.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <TablaDeGrupos
@@ -254,12 +255,12 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
               {/* El vale amarillo: cada salida de dinero sale por su RCI-05. */}
               <IconoSilk nombre="nota" className="shrink-0" />
               Parte II · Egresos del día
+              <Ayuda titulo="Qué entra en los egresos del día">
+                Nómina y comisiones, retiros de socios y pagos a proveedores salen por su vale
+                RCI-05. El depósito bancario y los resguardos también restan: son efectivo que ya
+                no está en el cajón.
+              </Ayuda>
             </CardTitle>
-            <CardDescription>
-              Nómina y comisiones, retiros de socios y pagos a proveedores salen por su vale
-              RCI-05. El depósito bancario y los resguardos también restan: son efectivo que ya no
-              está en el cajón.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <TablaDeGrupos
@@ -360,7 +361,13 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
             )}
 
             <div>
-              <h3 className="mb-2 text-sm font-medium">Ubicación final del efectivo al cierre</h3>
+              <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+                Ubicación final del efectivo al cierre
+                <Ayuda titulo="Por qué banco y resguardos no se suman aquí también">
+                  La caja física es el arqueo. El banco y los resguardos ya se restaron de los
+                  egresos porque ese efectivo salió del cajón: aquí sólo se dice dónde quedó.
+                </Ayuda>
+              </h3>
               {ubicacion.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   Todavía no hay nada que ubicar: no se ha contado la caja ni se ha registrado
@@ -397,10 +404,6 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
                   ))}
                 </ul>
               )}
-              <p className="mt-2 text-xs text-muted-foreground">
-                La caja física es el arqueo. El banco y los resguardos ya se restaron de los
-                egresos porque ese efectivo salió del cajón: aquí sólo se dice dónde quedó.
-              </p>
             </div>
           </CardContent>
         </Card>
@@ -425,12 +428,12 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
               <CardTitle className="flex items-center gap-2">
                 <IconoSilk nombre="candado" className="shrink-0" />
                 El día ya está cerrado
+                <Ayuda titulo="Qué sigue después de cerrar">
+                  El arqueo quedó asentado y el corte pasó a firmas: lo elabora el Custodio
+                  Financiero, lo revisa y autoriza el Gerente General y el socio queda enterado.
+                  Para rehacer el arqueo hay que regresar el folio a borrador.
+                </Ayuda>
               </CardTitle>
-              <CardDescription>
-                El arqueo quedó asentado y el corte pasó a firmas: lo elabora el Custodio
-                Financiero, lo revisa y autoriza el Gerente General y el socio queda enterado. Para
-                rehacer el arqueo hay que regresar el folio a borrador.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <Button asChild variant="secondary">
