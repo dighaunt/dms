@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { IconoSilk } from "@/components/iconos/silk";
+import { Ayuda } from "@/components/ui/ayuda";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
@@ -76,11 +77,11 @@ export function AccionesDocumento({
             {/* El mismo icono con el que la cabecera marca el borrador. */}
             <IconoSilk nombre="nota" className="shrink-0" />
             Enviar a firma
+            <Ayuda titulo="Hasta cuándo se puede corregir">
+              Hasta que se firme, el documento se puede corregir. Después sólo admite un
+              complementario.
+            </Ayuda>
           </CardTitle>
-          <CardDescription>
-            Hasta que se firme, el documento se puede corregir. Después sólo admite un
-            complementario.
-          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <Button
@@ -132,11 +133,11 @@ export function AccionesDocumento({
         <CardTitle className="flex items-center gap-2">
           <IconoSilk nombre="editar" className="shrink-0" />
           Firmar
+          <Ayuda titulo="Qué pasa cuando firman todos">
+            Cada quien firma con su propio usuario y su propio PIN. Cuando no falte ninguna firma
+            obligatoria, el documento queda cerrado e inalterable.
+          </Ayuda>
         </CardTitle>
-        <CardDescription>
-          Cada quien firma con su propio usuario y su propio PIN. Cuando no falte ninguna firma
-          obligatoria, el documento queda cerrado e inalterable.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
@@ -158,10 +159,13 @@ export function AccionesDocumento({
 
         {esExterno && (
           <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-3">
-            <p className="text-xs text-muted-foreground sm:col-span-3">
-              Este rol lo firma un tercero que no tiene cuenta en el sistema. Su rúbrica se levanta
-              de forma presencial y tú la atestiguas: es tu PIN el que se verifica, porque eres
-              quien responde por el acto.
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground sm:col-span-3">
+              Firma presencial de un tercero: tú la atestiguas con tu PIN.
+              <Ayuda titulo="Por qué se pide tu PIN y no el suyo">
+                Este rol lo firma un tercero que no tiene cuenta en el sistema. Su rúbrica se
+                levanta de forma presencial y tú la atestiguas: es tu PIN el que se verifica,
+                porque eres quien responde por el acto.
+              </Ayuda>
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="t-nombre">Nombre del firmante</Label>

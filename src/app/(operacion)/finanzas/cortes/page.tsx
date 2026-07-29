@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { IconoSilk } from "@/components/iconos/silk";
+import { Ayuda } from "@/components/ui/ayuda";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Button } from "@/components/ui/button";
@@ -234,9 +235,12 @@ export default async function CortesPage({
                   </>
                 ) : (
                   <form action={abrirCorteDelDia} className="space-y-3">
-                    <p className="text-muted-foreground">
-                      El corte de este día todavía no se abre. Al abrirlo se emite su folio
-                      RCI-07; los importes no se capturan, los jala de los folios firmados.
+                    <p className="flex items-center gap-1.5 text-muted-foreground">
+                      El corte de este día todavía no se abre.
+                      <Ayuda titulo="Qué pasa al abrir el corte">
+                        Al abrirlo se emite su folio RCI-07; los importes no se capturan, los jala
+                        de los folios firmados.
+                      </Ayuda>
                     </p>
                     <input type="hidden" name="sucursal" value={sucursal.id} />
                     <input type="hidden" name="fecha" value={fecha} />

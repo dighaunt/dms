@@ -89,13 +89,23 @@ export function CerrarCorte({
   const contado = efectivo.trim();
 
   /**
+   * `InputMoneda` deja pasar el punto decimal solo, sin dígitos detrás
+   * ("1234."), porque es un estado normal de a medio teclear. El schema del
+   * servidor no: exige 1 o 2 decimales si hay punto. Sin este filtro, la
+   * previsualización de abajo mandaba esa cifra incompleta al servidor justo
+   * después de teclear el punto, y el ZodError volvía como si el usuario
+   * hubiera escrito algo inválido cuando sólo estaba a la mitad de la cifra.
+   */
+  const contadoCompleto = /^\d+(?:\.\d{1,2})?$/.test(contado);
+
+  /**
    * La diferencia se calcula ANTES de intentar cerrar, no como respuesta a un
    * cierre fallido: mientras la caja sigue abierta todavía se puede volver a
    * contar el fajo. Se espera a que deje de teclear para no ir al servidor por
    * cada dígito.
    */
   useEffect(() => {
-    if (contado === "") return;
+    if (contado === "" || !contadoCompleto) return;
 
     let vigente = true;
     const temporizador = setTimeout(async () => {
@@ -115,7 +125,7 @@ export function CerrarCorte({
       vigente = false;
       clearTimeout(temporizador);
     };
-  }, [contado, totalEgresos, previsualizarAccion]);
+  }, [contado, contadoCompleto, totalEgresos, previsualizarAccion]);
 
   const alDia =
     respuesta !== null && respuesta.entrada === contado && respuesta.contra === totalEgresos;
