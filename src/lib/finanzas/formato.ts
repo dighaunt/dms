@@ -48,10 +48,41 @@ export type ImporteEnCasillas = {
 };
 
 /**
+ * Lo que se escribe cuando el importe queda fuera del rango que `monedaEnLetras`
+ * sabe deletrear. Se dice que no se pudo escribir en lugar de escribir una
+ * letra aproximada: la letra existe para cerrar la alteración de la cifra, y una
+ * equivocada es peor que ninguna.
+ */
+export const IMPORTE_SIN_LETRA = "(IMPORTE FUERA DEL RANGO QUE PUEDE ESCRIBIRSE CON LETRA)";
+
+/**
+ * La letra del importe sin poder tumbar la pantalla que lo muestra.
+ *
+ * `monedaEnLetras` es la autoridad y sigue rechazando lo que no sabe escribir,
+ * pero esto es presentación: se llama al pintar CADA renglón de importe de CADA
+ * pantalla, y una excepción aquí no corrige el dato —deja a quien opera ante un
+ * error de servidor en vez de ante su cifra—. Que un importe raro apague una
+ * pantalla completa es exactamente lo que pasaba al registrar un depósito
+ * mayor que los ingresos firmados del día: el saldo calculado quedaba en
+ * negativo, legítimamente, y la página del corte ya no podía dibujarse.
+ */
+function letraDelImporte(canonico: string): string {
+  try {
+    return monedaEnLetras(canonico);
+  } catch {
+    return IMPORTE_SIN_LETRA;
+  }
+}
+
+/**
  * Divide el importe como lo divide la forma impresa: "$ ____ . __".
  * Se opera sobre la cadena y no sobre un Number para no perder centavos en
  * cifras grandes; numeric(18,2) admite montos que el punto flotante ya
  * redondea mal.
+ *
+ * Un importe negativo se presenta, no se rechaza: hay cifras derivadas —el
+ * saldo de un corte, una diferencia de caja, la utilidad de una consigna
+ * vendida con pérdida— que son negativas de verdad y tienen que poder leerse.
  */
 export function importeEnCasillas(monto: string | number): ImporteEnCasillas {
   const canonico = typeof monto === "number" ? monto.toFixed(2) : monto.trim().replace(/,/g, "");
@@ -68,8 +99,11 @@ export function importeEnCasillas(monto: string | number): ImporteEnCasillas {
   return {
     pesos: `${signo}${pesos}`,
     centavos,
-    texto: `$${signo}${pesos}.${centavos}`,
-    letra: monedaEnLetras(`${signo}${entero}.${centavos}`),
+    // El signo va ANTES del peso —"-$500.00"—, como lo escribe la forma
+    // impresa. "$-500.00" se lee como una cifra con basura adentro y hace
+    // dudar de si el signo es del importe o un error de captura.
+    texto: `${signo}$${pesos}.${centavos}`,
+    letra: letraDelImporte(`${signo}${entero}.${centavos}`),
   };
 }
 

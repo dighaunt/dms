@@ -101,18 +101,36 @@ function enteroEnLetras(numero: number): string {
   return partes.join(" ");
 }
 
-/** Convierte moneda a letra y conserva centavos para cerrar la alteración. */
+/**
+ * Convierte moneda a letra y conserva centavos para cerrar la alteración.
+ *
+ * UN IMPORTE NEGATIVO SE ESCRIBE, NO SE RECHAZA. Hay cifras del sistema que son
+ * negativas de verdad —la diferencia de un corte con faltante, el saldo de una
+ * caja que declaró más depósitos de los que sus folios firmados respaldan, la
+ * utilidad de una consigna vendida con pérdida— y antes esta función reventaba
+ * ante ellas. Como toda pantalla que muestra un importe pide también su letra,
+ * ese throw no protegía nada: tumbaba la página que sólo quería enseñar la
+ * cifra. Se escriben "MENOS …", que es como se leen.
+ *
+ * El tope de mil millones SÍ sigue siendo un error, y por una razón distinta:
+ * `enteroEnLetras` no sabe decir "MIL MILLONES" y devolvería una letra falsa.
+ * La letra es lo que cierra la alteración del documento, así que vale más no
+ * escribirla que escribirla mal. Quien la pide para PINTARLA en pantalla no
+ * debe caerse por eso: `importeEnCasillas` lo resuelve sin inventar la letra.
+ */
 export function monedaEnLetras(valor: string | number): string {
   const normalizado = typeof valor === "number"
     ? valor
     : Number(valor.replace(/[^0-9.-]/g, ""));
-  if (!Number.isFinite(normalizado) || normalizado < 0 || normalizado > 999_999_999.99) {
-    throw new Error("El monto debe estar entre 0 y 999,999,999.99");
+  if (!Number.isFinite(normalizado) || Math.abs(normalizado) > 999_999_999.99) {
+    throw new Error("El monto debe estar entre -999,999,999.99 y 999,999,999.99");
   }
-  const redondeado = Math.round(normalizado * 100);
+  const redondeado = Math.round(Math.abs(normalizado) * 100);
   const entero = Math.floor(redondeado / 100);
   const centavos = redondeado % 100;
-  return `${apocopar(enteroEnLetras(entero))} ${entero === 1 ? "PESO" : "PESOS"} ${String(centavos).padStart(2, "0")}/100 M.N.`;
+  // "MENOS CERO" no existe: un importe que redondea a cero se escribe cero.
+  const menos = normalizado < 0 && redondeado > 0 ? "MENOS " : "";
+  return `${menos}${apocopar(enteroEnLetras(entero))} ${entero === 1 ? "PESO" : "PESOS"} ${String(centavos).padStart(2, "0")}/100 M.N.`;
 }
 
 /** Cierra el sobrante de una línea libre con guiones ASCII. */

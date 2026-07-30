@@ -101,10 +101,12 @@ function fechaCivilImpresa(fecha: string | null | undefined): string | null {
 }
 
 /**
- * Importe listo para imprimir. No usa `importeEnCasillas` porque aquélla
- * calcula además el importe con letra y `monedaEnLetras` rechaza los negativos;
- * la diferencia de un corte sí puede serlo, y un faltante tiene que poder
- * imprimirse.
+ * Importe listo para imprimir, escrito sólo con dígitos.
+ *
+ * Es el formateador del RCI-07, cuya hoja no lleva ningún importe con letra: no
+ * pasa por `importeEnCasillas` porque ésa calcula además la letra, y ahí el tope
+ * de mil millones de `monedaEnLetras` sí aplica. Aquí no hay letra que escribir,
+ * así que cualquier cifra que `numeric(18,2)` admita se imprime tal cual.
  */
 function montoImpreso(monto: string | null | undefined): string {
   if (monto === null || monto === undefined || monto.trim() === "") return "";
@@ -119,14 +121,16 @@ function montoImpreso(monto: string | null | undefined): string {
  * Importe de un renglón o de una casilla, partido por `importeEnCasillas()`,
  * que es la autoridad de presentación de los importes del manual.
  *
- * Se toma `.texto` y no la letra porque `monedaEnLetras` —que aquélla calcula
- * siempre— rechaza los negativos, y la utilidad neta de una consigna vendida
- * con pérdida sí puede serlo: esa hoja tiene que poder imprimirse igual. Para
- * ese único caso manda `montoImpreso`, que sabe escribir el signo.
+ * Se toma `.texto`, que ya escribe el signo cuando hace falta: la utilidad neta
+ * de una consigna vendida con pérdida es negativa y esa hoja tiene que poder
+ * imprimirse igual. Antes ese caso se desviaba a `montoImpreso` porque la letra
+ * que `importeEnCasillas` calcula reventaba ante un negativo; ya no lo hace, y
+ * un solo camino evita que la pantalla y el papel escriban la misma cifra de dos
+ * maneras distintas.
  */
 function importeImpreso(monto: string | null | undefined): string {
   if (monto === null || monto === undefined || monto.trim() === "") return "";
-  return monto.trim().startsWith("-") ? montoImpreso(monto) : importeEnCasillas(monto).texto;
+  return importeEnCasillas(monto).texto;
 }
 
 function identificacionImpresa(

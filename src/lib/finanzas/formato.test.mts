@@ -32,6 +32,7 @@ registerHooks({
 });
 
 const {
+  IMPORTE_SIN_LETRA,
   LONGITUD_VIN,
   casillasVin,
   custodiaEstaVencida,
@@ -147,6 +148,42 @@ test("importeEnCasillas conserva los centavos de un monto de ocho dígitos", () 
   assert.equal(casillas.pesos, "10,000,000");
   assert.equal(casillas.centavos, "03");
   assert.equal(casillas.texto, "$10,000,000.03");
+});
+
+/**
+ * El caso que tumbaba la pantalla del corte: registrar un depósito mayor que
+ * los ingresos FIRMADOS del día deja `saldo_calculado` —columna GENERATED sin
+ * candado de signo— en negativo, y al volver a pintar la página el importe con
+ * letra reventaba. El importe negativo es legítimo y tiene que poder leerse.
+ */
+test("importeEnCasillas presenta un importe negativo en vez de reventar", () => {
+  const saldo = importeEnCasillas("-5000.00");
+
+  assert.equal(saldo.texto, "-$5,000.00");
+  assert.equal(saldo.pesos, "-5,000");
+  assert.equal(saldo.centavos, "00");
+  assert.equal(saldo.letra, "MENOS CINCO MIL PESOS 00/100 M.N.");
+});
+
+test("importeEnCasillas escribe el signo antes del peso, como la forma impresa", () => {
+  // "$-1,234.50" se lee como una cifra con basura adentro.
+  assert.equal(importeEnCasillas("-1234.5").texto, "-$1,234.50");
+  assert.equal(importeEnCasillas("-0.01").texto, "-$0.01");
+  assert.equal(importeEnCasillas("-1,234.50").texto, importeEnCasillas("-1234.50").texto);
+});
+
+/**
+ * Arriba de mil millones la letra saldría falsa, y `monedaEnLetras` se niega a
+ * escribirla con razón. Lo que no puede pasar es que esa negativa apague la
+ * pantalla: aquí se dice que no se pudo escribir y la cifra se muestra igual.
+ */
+test("importeEnCasillas muestra la cifra aunque su letra no pueda escribirse", () => {
+  const enorme = importeEnCasillas("1000000000.00");
+
+  assert.equal(enorme.texto, "$1,000,000,000.00");
+  assert.equal(enorme.letra, IMPORTE_SIN_LETRA);
+  assert.equal(importeEnCasillas("-1000000000.00").texto, "-$1,000,000,000.00");
+  assert.equal(importeEnCasillas("-1000000000.00").letra, IMPORTE_SIN_LETRA);
 });
 
 test("importeEnCasillas cae a cero ante un importe ilegible en vez de romper la forma", () => {
