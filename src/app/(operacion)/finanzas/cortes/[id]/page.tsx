@@ -138,6 +138,13 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
   const egresos = detalle.grupos.filter((grupo) => grupo.naturaleza === "EGRESO");
   const hayDiferencia = corte.diferencia !== null && corte.diferencia !== "0.00";
   const esFaltante = corte.diferencia !== null && corte.diferencia.startsWith("-");
+  /**
+   * El saldo calculado es una columna GENERATED sin candado de signo, y puede
+   * quedar en negativo de forma legítima: basta declarar un depósito antes de
+   * que estén firmados los folios de ingreso con los que entró ese dinero. No
+   * es un error que haya que ocultar, pero mostrado a secas parece uno.
+   */
+  const saldoEnNegativo = corte.saldoCalculado.startsWith("-");
 
   return (
     <div className="space-y-6">
@@ -349,6 +356,20 @@ export default async function CorteDeCajaPage({ params }: { params: Promise<{ id
                 </>
               )}
             </dl>
+
+            {saldoEnNegativo && (
+              <Alert>
+                <IconoSilk nombre="advertencia" className="shrink-0" />
+                <AlertTitle>El saldo que debería existir en caja quedó en negativo</AlertTitle>
+                <AlertDescription>
+                  Salió del cajón más efectivo —depósitos, resguardos y vales de egreso— del que
+                  los folios FIRMADOS de este día alcanzan a respaldar. Casi siempre significa que
+                  faltan por firmar los folios de ingreso con los que ese dinero entró: en cuanto
+                  se firmen, el corte se rearma y el saldo sube. No impide seguir capturando, pero
+                  mientras siga negativo el arqueo no va a cuadrar.
+                </AlertDescription>
+              </Alert>
+            )}
 
             {corte.explicacionDiferencia && (
               <div className="rounded-md border p-3 text-sm">
