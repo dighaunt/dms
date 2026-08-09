@@ -1,0 +1,2728 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { uploadPresigned } from "@vercel/blob/client";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { AnimatePresence, motion } from "motion/react";
+import {
+  ArrowRightIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  CircleAlertIcon,
+  CircleDashedIcon,
+  ClipboardCheckIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  HandshakeIcon,
+  InfoIcon,
+  LandmarkIcon,
+  LayersIcon,
+  ListIcon,
+  ShoppingCartIcon,
+  SkullIcon,
+  XIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { CircleCheckIcon } from "@/components/animate-ui/icons/circle-check";
+import { LockKeyholeIcon } from "@/components/animate-ui/icons/lock-keyhole";
+import { GuiaOperativaResumen } from "@/components/guia-operativa-formato";
+import { anexosDeOrigen, EVENTO_ENFOCAR_ANEXO, ETIQUETA_EXIGENCIA } from "@/lib/anexos";
+import {
+  animoDeCandado,
+  idDeObjetivo,
+  objetivoDeCandado,
+  type ObjetivoCandado,
+} from "@/lib/candados-ui";
+import { mensajeErrorRespuesta, mensajeErrorSinRespuesta, postJson, postJsonDetallado, sha256Hex } from "@/lib/cliente-api";
+import type {
+  DocumentoDetalle,
+  ExcepcionDocumental,
+  AnulacionDocumentalExcepcional,
+  SolicitudRiesgoPendiente,
+} from "@/lib/db/consultas";
+import { ETIQUETA_ESTADO_F06, ETIQUETA_ESTADO_UNIDAD } from "@/lib/estados";
+import {
+  juegoEsperado,
+  NOMBRE_TIPO,
+  TIPOS_LEGACY,
+  type RequisitoDocumento,
+} from "@/lib/juego-documental";
+import { DEPENDENCIAS } from "@/lib/mapa-documental";
+import { canonizarNumeroCaptura, formatearNumeroCaptura } from "@/lib/numeros";
+import { cn } from "@/lib/utils";
+import { BotonCopiar } from "@/components/boton-copiar";
+import { IconoSilk, type NombreIconoSilk } from "@/components/iconos/silk";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { DialogFolioGenerado, type FolioEmitido } from "./folio-generado";
+import { WizardDocumento } from "./wizard-documento";
+
+const TIPOS_ACEPTADOS = "application/pdf,image/jpeg,image/png,image/webp";
+const MIMES_ACEPTADOS = new Set(TIPOS_ACEPTADOS.split(","));
+const MAX_BYTES_ESCANEO = 25 * 1024 * 1024;
+
+const ICONO_ETAPA: Record<string, React.ComponentType<{ className?: string }>> = {
+  ADQUISICION: ShoppingCartIcon,
+  INSPECCION: ClipboardCheckIcon,
+  EXPEDIENTE: FolderOpenIcon,
+  TRAMITES: LandmarkIcon,
+  VENTA: HandshakeIcon,
+};
+
+const ICONO_ETAPA_SILK: Record<string, NombreIconoSilk> = {
+  ADQUISICION: "paquete",
+  INSPECCION: "listado",
+  EXPEDIENTE: "expedientes",
+  TRAMITES: "sello",
+  VENTA: "dinero",
+};
+
+const ETAPA_DE_ESTADO: Record<string, string> = {
+  EN_RECEPCION: "ADQUISICION",
+  EN_INSPECCION: "INSPECCION",
+  EXPEDIENTE_INCOMPLETO: "EXPEDIENTE",
+  LISTO_PARA_VENTA: "VENTA",
+  APARTADA: "VENTA",
+  VENDIDA_PEND_ENTREGA: "VENTA",
+  ENTREGADA: "VENTA",
+  DEVUELTA_CONSIGNANTE: "VENTA",
+  BAJA: "VENTA",
+};
+
+const ANEXOS_POR_ETAPA: Record<string, string[]> = {
+  ADQUISICION: ["factura_original", "facturas_consecutivas", "ine_partes", "comprobante_pago", "tarjeta_circulacion"],
+  EXPEDIENTE: ["constancia_repuve", "verificacion_vigente"],
+  TRAMITES: ["baja_placas"],
+  VENTA: ["comprobante_pago", "factura_original"],
+};
+
+type EstadoRequisito = "PENDIENTE" | "EMITIDO" | "ESCANEADO" | "ANULADO";
+
+type AnulacionDocumental =
+  | (ExcepcionDocumental & { clase: "LEGACY" })
+  | (AnulacionDocumentalExcepcional & { clase: "EXCEPCIONAL" });
+
+function AnexosDeEtapa({ etapa, origen, anexos }: { etapa: string; origen: "PROPIA" | "CONSIGNADA"; anexos: { clave: string; version_maxima: number; subido_por_nombre: string }[] }) {
+  const claves = new Set(ANEXOS_POR_ETAPA[etapa] ?? []);
+  const fichas = anexosDeOrigen(origen).filter((f) => claves.has(f.clave));
+  if (fichas.length === 0) return null;
+  const porClave = new Map(anexos.map((a) => [a.clave, a]));
+  return <section className="mt-4 rounded-xl border border-dashed bg-muted/20 p-3" aria-label="Anexos de esta etapa">
+    <p className="text-xs font-medium text-muted-foreground">Anexos de esta etapa</p>
+    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+      {fichas.map((ficha) => {
+        const cargado = porClave.get(ficha.clave);
+        const exigencia = ficha.exigencia[origen]!;
+        return <button key={ficha.clave} type="button" onClick={() => {
+          window.dispatchEvent(new CustomEvent(EVENTO_ENFOCAR_ANEXO, { detail: { clave: ficha.clave } }));
+          document.getElementById(`anexo-${ficha.clave}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }} className={cn("flex items-start gap-2 rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:border-primary/40", cargado ? "border-emerald-200" : exigencia === "OBLIGATORIO" ? "border-amber-200" : "border-border")}>
+          {cargado ? <IconoSilk nombre="hojaOk" className="mt-0.5 shrink-0" /> : <CircleDashedIcon className={cn("mt-0.5 size-4 shrink-0", exigencia === "OBLIGATORIO" ? "text-amber-500" : "text-muted-foreground")} />}
+          <span className="min-w-0"><span className="block text-xs font-medium">{ficha.nombre}</span><span className="block text-[11px] text-muted-foreground">{cargado ? `Cargado · ${cargado.version_maxima} archivo${cargado.version_maxima === 1 ? "" : "s"}` : ETIQUETA_EXIGENCIA[exigencia]}</span></span>
+        </button>;
+      })}
+    </div>
+  </section>;
+}
+
+function estadoDe(docs: DocumentoDetalle[], tieneExcepcion = false): EstadoRequisito {
+  if (tieneExcepcion) return "ANULADO";
+  const vigentes = docs.filter((d) => !d.cancelado);
+  if (vigentes.some((d) => d.escaneado)) return "ESCANEADO";
+  if (vigentes.length > 0) return "EMITIDO";
+  if (docs.length > 0) return "ANULADO";
+  return "PENDIENTE";
+}
+
+function IconoEstadoRequisito({ estado }: { estado: EstadoRequisito }) {
+  if (estado === "EMITIDO") return <IconoSilk nombre="documento" />;
+  if (estado === "ESCANEADO") return <IconoSilk nombre="hojaOk" />;
+  if (estado === "ANULADO") return <SkullIcon className="size-6 text-white" />;
+  return <CircleDashedIcon className="size-4 text-muted-foreground/60" />;
+}
+
+const EXPLICACION_ESTADO: Record<EstadoRequisito, string> = {
+  PENDIENTE: "Todavía no existe un folio. Emitirlo crea un consecutivo permanente en la trazabilidad.",
+  EMITIDO: "El folio ya existe y el PDF está disponible; falta cargar el documento firmado o escaneado.",
+  ESCANEADO: "Existe al menos un escaneo resguardado. Cada nueva carga crea otra versión y conserva las anteriores.",
+  ANULADO:
+    "El documento se conserva para auditoría, pero no está habilitado ni admite operaciones. Cuando la anulación es por origen pre-sistema, la autorización N3 permanece visible en el historial.",
+};
+
+type ColorCarpeta = "verde" | "amarillo" | "gris" | "muerto";
+
+function colorCarpetaDe(
+  estado: EstadoRequisito,
+  requisito: RequisitoDocumento,
+  etapaAlcanzada: boolean,
+): ColorCarpeta {
+  if (estado === "ANULADO") return "muerto";
+  if (estado === "ESCANEADO") return "verde";
+  if (estado === "EMITIDO") return "amarillo";
+  if (!etapaAlcanzada || requisito.exigencia === "segun_aplique") return "gris";
+  return "amarillo";
+}
+
+const ESTILO_CARPETA: Record<
+  ColorCarpeta,
+  { clase: string; icono: React.ComponentType<{ className?: string }>; etiqueta: string }
+> = {
+  verde: {
+    clase: "border-emerald-300 bg-emerald-50 text-emerald-700",
+    icono: CheckIcon,
+    etiqueta: "Completo",
+  },
+  amarillo: {
+    clase: "border-amber-300 bg-amber-50 text-amber-700",
+    icono: CircleAlertIcon,
+    etiqueta: "Le falta",
+  },
+  gris: {
+    clase: "border-border bg-muted/40 text-muted-foreground",
+    icono: CircleDashedIcon,
+    etiqueta: "Aún no es su ciclo",
+  },
+  muerto: {
+    clase: "border-zinc-950 bg-zinc-950 text-white",
+    icono: SkullIcon,
+    etiqueta: "Anulado",
+  },
+};
+
+type ConjuntoCarpeta =
+  | { tipo: "grupo"; madre: RequisitoDocumento; hijos: { requisito: RequisitoDocumento; etiqueta: string }[] }
+  | { tipo: "suelta"; requisito: RequisitoDocumento };
+
+function agruparConjuntos(requisitos: RequisitoDocumento[]): ConjuntoCarpeta[] {
+  const tipos = new Set(requisitos.map((r) => r.tipo));
+  const dentroDeEtapa = DEPENDENCIAS.filter((d) => tipos.has(d.de) && tipos.has(d.a));
+  const sonHijos = new Set(dentroDeEtapa.map((d) => d.a));
+
+  return requisitos
+    .filter((r) => !sonHijos.has(r.tipo))
+    .map((r) => {
+      const hijos = dentroDeEtapa
+        .filter((d) => d.de === r.tipo)
+        .map((d) => ({
+          requisito: requisitos.find((x) => x.tipo === d.a)!,
+          etiqueta: d.etiqueta,
+        }));
+      return hijos.length > 0
+        ? ({ tipo: "grupo", madre: r, hijos } as const)
+        : ({ tipo: "suelta", requisito: r } as const);
+    });
+}
+
+const VARIANTES_CASCADA = {
+  apilado: {},
+  repartido: { transition: { staggerChildren: 0.09, delayChildren: 0.03 } },
+};
+
+const VARIANTES_ETAPA_CASCADA = {
+  apilado: { opacity: 0, y: -10, scale: 0.98 },
+  repartido: { opacity: 1, y: 0, scale: 1 },
+};
+
+function VistaCarpeta({
+  etapas,
+  porTipo,
+  excepcionPorTipo,
+  solicitudPendientePorTipo,
+  indiceActual,
+}: {
+  etapas: ReturnType<typeof juegoEsperado>;
+  porTipo: Map<string, DocumentoDetalle[]>;
+  excepcionPorTipo: Map<string, AnulacionDocumental>;
+  solicitudPendientePorTipo: Map<string, SolicitudRiesgoPendiente>;
+  indiceActual: number;
+}) {
+  const [abierto, setAbierto] = useState<string | null>(null);
+
+  function alternarPestana(tipo: string) {
+    setAbierto((prev) => (prev === tipo ? null : tipo));
+  }
+
+  return (
+    <div className="mb-6 rounded-2xl border bg-gradient-to-b from-muted/30 to-background p-5">
+      <p className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <FolderOpenIcon className="size-3.5" />
+        Cada pestaña es un documento que debería existir en esta carpeta. Las que comparten
+        documento madre quedan agrupadas; haz clic en una para abrirla.
+      </p>
+      <motion.div
+        initial="apilado"
+        animate="repartido"
+        variants={VARIANTES_CASCADA}
+        className="space-y-5"
+      >
+        {etapas.map((etapa, i) => {
+          const etapaAlcanzada = i <= indiceActual;
+          const conjuntos = agruparConjuntos(etapa.requisitos);
+          const abiertoEnEtapa = etapa.requisitos.find((r) => r.tipo === abierto) ?? null;
+
+          return (
+            <motion.div
+              key={etapa.codigo}
+              variants={VARIANTES_ETAPA_CASCADA}
+              transition={{ type: "spring", stiffness: 380, damping: 32 }}
+            >
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                {etapa.etiqueta}
+              </p>
+              <div className="flex flex-wrap items-start gap-3">
+                {conjuntos.map((c) =>
+                  c.tipo === "grupo" ? (
+                    <CarpetaMadre
+                      key={c.madre.tipo}
+                      madre={c.madre}
+                      hijos={c.hijos}
+                      porTipo={porTipo}
+                      excepcionPorTipo={excepcionPorTipo}
+                      solicitudPendientePorTipo={solicitudPendientePorTipo}
+                      etapaAlcanzada={etapaAlcanzada}
+                      abierto={abierto}
+                      onAlternar={alternarPestana}
+                    />
+                  ) : (
+                    <PestanaCarpeta
+                      key={c.requisito.tipo}
+                      requisito={c.requisito}
+                      docs={porTipo.get(c.requisito.tipo) ?? []}
+                      excepcion={excepcionPorTipo.get(c.requisito.tipo) ?? null}
+                      solicitudPendiente={solicitudPendientePorTipo.get(c.requisito.tipo) ?? null}
+                      etapaAlcanzada={etapaAlcanzada}
+                      abierta={abierto === c.requisito.tipo}
+                      onAlternar={() => alternarPestana(c.requisito.tipo)}
+                    />
+                  ),
+                )}
+              </div>
+
+              <AnimatePresence initial={false}>
+                {abiertoEnEtapa && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <ContenidoCarpeta
+                      requisito={abiertoEnEtapa}
+                      docs={porTipo.get(abiertoEnEtapa.tipo) ?? []}
+                      excepcion={excepcionPorTipo.get(abiertoEnEtapa.tipo) ?? null}
+                      solicitudPendiente={solicitudPendientePorTipo.get(abiertoEnEtapa.tipo) ?? null}
+                      etapaAlcanzada={etapaAlcanzada}
+                      onCerrar={() => setAbierto(null)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
+      </motion.div>
+      <div className="mt-5 flex flex-wrap gap-4 border-t pt-4 text-[11px] text-muted-foreground">
+        {(Object.keys(ESTILO_CARPETA) as ColorCarpeta[]).map((color) => {
+          const { icono: Icono, etiqueta, clase } = ESTILO_CARPETA[color];
+          return (
+            <span key={color} className="flex items-center gap-1.5">
+              <span className={cn("flex size-4 items-center justify-center rounded-full border", clase)}>
+                <Icono className="size-2.5" />
+              </span>
+              {etiqueta}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CarpetaMadre({
+  madre,
+  hijos,
+  porTipo,
+  excepcionPorTipo,
+  solicitudPendientePorTipo,
+  etapaAlcanzada,
+  abierto,
+  onAlternar,
+}: {
+  madre: RequisitoDocumento;
+  hijos: { requisito: RequisitoDocumento; etiqueta: string }[];
+  porTipo: Map<string, DocumentoDetalle[]>;
+  excepcionPorTipo: Map<string, AnulacionDocumental>;
+  solicitudPendientePorTipo: Map<string, SolicitudRiesgoPendiente>;
+  etapaAlcanzada: boolean;
+  abierto: string | null;
+  onAlternar: (tipo: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-dashed bg-muted/20 p-2.5">
+      <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+        <LayersIcon className="size-3" />
+        Conjunto · madre {madre.tipo}
+      </p>
+      <div className="flex flex-wrap items-start gap-2.5">
+        <PestanaCarpeta
+          requisito={madre}
+          docs={porTipo.get(madre.tipo) ?? []}
+          excepcion={excepcionPorTipo.get(madre.tipo) ?? null}
+          solicitudPendiente={solicitudPendientePorTipo.get(madre.tipo) ?? null}
+          etapaAlcanzada={etapaAlcanzada}
+          abierta={abierto === madre.tipo}
+          onAlternar={() => onAlternar(madre.tipo)}
+          esMadre
+        />
+        <div className="flex flex-wrap items-start gap-2 border-l pl-2.5">
+          {hijos.map(({ requisito, etiqueta }) => (
+            <div key={requisito.tipo} className="flex flex-col items-start gap-1">
+              <PestanaCarpeta
+                requisito={requisito}
+                docs={porTipo.get(requisito.tipo) ?? []}
+                excepcion={excepcionPorTipo.get(requisito.tipo) ?? null}
+                solicitudPendiente={solicitudPendientePorTipo.get(requisito.tipo) ?? null}
+                etapaAlcanzada={etapaAlcanzada}
+                abierta={abierto === requisito.tipo}
+                onAlternar={() => onAlternar(requisito.tipo)}
+              />
+              <span className="pl-1 text-[9px] text-muted-foreground/70">{etiqueta}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PestanaCarpeta({
+  requisito,
+  docs,
+  excepcion,
+  solicitudPendiente,
+  etapaAlcanzada,
+  abierta,
+  onAlternar,
+  esMadre = false,
+}: {
+  requisito: RequisitoDocumento;
+  docs: DocumentoDetalle[];
+  excepcion: AnulacionDocumental | null;
+  solicitudPendiente: SolicitudRiesgoPendiente | null;
+  etapaAlcanzada: boolean;
+  abierta: boolean;
+  onAlternar: () => void;
+  esMadre?: boolean;
+}) {
+  const estado = estadoDe(docs, excepcion !== null);
+  const color = colorCarpetaDe(estado, requisito, etapaAlcanzada);
+  const { clase, icono: Icono } = ESTILO_CARPETA[color];
+  const solicitudSinResolver = !excepcion && solicitudPendiente !== null;
+
+  return (
+    <button
+      type="button"
+      onClick={onAlternar}
+      aria-expanded={abierta}
+      aria-label={`${abierta ? "Cerrar" : "Abrir"} carpeta ${requisito.tipo}`}
+      className={cn(
+        "relative flex min-w-[104px] flex-col items-start gap-1.5 rounded-lg rounded-tl-none border-2 px-3 py-2.5 text-left shadow-sm transition-transform hover:-translate-y-0.5",
+        clase,
+        esMadre && "min-w-[116px] font-semibold",
+        abierta && "-translate-y-0.5 ring-2 ring-primary/50",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn("absolute -top-2 left-2.5 h-2 w-7 rounded-t-md border-2 border-b-0", clase)}
+      />
+      {color === "amarillo" && !abierta && (
+        <>
+          <span aria-hidden="true" className="folder-aura pointer-events-none absolute -inset-1 rounded-[10px] rounded-tl-none border-2 border-amber-400/80" />
+          <span aria-hidden="true" className="folder-aura pointer-events-none absolute -top-3 left-1.5 h-3 w-8 rounded-t-md border-2 border-b-0 border-amber-400/80" />
+        </>
+      )}
+      {solicitudSinResolver && (
+        <span
+          aria-hidden="true"
+          className="absolute -inset-0.5 animate-pulse rounded-lg ring-2 ring-amber-400/80"
+        />
+      )}
+      <Icono className={cn(color === "muerto" ? "size-5" : "size-3.5")} />
+      <span className="font-mono text-[11px] font-semibold">{requisito.tipo}</span>
+    </button>
+  );
+}
+
+function ContenidoCarpeta({
+  requisito,
+  docs,
+  excepcion,
+  solicitudPendiente,
+  etapaAlcanzada,
+  onCerrar,
+}: {
+  requisito: RequisitoDocumento;
+  docs: DocumentoDetalle[];
+  excepcion: AnulacionDocumental | null;
+  solicitudPendiente: SolicitudRiesgoPendiente | null;
+  etapaAlcanzada: boolean;
+  onCerrar: () => void;
+}) {
+  const estado = estadoDe(docs, excepcion !== null);
+  const color = colorCarpetaDe(estado, requisito, etapaAlcanzada);
+  const { clase, icono: Icono, etiqueta } = ESTILO_CARPETA[color];
+  const destraba = DEPENDENCIAS.filter((d) => d.de === requisito.tipo);
+
+  const detalle = excepcion
+    ? `Excepción legacy: ${excepcion.motivo}`
+    : solicitudPendiente
+      ? `Solicitud enviada, pendiente de aprobación N3: ${solicitudPendiente.motivo}`
+      : estado === "ANULADO"
+        ? "Anulado: permanece en el expediente solo como evidencia de auditoría."
+        : requisito.proposito;
+
+  return (
+    <div className="mt-3 rounded-xl border bg-background/70 p-4 shadow-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
+            {NOMBRE_TIPO[requisito.tipo] ?? requisito.tipo}
+            <span className="font-mono text-xs font-normal text-muted-foreground">
+              {requisito.tipo}
+            </span>
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{detalle}</p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Cerrar carpeta ${requisito.tipo}`}
+          onClick={onCerrar}
+        >
+          <ChevronDownIcon className="size-4 rotate-180" />
+        </Button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span
+          className={cn(
+            "inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+            clase,
+          )}
+        >
+          <Icono className="size-3" />
+          {etiqueta}
+        </span>
+        {docs.length > 0 && (
+          <span className="text-[11px] text-muted-foreground">
+            {docs.length} {docs.length === 1 ? "folio" : "folios"} en este documento
+          </span>
+        )}
+      </div>
+
+      <GuiaOperativaResumen tipo={requisito.tipo} />
+
+      {destraba.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3 text-[11px] text-muted-foreground">
+          <ArrowRightIcon className="size-3 shrink-0" />
+          destraba:
+          {destraba.map((d) => (
+            <span
+              key={d.a}
+              className="rounded-full border bg-muted/40 px-2 py-0.5 font-mono text-[10px] font-medium text-foreground"
+              title={d.etiqueta}
+            >
+              {d.a}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function LineaTiempoExpediente({
+  expedienteId,
+  numeroExpediente,
+  vin,
+  origen,
+  estadoUnidad,
+  estadoF06,
+  transicionesValidas,
+  documentos,
+  anexos,
+  excepciones,
+  anulacionesExcepcionales,
+  puedeAnularExcepcionalmente,
+  solicitudesPendientes,
+}: {
+  expedienteId: number;
+  numeroExpediente: string;
+  vin: string;
+  origen: "PROPIA" | "CONSIGNADA";
+  estadoUnidad: string;
+  estadoF06: string;
+  transicionesValidas: string[];
+  documentos: DocumentoDetalle[];
+  anexos: { clave: string; version_maxima: number; subido_por_nombre: string }[];
+  excepciones: ExcepcionDocumental[];
+  anulacionesExcepcionales: AnulacionDocumentalExcepcional[];
+  puedeAnularExcepcionalmente: boolean;
+  solicitudesPendientes: SolicitudRiesgoPendiente[];
+}) {
+  const router = useRouter();
+  const etapas = juegoEsperado(origen);
+  const etapaActual = ETAPA_DE_ESTADO[estadoUnidad] ?? "ADQUISICION";
+  const indiceActual = etapas.findIndex((e) => e.codigo === etapaActual);
+  const excepcionPorTipo = new Map<string, AnulacionDocumental>([
+    ...excepciones.map(
+      (e): [string, AnulacionDocumental] => [e.tipo_codigo, { ...e, clase: "LEGACY" }],
+    ),
+    ...anulacionesExcepcionales.map(
+      (a): [string, AnulacionDocumental] => [a.tipo_codigo, { ...a, clase: "EXCEPCIONAL" }],
+    ),
+  ]);
+  const solicitudPendientePorTipo = new Map(
+    solicitudesPendientes.map((s) => [s.tipo_codigo, s]),
+  );
+
+  const [vista, setVista] = useState<"linea" | "carpeta">("linea");
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set([etapaActual]));
+  const [subirDoc, setSubirDoc] = useState<DocumentoDetalle | null>(null);
+  const [verEscaneos, setVerEscaneos] = useState<DocumentoDetalle | null>(null);
+  const [cancelarDoc, setCancelarDoc] = useState<DocumentoDetalle | null>(null);
+  const [pagoDoc, setPagoDoc] = useState<DocumentoDetalle | null>(null);
+  const [declararTipo, setDeclararTipo] = useState<string | null>(null);
+  const [anularExcepcionalTipo, setAnularExcepcionalTipo] = useState<string | null>(null);
+  const [folioNuevo, setFolioNuevo] = useState<FolioEmitido | null>(null);
+  const [documentoEnCaptura, setDocumentoEnCaptura] = useState<number | null>(null);
+  const [emitiendo, setEmitiendo] = useState<string | null>(null);
+  const [avanzando, setAvanzando] = useState<string | null>(null);
+  const [candado, setCandado] = useState<{ objetivo: ObjetivoCandado; mensaje: string } | null>(null);
+  const candadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cerrarWizard = useCallback(() => setDocumentoEnCaptura(null), []);
+
+  
+  function activarCandado(mensaje: string, tipoIntentado?: string) {
+    const objetivo =
+      objetivoDeCandado(mensaje) ??
+      (tipoIntentado ? ({ tipo: "requisito", codigo: tipoIntentado } as const) : null);
+    if (!objetivo) {
+      toast.error(mensaje);
+      return;
+    }
+    const etapaObjetivo =
+      objetivo.tipo === "selector-f06"
+        ? "EXPEDIENTE"
+        : etapas.find((e) => e.requisitos.some((r) => r.tipo === objetivo.codigo))?.codigo;
+    if (etapaObjetivo) {
+      setAbiertas((prev) => new Set(prev).add(etapaObjetivo));
+    }
+    setCandado({ objetivo, mensaje });
+    if (candadoTimer.current) clearTimeout(candadoTimer.current);
+    candadoTimer.current = setTimeout(() => setCandado(null), 15000);
+    setTimeout(() => {
+      document
+        .getElementById(idDeObjetivo(objetivo))
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 350); 
+  }
+
+  
+  useEffect(() => {
+    function onCandado(e: Event) {
+      const det = (e as CustomEvent<{ mensaje: string; tipo?: string }>).detail;
+      activarCandado(det.mensaje, det.tipo);
+    }
+    window.addEventListener("candado-manual", onCandado);
+    return () => window.removeEventListener("candado-manual", onCandado);
+    
+  }, [origen]);
+
+  const porTipo = new Map<string, DocumentoDetalle[]>();
+  for (const d of documentos) {
+    porTipo.set(d.tipo_codigo, [...(porTipo.get(d.tipo_codigo) ?? []), d]);
+  }
+
+  
+  const transicionesPorEtapa = new Map<string, string[]>();
+  const otrasTransiciones: string[] = [];
+  for (const hacia of transicionesValidas) {
+    let etapa: string | null = null;
+    if (hacia === "EN_INSPECCION") etapa = "INSPECCION";
+    else if (hacia === "EXPEDIENTE_INCOMPLETO" && estadoUnidad === "EN_INSPECCION")
+      etapa = "EXPEDIENTE";
+    else if (hacia === "LISTO_PARA_VENTA" && estadoUnidad === "EXPEDIENTE_INCOMPLETO")
+      etapa = "EXPEDIENTE";
+    else if (["APARTADA", "VENDIDA_PEND_ENTREGA", "ENTREGADA"].includes(hacia))
+      etapa = "VENTA";
+    if (etapa) transicionesPorEtapa.set(etapa, [...(transicionesPorEtapa.get(etapa) ?? []), hacia]);
+    else otrasTransiciones.push(hacia);
+  }
+  function alternar(codigo: string) {
+    setAbiertas((prev) => {
+      const s = new Set(prev);
+      if (s.has(codigo)) s.delete(codigo);
+      else s.add(codigo);
+      return s;
+    });
+  }
+
+  async function emitir(tipo: string) {
+    setEmitiendo(tipo);
+    setCandado(null);
+    try {
+      const res = await postJsonDetallado<FolioEmitido>(
+        `/api/expedientes/${expedienteId}/documentos`,
+        { tipo },
+      );
+      if (!res.ok) {
+        if (res.status === 409) activarCandado(res.error, tipo);
+        else toast.error(res.error);
+        return;
+      }
+      setFolioNuevo(res.data);
+      router.refresh();
+    } finally {
+      setEmitiendo(null);
+    }
+  }
+
+  async function avanzar(hacia: string) {
+    setAvanzando(hacia);
+    setCandado(null);
+    try {
+      const res = await postJsonDetallado(`/api/unidades/${vin}/estado`, { hacia });
+      if (!res.ok) {
+        if (res.status === 409) activarCandado(res.error);
+        else toast.error(res.error);
+        return;
+      }
+      toast.success(`Unidad ahora en ${ETIQUETA_ESTADO_UNIDAD[hacia] ?? hacia}`);
+      router.refresh();
+    } finally {
+      setAvanzando(null);
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex justify-end">
+        <div className="inline-flex rounded-full border bg-background p-0.5 text-xs shadow-xs">
+          <button
+            type="button"
+            onClick={() => setVista("linea")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors",
+              vista === "linea"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <ListIcon className="size-3.5" />
+            Línea de tiempo
+          </button>
+          <button
+            type="button"
+            onClick={() => setVista("carpeta")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors",
+              vista === "carpeta"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <FolderIcon className="size-3.5" />
+            Carpeta
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {vista === "carpeta" && (
+          <motion.div
+            key="vista-carpeta"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+            <VistaCarpeta
+              etapas={etapas}
+              porTipo={porTipo}
+              excepcionPorTipo={excepcionPorTipo}
+              solicitudPendientePorTipo={solicitudPendientePorTipo}
+              indiceActual={indiceActual}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {vista === "linea" &&
+      etapas.map((etapa, i) => {
+        const IconoEtapa = ICONO_ETAPA[etapa.codigo] ?? FolderOpenIcon;
+        const abierta = abiertas.has(etapa.codigo);
+        const esActual = etapa.codigo === etapaActual;
+        const pasada = i < indiceActual;
+
+        const medibles = etapa.requisitos.filter((r) => r.exigencia !== "segun_aplique");
+        const completos = medibles.filter((r) => {
+          const e = estadoDe(porTipo.get(r.tipo) ?? [], excepcionPorTipo.has(r.tipo));
+          return e === "EMITIDO" || e === "ESCANEADO";
+        }).length;
+        const etapaCompleta = medibles.length > 0 && completos === medibles.length;
+        const transiciones = transicionesPorEtapa.get(etapa.codigo) ?? [];
+
+        return (
+          <div key={etapa.codigo} className="relative flex gap-4">
+            {}
+            <div className="flex flex-col items-center">
+              <div
+                className={cn(
+                  "z-10 flex size-9 shrink-0 items-center justify-center rounded-full border-2 bg-background transition-colors",
+                  esActual && "border-primary bg-primary/10",
+                  !esActual && (pasada || etapaCompleta) && "border-emerald-500 bg-emerald-50",
+                  !esActual && !pasada && !etapaCompleta && "border-border",
+                )}
+              >
+                {!esActual && (pasada || etapaCompleta) ? (
+                  <CheckIcon className="size-4 text-emerald-600" />
+                ) : (
+                  <IconoEtapa
+                    className={cn("size-4", esActual ? "text-primary" : "text-muted-foreground")}
+                  />
+                )}
+              </div>
+              {i < etapas.length - 1 && (
+                <div className={cn("w-px flex-1", pasada ? "bg-emerald-300" : "bg-border")} />
+              )}
+            </div>
+
+            {}
+            <div
+              className={cn(
+                "min-w-0 flex-1 transition-[padding-bottom] duration-200",
+                abierta ? "pb-5" : "pb-10",
+              )}
+            >
+              <div className="relative isolate">
+                <AnimatePresence initial={false}>
+                  {!abierta &&
+                    etapa.requisitos.map((requisito, indice) => {
+                      const estadoHijo = estadoDe(
+                        porTipo.get(requisito.tipo) ?? [],
+                        excepcionPorTipo.has(requisito.tipo),
+                      );
+                      const desplazamiento = (indice + 1) * 6;
+
+                      return (
+                        <motion.div
+                          key={requisito.tipo}
+                          layoutId={`wallet-requisito-${requisito.tipo}`}
+                          aria-hidden="true"
+                          initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 420,
+                            damping: 32,
+                            delay: indice * 0.035,
+                          }}
+                          style={{
+                            left: desplazamiento,
+                            right: desplazamiento,
+                            top: desplazamiento,
+                            zIndex: -10 - indice,
+                          }}
+                          className={cn(
+                            "absolute h-full rounded-2xl border bg-background shadow-xs",
+                            estadoHijo === "ESCANEADO" &&
+                              "border-emerald-200 bg-emerald-50/45",
+                            estadoHijo === "EMITIDO" && "border-primary/20 bg-primary/[0.025]",
+                            estadoHijo === "ANULADO" && "border-zinc-950 bg-zinc-950",
+                          )}
+                        />
+                      );
+                    })}
+                </AnimatePresence>
+                <button
+                  type="button"
+                  onClick={() => alternar(etapa.codigo)}
+                  aria-expanded={abierta}
+                  className={cn(
+                    "relative flex w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border bg-background px-4 py-3.5 text-left shadow-sm transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md",
+                    esActual && "border-primary/40 shadow-primary/5",
+                    etapaCompleta && !esActual && "border-emerald-200",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-9 shrink-0 items-center justify-center rounded-xl border bg-muted/50 text-muted-foreground",
+                      esActual && "border-primary/20 bg-primary/10 text-primary",
+                      etapaCompleta && !esActual &&
+                        "border-emerald-200 bg-emerald-50 text-emerald-600",
+                    )}
+                  >
+                    <IconoSilk nombre={ICONO_ETAPA_SILK[etapa.codigo] ?? "expedientes"} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{etapa.etiqueta}</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Etapa padre · {etapa.requisitos.length}{" "}
+                      {etapa.requisitos.length === 1 ? "documento hijo" : "documentos hijos"}
+                    </span>
+                  </span>
+                  {esActual && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                      unidad aquí · {ETIQUETA_ESTADO_UNIDAD[estadoUnidad] ?? estadoUnidad}
+                    </span>
+                  )}
+                  <span className="flex-1" />
+                  {medibles.length > 0 && (
+                    <span
+                      className={cn(
+                        "rounded-full border bg-background px-2.5 py-1 text-xs tabular-nums",
+                        etapaCompleta
+                          ? "border-emerald-200 font-medium text-emerald-600"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {completos} de {medibles.length}
+                    </span>
+                  )}
+                  <ChevronDownIcon
+                    className={cn(
+                      "size-4 text-muted-foreground transition-transform duration-200",
+                      abierta && "rotate-180",
+                    )}
+                  />
+                </button>
+              </div>
+
+              <AnimatePresence initial={false}>
+                {abierta && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="relative ml-1 mt-3 pl-5 sm:ml-5 sm:pl-7">
+                      <div
+                        aria-hidden="true"
+                        className="absolute bottom-5 left-2 top-0 w-px bg-gradient-to-b from-primary/35 via-border to-border sm:left-3"
+                      />
+                      <motion.ul
+                        initial="apilado"
+                        animate="repartido"
+                        variants={{
+                          apilado: {},
+                          repartido: {
+                            transition: { staggerChildren: 0.055, delayChildren: 0.025 },
+                          },
+                        }}
+                        className="space-y-3"
+                      >
+                        {etapa.requisitos.map((req, indice) => (
+                          <FilaRequisito
+                            key={req.tipo}
+                            requisito={req}
+                            docs={porTipo.get(req.tipo) ?? []}
+                            excepcion={excepcionPorTipo.get(req.tipo) ?? null}
+                            solicitudPendiente={solicitudPendientePorTipo.get(req.tipo) ?? null}
+                            orden={indice}
+                            emitiendo={emitiendo === req.tipo}
+                            onEmitir={() => emitir(req.tipo)}
+                            onSubir={setSubirDoc}
+                            onVerEscaneos={setVerEscaneos}
+                            onCancelar={setCancelarDoc}
+                            onPago={setPagoDoc}
+                            onCapturar={setDocumentoEnCaptura}
+                            onDeclararExcepcion={setDeclararTipo}
+                            puedeAnularExcepcionalmente={puedeAnularExcepcionalmente}
+                            onAnularExcepcionalmente={setAnularExcepcionalTipo}
+                            candado={
+                              candado?.objetivo.tipo === "requisito" &&
+                              candado.objetivo.codigo === req.tipo
+                                ? candado
+                                : null
+                            }
+                            onCerrarCandado={() => setCandado(null)}
+                          />
+                        ))}
+                      </motion.ul>
+                      <AnexosDeEtapa etapa={etapa.codigo} origen={origen} anexos={anexos} />
+
+                      {}
+                      {(transiciones.length > 0 || etapa.codigo === "EXPEDIENTE") && (
+                        <div className="relative mt-3 space-y-3 rounded-xl border bg-muted/25 px-4 py-3 shadow-xs before:absolute before:-left-5 before:top-6 before:h-px before:w-5 before:bg-border sm:before:-left-7 sm:before:w-7">
+                          {etapa.codigo === "EXPEDIENTE" && (
+                            <SelectorF06
+                              expedienteId={expedienteId}
+                              estadoActual={estadoF06}
+                              candado={
+                                candado?.objetivo.tipo === "selector-f06" ? candado : null
+                              }
+                              onCerrarCandado={() => setCandado(null)}
+                            />
+                          )}
+                          {transiciones.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                Esta etapa destraba:
+                              </span>
+                              {transiciones.map((t) => (
+                                <AccionExplicada
+                                  key={t}
+                                  etiqueta={
+                                    avanzando === t
+                                      ? "Avanzando…"
+                                      : `Avanzar a ${ETIQUETA_ESTADO_UNIDAD[t] ?? t}`
+                                  }
+                                  titulo={`Avanzar a ${ETIQUETA_ESTADO_UNIDAD[t] ?? t}`}
+                                  descripcion="Actualiza el estado operativo de la unidad. Los candados del manual volverán a validar que todos los documentos necesarios estén completos."
+                                  confirmar="Confirmar avance"
+                                  className="h-7 px-3 text-xs"
+                                  disabled={avanzando !== null}
+                                  onConfirmar={() => avanzar(t)}
+                                  variant="default"
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        );
+      })}
+
+      {otrasTransiciones.length > 0 && (
+        <div className="ml-13 flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-4 py-3">
+          <span className="text-xs text-muted-foreground">Otras acciones:</span>
+          {otrasTransiciones.map((t) => (
+            <AccionExplicada
+              key={t}
+              etiqueta={avanzando === t ? "Aplicando…" : ETIQUETA_ESTADO_UNIDAD[t] ?? t}
+              titulo={ETIQUETA_ESTADO_UNIDAD[t] ?? t}
+              descripcion={
+                t === "BAJA"
+                  ? "Marca la unidad como baja y la saca del flujo operativo normal. Verifica el expediente antes de continuar."
+                  : "Aplica una transición fuera del camino principal y conserva el cambio en el historial de la unidad."
+              }
+              confirmar={t === "BAJA" ? "Confirmar baja" : "Aplicar cambio"}
+              variant="outline"
+              className={cn("h-7 px-3 text-xs", t === "BAJA" && "text-destructive")}
+              disabled={avanzando !== null}
+              onConfirmar={() => avanzar(t)}
+              peligrosa={t === "BAJA"}
+            />
+          ))}
+        </div>
+      )}
+
+      <DialogFolioGenerado
+        folio={folioNuevo}
+        numeroExpediente={numeroExpediente}
+        vin={vin}
+        onCapturar={(documentoId) => {
+          setFolioNuevo(null);
+          setDocumentoEnCaptura(documentoId);
+        }}
+        onCerrar={() => setFolioNuevo(null)}
+      />
+      <WizardDocumento
+        key={documentoEnCaptura ?? "cerrado"}
+        documentoId={documentoEnCaptura}
+        onClose={cerrarWizard}
+        onComplete={() => router.refresh()}
+      />
+      {subirDoc && (
+        <DialogSubirEscaneo
+          doc={subirDoc}
+          onClose={() => setSubirDoc(null)}
+          onDone={() => {
+            setSubirDoc(null);
+            router.refresh();
+          }}
+        />
+      )}
+      {verEscaneos && (
+        <DialogEscaneosDocumento
+          doc={verEscaneos}
+          onClose={() => setVerEscaneos(null)}
+        />
+      )}
+      {cancelarDoc && (
+        <DialogCancelar
+          doc={cancelarDoc}
+          onClose={() => setCancelarDoc(null)}
+          onDone={(sustituto) => {
+            setCancelarDoc(null);
+            if (sustituto) setFolioNuevo(sustituto);
+            router.refresh();
+          }}
+        />
+      )}
+      {pagoDoc && (
+        <DialogPago
+          doc={pagoDoc}
+          onClose={() => setPagoDoc(null)}
+          onDone={() => {
+            setPagoDoc(null);
+            router.refresh();
+          }}
+        />
+      )}
+      {declararTipo && (
+        <DialogSolicitarExcepcion
+          expedienteId={expedienteId}
+          tipoCodigo={declararTipo}
+          nombreTipo={NOMBRE_TIPO[declararTipo] ?? declararTipo}
+          onClose={() => setDeclararTipo(null)}
+          onDone={() => {
+            setDeclararTipo(null);
+            router.refresh();
+          }}
+        />
+      )}
+      {anularExcepcionalTipo && (
+        <DialogAnularExcepcionalmente expedienteId={expedienteId} tipoCodigo={anularExcepcionalTipo} nombreTipo={NOMBRE_TIPO[anularExcepcionalTipo] ?? anularExcepcionalTipo} onClose={() => setAnularExcepcionalTipo(null)} onDone={() => { setAnularExcepcionalTipo(null); router.refresh(); }} />
+      )}
+    </div>
+  );
+}
+
+type CandadoActivo = { objetivo: ObjetivoCandado; mensaje: string };
+
+type VarianteAccion = "default" | "outline" | "ghost" | "destructive";
+
+function AccionExplicada({
+  etiqueta,
+  titulo,
+  descripcion,
+  confirmar,
+  onConfirmar,
+  disabled = false,
+  variant = "outline",
+  className,
+  icono,
+  peligrosa = false,
+}: {
+  etiqueta: string;
+  titulo: string;
+  descripcion: string;
+  confirmar: string;
+  onConfirmar: () => void | Promise<void>;
+  disabled?: boolean;
+  variant?: VarianteAccion;
+  className?: string;
+  icono?: React.ReactNode;
+  peligrosa?: boolean;
+}) {
+  const [abierto, setAbierto] = useState(false);
+
+  return (
+    <Popover open={abierto} onOpenChange={setAbierto}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant={variant} size="sm" className={className} disabled={disabled}>
+          {icono}
+          {etiqueta}
+          <InfoIcon className="size-3 opacity-55" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-80">
+        <PopoverHeader>
+          <PopoverTitle>{titulo}</PopoverTitle>
+          <PopoverDescription className="leading-relaxed">{descripcion}</PopoverDescription>
+        </PopoverHeader>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setAbierto(false)}>
+            Volver
+          </Button>
+          <Button
+            type="button"
+            variant={peligrosa ? "destructive" : "default"}
+            size="sm"
+            onClick={() => {
+              setAbierto(false);
+              void onConfirmar();
+            }}
+          >
+            {confirmar}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function AbrirWizardButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={onOpen}>
+      <IconoSilk nombre="formulario" className="size-3.5" />
+      Completar PDF
+    </Button>
+  );
+}
+
+function EstadoRequisitoPopover({
+  estado,
+  className,
+  children,
+}: {
+  estado: EstadoRequisito;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1 text-[10px] font-semibold tracking-wide outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50",
+            className,
+          )}
+          aria-label={`${estado}: ver significado`}
+        >
+          {estado}
+          {children}
+          <InfoIcon className="size-3 opacity-55" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-72">
+        <PopoverHeader>
+          <PopoverTitle>{estado}</PopoverTitle>
+          <PopoverDescription className="leading-relaxed">
+            {EXPLICACION_ESTADO[estado]}
+          </PopoverDescription>
+        </PopoverHeader>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CalloutCandado({
+  candado,
+  onCerrar,
+}: {
+  candado: CandadoActivo;
+  onCerrar: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", duration: 0.4, bounce: 0.35 }}
+      className="mt-2 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5"
+      role="alert"
+    >
+      <LockKeyholeIcon
+        animateOnView
+        aria-hidden="true"
+        className="mt-0.5 size-4 shrink-0 text-red-600"
+      />
+      <div className="min-w-0 flex-1 text-xs leading-relaxed">
+        <p className="font-semibold text-red-800">Candado del manual</p>
+        <p className="mt-0.5 text-red-700">{candado.mensaje}.</p>
+        <p className="mt-1 flex items-center gap-1.5 font-medium text-red-800">
+          <CircleCheckIcon
+            animateOnView
+            aria-hidden="true"
+            className="size-3.5 shrink-0"
+          />
+          <span>{animoDeCandado(candado.objetivo)}</span>
+        </p>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 shrink-0 px-2 text-[11px] text-red-700 hover:bg-red-100 hover:text-red-800"
+        onClick={onCerrar}
+      >
+        Entendido
+      </Button>
+    </motion.div>
+  );
+}
+
+function CalloutAnulacion({ anulacion }: { anulacion: AnulacionDocumental }) {
+  const esLegacy = anulacion.clase === "LEGACY";
+  return (
+    <div className="mt-2 flex items-start gap-2.5 rounded-lg border border-zinc-900 bg-zinc-100 px-3 py-2.5">
+      <SkullIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-zinc-950" />
+      <div className="min-w-0 flex-1 text-xs leading-relaxed">
+        <p className="font-semibold text-zinc-950">
+          {esLegacy ? "Anulado por origen pre-sistema" : "Anulado excepcionalmente"}
+        </p>
+        <p className="mt-0.5 text-zinc-800">{anulacion.motivo}</p>
+        <p className="mt-1 text-zinc-700">
+          {esLegacy ? (
+            <>
+              Solicitada por {anulacion.solicitado_por_nombre} el{" "}
+              {format(new Date(anulacion.solicitado_en), "d MMM yyyy", { locale: es })} · autorizada en
+              modo riesgo por {anulacion.autorizado_por_nombre}
+            </>
+          ) : (
+            <>
+              Anulada por {anulacion.anulado_por_nombre} el{" "}
+              {format(new Date(anulacion.anulado_en), "d MMM yyyy", { locale: es })} como decisión
+              excepcional N3.
+            </>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CalloutSolicitudPendiente({ solicitud }: { solicitud: SolicitudRiesgoPendiente }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="mt-2 flex w-full items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 transition-colors hover:bg-amber-100"
+        >
+          <IconoSilk nombre="riesgo" tamano={14} className="shrink-0" />
+          <span className="font-medium">Solicitud enviada, pendiente de aprobación N3</span>
+          <InfoIcon className="ml-auto size-3 shrink-0 opacity-55" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" className="w-72">
+        <PopoverHeader>
+          <PopoverTitle>Excepción legacy solicitada</PopoverTitle>
+          <PopoverDescription className="leading-relaxed">
+            {solicitud.motivo}
+          </PopoverDescription>
+        </PopoverHeader>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Solicitada por {solicitud.solicitado_por_nombre} el{" "}
+          {format(new Date(solicitud.solicitado_en), "d MMM yyyy", { locale: es })} · a la espera
+          de que un administrador (N3) la apruebe o la rechace desde /modo-riesgo.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+const ESTADOS_F06 = ["INCOMPLETO", "COMPLETO", "LISTO_PARA_VENTA"] as const;
+
+function SelectorF06({
+  expedienteId,
+  estadoActual,
+  candado,
+  onCerrarCandado,
+}: {
+  expedienteId: number;
+  estadoActual: string;
+  candado: CandadoActivo | null;
+  onCerrarCandado: () => void;
+}) {
+  const router = useRouter();
+  const [estado, setEstado] = useState<string | undefined>();
+  const [selectAbierto, setSelectAbierto] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+
+  
+  const [candadoVisto, setCandadoVisto] = useState<CandadoActivo | null>(null);
+  if (candado !== candadoVisto) {
+    setCandadoVisto(candado);
+    if (candado) setSelectAbierto(true);
+  }
+
+  async function registrar() {
+    if (!estado) return;
+    setEnviando(true);
+    try {
+      const res = await postJson(`/api/expedientes/${expedienteId}/f06`, { estado });
+      if (!res) return;
+      toast.success(`F-06 ahora en ${ETIQUETA_ESTADO_F06[estado] ?? estado}`);
+      setEstado(undefined);
+      onCerrarCandado();
+      router.refresh();
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div id="selector-f06">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 rounded-md transition-all",
+          candado && "animate-pulse bg-red-50/70 p-2 ring-2 ring-red-500/70",
+        )}
+      >
+        <span className={cn("text-xs", candado ? "font-medium text-red-800" : "text-muted-foreground")}>
+          Casilla F-06 (la única que autoriza C-01/C-02):
+        </span>
+        <Select
+          value={estado}
+          onValueChange={setEstado}
+          open={selectAbierto}
+          onOpenChange={setSelectAbierto}
+        >
+          <SelectTrigger size="sm" className="w-48 bg-background">
+            <SelectValue
+              placeholder={`Actual: ${ETIQUETA_ESTADO_F06[estadoActual] ?? estadoActual}`}
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {ESTADOS_F06.map((e) => (
+              <SelectItem key={e} value={e} disabled={e === estadoActual}>
+                {ETIQUETA_ESTADO_F06[e]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <AccionExplicada
+          etiqueta={enviando ? "Registrando…" : "Registrar"}
+          titulo="Registrar estado de la carátula F-06"
+          descripcion={
+            estado === "LISTO_PARA_VENTA"
+              ? "Marca la carátula como Lista para venta. Este estado autoriza la emisión de C-01 y C-02 cuando los demás candados estén completos."
+              : `Guarda la carátula como ${estado ? (ETIQUETA_ESTADO_F06[estado] ?? estado) : "el estado seleccionado"}.`
+          }
+          confirmar="Registrar estado"
+          variant="outline"
+          className="h-8 px-3 text-xs"
+          disabled={!estado || enviando}
+          onConfirmar={registrar}
+        />
+      </div>
+      {candado && <CalloutCandado candado={candado} onCerrar={onCerrarCandado} />}
+    </div>
+  );
+}
+
+function FilaRequisito({
+  requisito,
+  docs,
+  excepcion,
+  solicitudPendiente,
+  orden,
+  emitiendo,
+  onEmitir,
+  onSubir,
+  onVerEscaneos,
+  onCancelar,
+  onPago,
+  onCapturar,
+  onDeclararExcepcion,
+  puedeAnularExcepcionalmente,
+  onAnularExcepcionalmente,
+  candado,
+  onCerrarCandado,
+}: {
+  requisito: RequisitoDocumento;
+  docs: DocumentoDetalle[];
+  excepcion: AnulacionDocumental | null;
+  solicitudPendiente: SolicitudRiesgoPendiente | null;
+  orden: number;
+  emitiendo: boolean;
+  onEmitir: () => void;
+  onSubir: (d: DocumentoDetalle) => void;
+  onVerEscaneos: (d: DocumentoDetalle) => void;
+  onCancelar: (d: DocumentoDetalle) => void;
+  onPago: (d: DocumentoDetalle) => void;
+  onCapturar: (documentoId: number) => void;
+  onDeclararExcepcion: (tipoCodigo: string) => void;
+  puedeAnularExcepcionalmente: boolean;
+  onAnularExcepcionalmente: (tipoCodigo: string) => void;
+  candado: CandadoActivo | null;
+  onCerrarCandado: () => void;
+}) {
+  const estado = estadoDe(docs, excepcion !== null);
+  const esExcepcionable = (TIPOS_LEGACY as readonly string[]).includes(requisito.tipo);
+  const [abierta, setAbierta] = useState(true);
+  const expandida = abierta || candado !== null;
+
+  return (
+    <li
+      id={`requisito-${requisito.tipo}`}
+      className={cn(
+        "relative transition-[padding-bottom] duration-200",
+        !expandida && docs.length > 0 && "pb-4",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className="absolute -left-3 top-8 h-px w-3 bg-border sm:-left-4 sm:w-4"
+      />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute -left-[15px] top-[29px] size-2 rounded-full border-2 border-background bg-border sm:-left-[19px]",
+          estado === "ESCANEADO" && "bg-emerald-500",
+          estado === "EMITIDO" && "bg-primary",
+          candado && "bg-red-500",
+        )}
+      />
+
+      <motion.div
+        layout
+        layoutId={`wallet-requisito-${requisito.tipo}`}
+        variants={{
+          apilado: {
+            opacity: 0,
+            y: -14,
+            rotate: orden % 2 === 0 ? -0.6 : 0.6,
+            scale: 0.985,
+          },
+          repartido: {
+            opacity: 1,
+            y: 0,
+            rotate: 0,
+            scale: 1,
+          },
+        }}
+        whileHover={{ y: -2 }}
+        transition={{ type: "spring", stiffness: 380, damping: 30 }}
+        className="relative isolate"
+      >
+        <AnimatePresence initial={false}>
+          {!expandida &&
+            docs.slice(0, 3).map((doc, indice) => {
+              const desplazamiento = (indice + 1) * 5;
+
+              return (
+                <motion.div
+                  key={doc.id}
+                  layoutId={`wallet-documento-${doc.id}`}
+                  aria-hidden="true"
+                  initial={{ opacity: 0, y: -6, scale: 0.985 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 420,
+                    damping: 32,
+                    delay: indice * 0.035,
+                  }}
+                  style={{
+                    left: desplazamiento,
+                    right: desplazamiento,
+                    top: desplazamiento,
+                    zIndex: -10 - indice,
+                  }}
+                  className={cn(
+                    "absolute h-full rounded-2xl border bg-background shadow-xs",
+                    doc.escaneado && "border-emerald-200 bg-emerald-50/45",
+                    doc.cancelado && "border-red-200 bg-red-50/50",
+                  )}
+                />
+              );
+            })}
+        </AnimatePresence>
+        <div
+          className={cn(
+            "relative rounded-2xl border bg-gradient-to-br from-background via-background to-muted/25 p-3.5 shadow-sm transition-all sm:p-4",
+            estado === "ESCANEADO" && "border-emerald-200/80",
+            candado && "animate-pulse border-red-300 ring-2 ring-red-500/60",
+          )}
+        >
+          <div className="flex flex-wrap items-start gap-3">
+            <span
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-xl border bg-background shadow-xs",
+                estado === "ESCANEADO" && "border-emerald-200 bg-emerald-50",
+                estado === "ANULADO" && "border-zinc-950 bg-zinc-950",
+              )}
+            >
+              <IconoEstadoRequisito estado={estado} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs font-semibold text-primary">
+                  {requisito.tipo}
+                </span>
+                <span className="text-sm font-semibold">{NOMBRE_TIPO[requisito.tipo]}</span>
+                {requisito.exigencia === "segun_aplique" && (
+                  <span className="rounded-full border bg-background px-2 py-px text-[10px] text-muted-foreground">
+                    según aplique
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">{requisito.proposito}</p>
+              <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground/70">
+                Documento hijo · {docs.length} {docs.length === 1 ? "folio" : "folios"}
+              </p>
+            </div>
+            <EstadoRequisitoPopover
+              estado={estado}
+              className={cn(
+                estado === "ESCANEADO" && "border-emerald-200 text-emerald-700",
+                estado === "EMITIDO" && "border-primary/20 text-primary",
+                estado === "PENDIENTE" && "text-muted-foreground",
+                estado === "ANULADO" && "border-zinc-950 bg-zinc-950 text-white",
+              )}
+            />
+            {estado === "PENDIENTE" && (
+              <AccionExplicada
+                etiqueta={emitiendo ? "Emitiendo…" : `Emitir ${requisito.tipo}`}
+                titulo={`Emitir ${requisito.tipo}`}
+                descripcion="Crea un folio consecutivo permanente para este tipo documental. El registro quedará en la trazabilidad aunque después sea cancelado."
+                confirmar="Emitir folio"
+                variant={requisito.exigencia === "segun_aplique" ? "outline" : "default"}
+                className="h-8 px-3 text-xs"
+                disabled={emitiendo}
+                onConfirmar={onEmitir}
+              />
+            )}
+            {puedeAnularExcepcionalmente && !excepcion && (
+              <AccionExplicada etiqueta="Anular excepcionalmente" titulo={`Anular ${requisito.tipo} excepcionalmente`} descripcion="Decisión unilateral N3, inmutable y auditada. Este requisito dejará de estar habilitado y podrá respaldar el cierre del expediente cuando corresponda." confirmar="Revisar anulación" variant="ghost" className="h-8 px-3 text-xs text-zinc-800 hover:text-zinc-950" icono={<SkullIcon className="size-3" />} onConfirmar={() => onAnularExcepcionalmente(requisito.tipo)} />
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-expanded={expandida}
+              aria-label={`${expandida ? "Cerrar" : "Abrir"} ${requisito.tipo}`}
+              onClick={() => setAbierta((valor) => !valor)}
+              disabled={candado !== null}
+            >
+              <ChevronDownIcon
+                className={cn(
+                  "size-4 text-muted-foreground transition-transform duration-200",
+                  expandida && "rotate-180",
+                )}
+              />
+            </Button>
+          </div>
+
+          <AnimatePresence initial={false}>
+            {expandida && (
+              <motion.div
+                initial={{ height: 0, opacity: 0, y: -4 }}
+                animate={{ height: "auto", opacity: 1, y: 0 }}
+                exit={{ height: 0, opacity: 0, y: -4 }}
+                transition={{ duration: 0.22, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                {candado && (
+                  <CalloutCandado candado={candado} onCerrar={onCerrarCandado} />
+                )}
+
+                {excepcion && <CalloutAnulacion anulacion={excepcion} />}
+
+                {!excepcion && solicitudPendiente && (
+                  <CalloutSolicitudPendiente solicitud={solicitudPendiente} />
+                )}
+
+                {docs.length > 0 ? (
+                  <ul className="ml-4 mt-3 space-y-2 border-l border-dashed pl-4">
+                    {docs.map((doc, indice) => (
+                      <li key={doc.id} className="relative">
+                        <span
+                          aria-hidden="true"
+                          className="absolute -left-4 top-5 h-px w-4 bg-border"
+                        />
+                        <motion.div
+                          layout
+                          layoutId={`wallet-documento-${doc.id}`}
+                          initial={{
+                            opacity: 0,
+                            y: -8,
+                            rotate: indice % 2 === 0 ? -0.5 : 0.5,
+                            scale: 0.99,
+                          }}
+                          animate={{ opacity: 1, y: 0, rotate: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.99 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 400,
+                            damping: 32,
+                            delay: indice * 0.045,
+                          }}
+                          className={cn(
+                            "rounded-xl border bg-background/90 p-3 shadow-xs transition-colors hover:border-primary/20 hover:bg-background",
+                            doc.cancelado && "bg-muted/40 opacity-65",
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-mono text-xs font-semibold">{doc.folio}</span>
+                            <BotonCopiar texto={doc.folio} />
+                            <BadgeDocumento doc={doc} />
+                            <span className="text-[11px] text-muted-foreground">
+                              {doc.emitido_por_nombre} ·{" "}
+                              {format(new Date(doc.emitido_en), "d MMM yyyy", {
+                                locale: es,
+                              })}
+                            </span>
+                            {doc.sustituido_por_folio && (
+                              <span className="text-[11px] text-muted-foreground">
+                                → {doc.sustituido_por_folio}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap items-center gap-1 border-t pt-2">
+                            {!doc.cancelado && !excepcion && (
+                              <AbrirWizardButton onOpen={() => onCapturar(doc.id)} />
+                            )}
+                            {!doc.cancelado && !excepcion && (
+                              <AccionExplicada
+                                etiqueta="Subir escaneo"
+                                titulo={`Subir escaneo de ${doc.folio}`}
+                                descripcion="Abre el selector para cargar el documento firmado. Al confirmar la carga se crea una versión inmutable y las versiones anteriores permanecen disponibles."
+                                confirmar="Elegir archivo"
+                                variant="ghost"
+                                className="h-7 px-2 text-[11px]"
+                                icono={<IconoSilk nombre="adjuntar" className="size-3.5" />}
+                                onConfirmar={() => onSubir(doc)}
+                              />
+                            )}
+                            {esExcepcionable &&
+                              !doc.cancelado &&
+                              !doc.escaneado &&
+                              !excepcion &&
+                              !solicitudPendiente && (
+                                <AccionExplicada
+                                  etiqueta="Anular por pre-origen"
+                                  titulo={`Anular ${requisito.tipo} por pre-origen`}
+                                  descripcion="Para una unidad previa al sistema, cuando este formato nunca existió. La calavera no borra nada: deja una excepción auditada y evita que el flujo vuelva a exigir este documento. Un N3 distinto debe aprobarla."
+                                  confirmar="Solicitar anulación"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[11px] text-amber-700 hover:text-amber-800"
+                                  icono={<SkullIcon className="size-3" />}
+                                  onConfirmar={() => onDeclararExcepcion(requisito.tipo)}
+                                />
+                              )}
+                            {doc.version_maxima != null && (
+                              <AccionExplicada
+                                etiqueta={doc.version_maxima > 1 ? `Ver archivos (${doc.version_maxima})` : "Ver escaneo"}
+                                titulo={`Consultar archivos de ${doc.folio}`}
+                                descripcion="Abre la colección completa de evidencia del folio. Puedes consultar cada archivo o unir PDFs y fotografías en un solo PDF de lectura."
+                                confirmar="Ver archivos"
+                                variant="ghost"
+                                className="h-7 px-2 text-[11px]"
+                                onConfirmar={() => onVerEscaneos(doc)}
+                              />
+                            )}
+                            {doc.tipo_codigo === "C-02" &&
+                              !doc.pago_verificado &&
+                              !doc.cancelado && (
+                                <AccionExplicada
+                                  etiqueta="Verificar pago"
+                                  titulo="Verificar pago del C-02"
+                                  descripcion="Abre la confirmación de pago. El pago verificado, junto con el escaneo del C-02, habilita la emisión del acta F-11."
+                                  confirmar="Revisar pago"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[11px]"
+                                  onConfirmar={() => onPago(doc)}
+                                />
+                              )}
+                            {!doc.cancelado && !excepcion && (
+                              <AccionExplicada
+                                etiqueta="Cancelar"
+                                titulo={`Cancelar ${doc.folio}`}
+                                descripcion="No elimina el folio: lo conserva en la auditoría y deja de admitir operaciones. El siguiente diálogo pedirá el motivo y permitirá emitir un sustituto."
+                                confirmar="Revisar cancelación"
+                                variant="ghost"
+                                className="h-7 px-2 text-[11px] text-destructive hover:text-destructive"
+                                onConfirmar={() => onCancelar(doc)}
+                                peligrosa
+                              />
+                            )}
+                          </div>
+                        </motion.div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                    <CircleDashedIcon className="size-3.5 shrink-0" />
+                    Aún no hay un folio dentro de este documento.
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </motion.div>
+    </li>
+  );
+}
+
+function BadgeDocumento({ doc }: { doc: DocumentoDetalle }) {
+  const estado: EstadoRequisito = doc.cancelado
+    ? "ANULADO"
+    : doc.escaneado
+      ? "ESCANEADO"
+      : "EMITIDO";
+  return (
+    <EstadoRequisitoPopover
+      estado={estado}
+      className={cn(
+        "px-2 py-px font-medium normal-case tracking-normal",
+        estado === "ANULADO" && "border-zinc-950 bg-zinc-950 text-white",
+        estado === "ESCANEADO" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+        estado === "EMITIDO" && "bg-background text-foreground",
+      )}
+    >
+      {estado === "ESCANEADO" && doc.version_maxima != null && doc.version_maxima > 1 && (
+        <span className="text-emerald-600">v{doc.version_maxima}</span>
+      )}
+      {estado === "ANULADO" && <SkullIcon aria-hidden="true" className="size-4 text-white" />}
+      {doc.tipo_codigo === "C-02" && doc.pago_verificado && !doc.cancelado && (
+        <span className="inline-flex items-center gap-0.5 text-emerald-600">
+          · pago
+          <CircleCheckIcon
+            animateOnView
+            aria-label="verificado"
+            className="size-3"
+          />
+        </span>
+      )}
+    </EstadoRequisitoPopover>
+  );
+}
+
+function DialogSubirEscaneo({
+  doc,
+  onClose,
+  onDone,
+}: {
+  doc: DocumentoDetalle;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [arrastrando, setArrastrando] = useState(false);
+  const [subiendo, setSubiendo] = useState(false);
+  const [progreso, setProgreso] = useState<{ actual: number; total: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function agregarArchivos(nuevos: FileList | File[]) {
+    const seleccion = Array.from(nuevos);
+    if (seleccion.length === 0) return;
+    const validos = seleccion.filter((archivo) => {
+      if (!MIMES_ACEPTADOS.has(archivo.type)) {
+        toast.error(`${archivo.name}: solo se admiten PDF, JPG, PNG o WEBP.`);
+        return false;
+      }
+      if (archivo.size > MAX_BYTES_ESCANEO) {
+        toast.error(`${archivo.name}: supera el límite de 25 MB.`);
+        return false;
+      }
+      return true;
+    });
+    if (validos.length > 0) setArchivos((anteriores) => [...anteriores, ...validos]);
+  }
+
+  async function subir() {
+    if (archivos.length === 0) return;
+    setSubiendo(true);
+    setProgreso({ actual: 0, total: archivos.length });
+    const pendientes: File[] = [];
+    let nuevos = 0;
+    let yaRegistrados = 0;
+    try {
+      for (const [indice, archivo] of archivos.entries()) {
+        setProgreso({ actual: indice + 1, total: archivos.length });
+        const buffer = await archivo.arrayBuffer();
+        const sha256 = await sha256Hex(buffer);
+
+        const presign = await postJson<{
+          rutaObjeto: string | null;
+          archivoId: number | null;
+          yaRegistrado?: boolean;
+          contentType?: string;
+        }>(
+          `/api/documentos/${doc.id}/escaneos/presign`,
+          {
+            nombreArchivo: archivo.name,
+            tamanoBytes: archivo.size,
+            sha256,
+            contentType: archivo.type,
+          },
+        );
+        if (!presign) {
+          pendientes.push(archivo);
+          continue;
+        }
+        if (presign.yaRegistrado) {
+          yaRegistrados += 1;
+          continue;
+        }
+        if (!presign.rutaObjeto || !presign.contentType) {
+          toast.error(`${archivo.name}: no fue posible preparar la carga.`);
+          pendientes.push(archivo);
+          continue;
+        }
+
+        try {
+          await uploadPresigned(presign.rutaObjeto, archivo, {
+            access: "private",
+            contentType: presign.contentType,
+            handleUploadUrl: `/api/documentos/${doc.id}/escaneos/presign`,
+            clientPayload: JSON.stringify({
+              nombreArchivo: archivo.name,
+              tamanoBytes: archivo.size,
+              sha256,
+              contentType: archivo.type,
+            }),
+          });
+        } catch {
+          toast.error(`No se pudo subir «${archivo.name}»`, {
+            description: mensajeErrorSinRespuesta(),
+          });
+          pendientes.push(archivo);
+          continue;
+        }
+
+        const confirmado = await postJson<{ archivoId: number; yaRegistrado?: boolean }>(
+          `/api/documentos/${doc.id}/escaneos/confirmar`,
+          {
+            nombreArchivo: archivo.name,
+            contentType: archivo.type,
+            sha256,
+            rutaObjeto: presign.rutaObjeto,
+            tamanoBytes: archivo.size,
+          },
+        );
+        if (!confirmado) {
+          pendientes.push(archivo);
+          continue;
+        }
+        if (confirmado.yaRegistrado) yaRegistrados += 1;
+        else nuevos += 1;
+      }
+
+      if (nuevos > 0) {
+        toast.success(
+          nuevos === 1
+            ? `Archivo registrado para ${doc.folio}`
+            : `${nuevos} archivos registrados para ${doc.folio}`,
+        );
+      }
+      if (yaRegistrados > 0) {
+        toast.info(
+          yaRegistrados === 1
+            ? "El archivo ya estaba resguardado en este folio."
+            : `${yaRegistrados} archivos ya estaban resguardados en este folio.`,
+        );
+      }
+      if (pendientes.length === 0) {
+        onDone();
+      } else {
+        setArchivos(pendientes);
+      }
+    } finally {
+      setSubiendo(false);
+      setProgreso(null);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Subir escaneo · {doc.folio}</DialogTitle>
+          <DialogDescription>
+            Adjunta uno o varios archivos del documento firmado. Cada PDF o imagen
+            queda resguardado de forma independiente y no reemplaza los anteriores.
+          </DialogDescription>
+        </DialogHeader>
+
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setArrastrando(true);
+          }}
+          onDragLeave={() => setArrastrando(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setArrastrando(false);
+            agregarArchivos(e.dataTransfer.files);
+          }}
+          className={cn(
+            "flex min-h-32 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-4 text-sm text-muted-foreground transition-colors",
+            arrastrando && "border-foreground bg-muted",
+          )}
+        >
+          {archivos.length > 0 ? (
+            <>
+              <IconoSilk nombre="hojaOk" tamano={28} className="mb-1" />
+              <span className="font-medium text-foreground">
+                {archivos.length === 1 ? archivos[0].name : `${archivos.length} archivos seleccionados`}
+              </span>
+              <span className="text-xs">Haz clic o arrastra más archivos para agregarlos</span>
+            </>
+          ) : (
+            <>
+              <IconoSilk nombre="adjuntar" tamano={28} className="mb-1" />
+              <span>Arrastra PDFs o imágenes aquí</span>
+              <span className="text-xs">o haz clic para elegir varios (PDF/JPG/PNG/WEBP, máx. 25 MB c/u)</span>
+            </>
+          )}
+        </button>
+        {archivos.length > 0 && (
+          <ul className="max-h-32 space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2 text-xs">
+            {archivos.map((archivo, indice) => (
+              <li key={`${archivo.name}-${archivo.size}-${indice}`} className="flex items-center justify-between gap-3">
+                <span className="truncate text-foreground">{archivo.name}</span>
+                <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                  {(archivo.size / 1024 / 1024).toFixed(2)} MB
+                  <button
+                    type="button"
+                    aria-label={`Quitar ${archivo.name}`}
+                    className="rounded p-0.5 hover:bg-muted hover:text-foreground"
+                    onClick={() =>
+                      setArchivos((anteriores) => anteriores.filter((_, i) => i !== indice))
+                    }
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept={TIPOS_ACEPTADOS}
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            agregarArchivos(e.target.files ?? []);
+            e.currentTarget.value = "";
+          }}
+        />
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={subiendo}>
+            Cancelar
+          </Button>
+          <Button onClick={subir} disabled={archivos.length === 0 || subiendo}>
+            {!subiendo && <IconoSilk nombre="adjuntar" className="size-4" />}
+            {subiendo && progreso
+              ? `Subiendo ${progreso.actual} de ${progreso.total}…`
+              : archivos.length > 1
+                ? `Subir ${archivos.length} archivos`
+                : "Subir y registrar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DialogEscaneosDocumento({
+  doc,
+  onClose,
+}: {
+  doc: DocumentoDetalle;
+  onClose: () => void;
+}) {
+  const [archivos, setArchivos] = useState<Array<{
+    id: number;
+    nombreArchivo: string;
+    contentType: string;
+    tamanoBytes: number;
+    subidoEn: string;
+    subidoPorNombre: string;
+  }> | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    fetch(`/api/documentos/${doc.id}/escaneos`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (activo) setArchivos(Array.isArray(data) ? data : []);
+      })
+      .catch(() => activo && setArchivos([]));
+    return () => {
+      activo = false;
+    };
+  }, [doc.id]);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Archivos resguardados · {doc.folio}</DialogTitle>
+          <DialogDescription>
+            Cada archivo conserva su propia versión y evidencia. Consultarlos o compilarlos no modifica el expediente.
+          </DialogDescription>
+        </DialogHeader>
+        {archivos === null ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Cargando archivos…</p>
+        ) : (
+          <div className="max-h-72 space-y-2 overflow-y-auto">
+            {archivos.map((archivo, indice) => (
+              <div key={archivo.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{archivo.nombreArchivo}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Archivo {indice + 1} · {archivo.subidoPorNombre} · {(archivo.tamanoBytes / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={`/api/documentos/${doc.id}/escaneos/adjuntos/${archivo.id}`} target="_blank" rel="noreferrer">
+                    Abrir
+                  </a>
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <DialogFooter>
+          {(archivos?.length ?? 0) > 1 && (
+            <Button variant="outline" asChild>
+              <a href={`/api/documentos/${doc.id}/escaneos/compilado`} target="_blank" rel="noreferrer">
+                Descargar PDF conjunto
+              </a>
+            </Button>
+          )}
+          <Button onClick={onClose}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DialogCancelar({
+  doc,
+  onClose,
+  onDone,
+}: {
+  doc: DocumentoDetalle;
+  onClose: () => void;
+  onDone: (sustituto: FolioEmitido | null) => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const [sustituir, setSustituir] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+
+  async function cancelar() {
+    setEnviando(true);
+    try {
+      const res = await postJson<{ sustituto: FolioEmitido | null }>(
+        `/api/documentos/${doc.id}/cancelar`,
+        {
+          motivo,
+          ...(sustituir ? { sustituirConTipo: doc.tipo_codigo } : {}),
+        },
+      );
+      if (!res) return;
+      toast.success(
+        res.sustituto
+          ? `${doc.folio} cancelado; sustituido por ${res.sustituto.folio}`
+          : `${doc.folio} cancelado`,
+      );
+      onDone(res.sustituto);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cancelar documento · {doc.folio}</DialogTitle>
+          <DialogDescription>
+            El documento ANULADO se conserva en el expediente. La corrección es
+            cancelación + folio sustituto del mismo tipo.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="motivo">Motivo</Label>
+            <Textarea
+              id="motivo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Error de captura en datos del cliente…"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={sustituir}
+              onChange={(e) => setSustituir(e.target.checked)}
+              className="size-4"
+            />
+            Emitir folio sustituto del mismo tipo ({doc.tipo_codigo})
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={enviando}>
+            Volver
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={cancelar}
+            disabled={motivo.trim().length === 0 || enviando}
+          >
+            {enviando ? "Cancelando…" : "Cancelar documento"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DialogSolicitarExcepcion({
+  expedienteId,
+  tipoCodigo,
+  nombreTipo,
+  onClose,
+  onDone,
+}: {
+  expedienteId: number;
+  tipoCodigo: string;
+  nombreTipo: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const motivoValido = motivo.trim().length >= 40;
+
+  async function solicitar() {
+    setEnviando(true);
+    try {
+      const res = await postJson<{ solicitudId: number }>(
+        `/api/expedientes/${expedienteId}/solicitudes-riesgo`,
+        { tipoCodigo, motivo },
+      );
+      if (!res) return;
+      toast.success("Solicitud enviada; un administrador (N3) debe aprobarla");
+      onDone();
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Solicitar excepción legacy · {tipoCodigo}</DialogTitle>
+          <DialogDescription>
+            Para unidades legacy (adquiridas antes de existir el sistema) sin el
+            papel físico de {nombreTipo}. Esto no declara la excepción todavía:
+            queda PENDIENTE hasta que un administrador (N3), que no seas tú, la
+            apruebe o la rechace desde /modo-riesgo.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label htmlFor="motivo-excepcion">Motivo</Label>
+          <Textarea
+            id="motivo-excepcion"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Unidad adquirida en 2017, antes de existir el sistema; no hay checklist físico de inspección que escanear…"
+          />
+          <p
+            className={cn(
+              "text-xs",
+              motivoValido ? "text-muted-foreground" : "text-amber-700",
+            )}
+          >
+            {motivo.trim().length}/40 caracteres mínimo
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={enviando}>
+            Volver
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={solicitar}
+            disabled={!motivoValido || enviando}
+          >
+            {enviando ? "Enviando…" : "Enviar solicitud"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DialogAnularExcepcionalmente({ expedienteId, tipoCodigo, nombreTipo, onClose, onDone }: { expedienteId: number; tipoCodigo: string; nombreTipo: string; onClose: () => void; onDone: () => void }) {
+  const [motivo, setMotivo] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const valido = motivo.trim().length >= 40;
+  async function anular() {
+    setEnviando(true);
+    try {
+      const res = await postJsonDetallado(`/api/expedientes/${expedienteId}/anulaciones-excepcionales`, { tipoCodigo, motivo });
+      if (!res.ok) return toast.error(res.error);
+      toast.success(`${tipoCodigo} quedó anulado excepcionalmente`);
+      onDone();
+    } finally { setEnviando(false); }
+  }
+  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent><DialogHeader><DialogTitle>Anular excepcionalmente · {tipoCodigo}</DialogTitle><DialogDescription>Decisión unilateral N3 para {nombreTipo}. Queda inmutable en la base de datos, con tu motivo y fecha; el requisito no volverá a habilitarse.</DialogDescription></DialogHeader><div className="grid gap-2"><Label htmlFor="motivo-anulacion">Motivo de la decisión</Label><Textarea id="motivo-anulacion" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Explica por qué este requisito no aplica y por qué la anulación excepcional está justificada…" /><p className={cn("text-xs", valido ? "text-muted-foreground" : "text-amber-700")}>{motivo.trim().length}/40 caracteres mínimo</p></div><DialogFooter><Button variant="outline" disabled={enviando} onClick={onClose}>Volver</Button><Button variant="destructive" disabled={!valido || enviando} onClick={anular}>{enviando ? "Anulando…" : "Confirmar anulación"}</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+const MEDIOS_PAGO_C02 = [
+  {
+    value: "EFECTIVO",
+    label: "Efectivo",
+    referenciaLabel: "Folio del recibo firmado",
+    referenciaPlaceholder: "REC-2026-0001",
+    regla: "Resguarda el recibo de caja firmado y captura su folio.",
+  },
+  {
+    value: "SPEI",
+    label: "SPEI",
+    referenciaLabel: "Clave de rastreo SPEI",
+    referenciaPlaceholder: "40012345678901234567",
+    regla: "Usa la clave de rastreo que aparece en el comprobante bancario.",
+  },
+  {
+    value: "TRANSFERENCIA",
+    label: "Transferencia bancaria",
+    referenciaLabel: "Referencia de transferencia",
+    referenciaPlaceholder: "Referencia bancaria",
+    regla: "Resguarda el comprobante emitido por el banco.",
+  },
+  {
+    value: "TARJETA",
+    label: "Tarjeta",
+    referenciaLabel: "Autorización de terminal",
+    referenciaPlaceholder: "AUT-123456",
+    regla: "Registra únicamente la autorización de terminal; nunca el número completo de tarjeta.",
+  },
+  {
+    value: "CHEQUE",
+    label: "Cheque",
+    referenciaLabel: "Folio de cheque",
+    referenciaPlaceholder: "CHEQ-000123",
+    regla: "Resguarda la copia o comprobante de depósito del cheque.",
+  },
+  {
+    value: "FINANCIAMIENTO",
+    label: "Financiamiento",
+    referenciaLabel: "Folio de autorización",
+    referenciaPlaceholder: "FIN-2026-0001",
+    regla: "Resguarda la autorización o contrato de la financiera.",
+  },
+  {
+    value: "OTRO",
+    label: "Otro medio",
+    referenciaLabel: "Referencia adicional",
+    referenciaPlaceholder: "Referencia opcional",
+    regla: "Describe el medio y la referencia que permiten auditarlo.",
+  },
+] as const;
+
+type MedioPagoC02 = (typeof MEDIOS_PAGO_C02)[number]["value"];
+
+type EstadoPagoC02 = {
+  precioTotal: string | null;
+  totalRegistrado: string;
+  diferencia: string | null;
+  conciliado: boolean;
+  capturaCompleta: boolean;
+  escaneado: boolean;
+  pagoVerificado: boolean;
+  umbralEfectivoPld: string;
+  pagos: Array<{
+    id: string;
+    medio: MedioPagoC02;
+    monto: string;
+    fechaPago: string;
+    referencia: string | null;
+    detalle: string | null;
+    comprobanteVersion: number;
+    registradoEn: string;
+  }>;
+  comprobantes: Array<{
+    version: number;
+    contentType: string;
+    tamanoBytes: number;
+    subidoEn: string;
+  }>;
+};
+
+type ResultadoEstadoPagoC02 =
+  | { ok: true; data: EstadoPagoC02 }
+  | { ok: false; error: string };
+
+async function consultarEstadoPagoC02(documentoId: number): Promise<ResultadoEstadoPagoC02> {
+  try {
+    const respuesta = await fetch(`/api/documentos/${documentoId}/pago`, { cache: "no-store" });
+    const cuerpo: unknown = await respuesta.json().catch(() => undefined);
+    if (!respuesta.ok) {
+      return { ok: false, error: mensajeErrorRespuesta(respuesta.status, cuerpo) };
+    }
+    return { ok: true, data: cuerpo as EstadoPagoC02 };
+  } catch {
+    return { ok: false, error: mensajeErrorSinRespuesta() };
+  }
+}
+
+function efectivoBloqueadoPara(estado: Pick<EstadoPagoC02, "precioTotal" | "umbralEfectivoPld"> | null) {
+  return Boolean(
+    estado?.precioTotal && Number(estado.precioTotal) >= Number(estado.umbralEfectivoPld),
+  );
+}
+
+function formatoMoneda(valor: string | null) {
+  if (valor === null || valor === "") return "Pendiente";
+  const negativo = valor.startsWith("-");
+  const absoluto = negativo ? valor.slice(1) : valor;
+  return `${negativo ? "-" : ""}$${formatearNumeroCaptura(absoluto)}`;
+}
+
+function DialogPago({
+  doc,
+  onClose,
+  onDone,
+}: {
+  doc: DocumentoDetalle;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [estado, setEstado] = useState<EstadoPagoC02 | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState<"registro" | "certificacion" | null>(null);
+  const [medio, setMedio] = useState<MedioPagoC02>("EFECTIVO");
+  const [monto, setMonto] = useState("");
+  const [fechaPago, setFechaPago] = useState(() => new Date().toISOString().slice(0, 10));
+  const [referencia, setReferencia] = useState("");
+  const [detalle, setDetalle] = useState("");
+  const [comprobanteVersion, setComprobanteVersion] = useState("");
+
+  const cargar = useCallback(async () => {
+    const respuesta = await consultarEstadoPagoC02(doc.id);
+    if (respuesta.ok) {
+      setEstado(respuesta.data);
+      setError(null);
+      if (efectivoBloqueadoPara(respuesta.data)) {
+        setMedio((actual) => (actual === "EFECTIVO" ? "TRANSFERENCIA" : actual));
+      }
+    } else {
+      setEstado(null);
+      setError(respuesta.error);
+    }
+    setCargando(false);
+  }, [doc.id]);
+
+  useEffect(() => {
+    let vigente = true;
+    void consultarEstadoPagoC02(doc.id).then((respuesta) => {
+      if (!vigente) return;
+      if (respuesta.ok) {
+        setEstado(respuesta.data);
+        setError(null);
+        if (efectivoBloqueadoPara(respuesta.data)) {
+          setMedio((actual) => (actual === "EFECTIVO" ? "TRANSFERENCIA" : actual));
+        }
+      } else {
+        setEstado(null);
+        setError(respuesta.error);
+      }
+      setCargando(false);
+    });
+    return () => { vigente = false; };
+  }, [doc.id]);
+
+  const efectivoBloqueado = efectivoBloqueadoPara(estado);
+  const configuracion = MEDIOS_PAGO_C02.find((item) => item.value === medio) ?? MEDIOS_PAGO_C02[0];
+  const montoCanonico = canonizarNumeroCaptura(monto);
+  const referenciaValida = medio === "OTRO"
+    ? detalle.trim().length >= 10
+    : referencia.trim().length >= 3;
+  const pagoValido = Boolean(
+    montoCanonico && montoCanonico !== "" && fechaPago && comprobanteVersion && referenciaValida,
+  );
+  const puedeCertificar = Boolean(
+    estado
+      && estado.pagos.length > 0
+      && estado.conciliado
+      && estado.capturaCompleta
+      && estado.escaneado
+      && !estado.pagoVerificado,
+  );
+
+  function irAComprobantes() {
+    onClose();
+    requestAnimationFrame(() => {
+      document.getElementById("anexo-comprobante_pago")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  async function registrar() {
+    if (!pagoValido || !montoCanonico) return;
+    setEnviando("registro");
+    setError(null);
+    try {
+      const respuesta = await postJsonDetallado(`/api/documentos/${doc.id}/pago`, {
+        accion: "registrar",
+        medio,
+        monto: montoCanonico,
+        fechaPago,
+        referencia: referencia.trim() || undefined,
+        detalle: detalle.trim() || undefined,
+        comprobanteVersion: Number(comprobanteVersion),
+      });
+      if (!respuesta.ok) {
+        setError(respuesta.error);
+        return;
+      }
+      setMonto("");
+      setReferencia("");
+      setDetalle("");
+      setComprobanteVersion("");
+      toast.success("Medio de pago registrado");
+      await cargar();
+    } finally {
+      setEnviando(null);
+    }
+  }
+
+  async function certificar() {
+    if (!puedeCertificar) return;
+    setEnviando("certificacion");
+    setError(null);
+    try {
+      const respuesta = await postJsonDetallado(`/api/documentos/${doc.id}/pago`, { accion: "certificar" });
+      if (!respuesta.ok) {
+        setError(respuesta.error);
+        return;
+      }
+      toast.success(`Pago conciliado para ${doc.folio}`);
+      onDone();
+    } finally {
+      setEnviando(null);
+    }
+  }
+
+  const estadoConciliacion = estado?.conciliado
+    ? "Importes conciliados"
+    : estado?.diferencia?.startsWith("-")
+      ? "Importe excedido"
+      : "Importe pendiente";
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Pago del C-02 · {doc.folio}</DialogTitle>
+          <DialogDescription>
+            Registra cada medio con el comprobante que lo respalda. Solo la conciliación exacta
+            contra el precio firmado habilita F-11 y la venta de la unidad.
+          </DialogDescription>
+        </DialogHeader>
+
+        {cargando && <p className="py-6 text-sm text-muted-foreground">Cargando estado de conciliación…</p>}
+
+        {!cargando && estado && (
+          <div className="grid gap-5">
+            <dl className="grid gap-3 border-y py-4 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-muted-foreground">Precio total C-02</dt>
+                <dd className="mt-1 font-medium tabular-nums">{formatoMoneda(estado.precioTotal)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Pagos registrados</dt>
+                <dd className="mt-1 font-medium tabular-nums">{formatoMoneda(estado.totalRegistrado)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{estadoConciliacion}</dt>
+                <dd className={cn("mt-1 font-medium tabular-nums", estado.conciliado ? "text-emerald-700" : "text-amber-700")}>
+                  {estado.conciliado ? "Listo para certificar" : formatoMoneda(estado.diferencia)}
+                </dd>
+              </div>
+            </dl>
+
+            {estado.pagoVerificado ? (
+              <p className="border-l-2 border-emerald-600 pl-3 text-sm text-emerald-800">
+                El pago ya quedó certificado e inmutable. No se admiten nuevos renglones.
+              </p>
+            ) : (
+              <section className="grid gap-4" aria-label="Registrar medio de pago">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="monto-pago">Monto del pago</Label>
+                    <Input
+                      id="monto-pago"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={formatearNumeroCaptura(monto)}
+                      onChange={(event) => {
+                        const siguiente = canonizarNumeroCaptura(event.target.value);
+                        if (siguiente !== null) setMonto(siguiente);
+                      }}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="fecha-pago">Fecha de pago</Label>
+                    <Input id="fecha-pago" type="date" value={fechaPago} onChange={(event) => setFechaPago(event.target.value)} />
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:max-w-sm">
+                  <Label htmlFor="medio-pago">Medio de pago</Label>
+                  <Select value={medio} onValueChange={(valor) => setMedio(valor as MedioPagoC02)}>
+                    <SelectTrigger id="medio-pago"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MEDIOS_PAGO_C02.map((opcion) => (
+                        <SelectItem
+                          key={opcion.value}
+                          value={opcion.value}
+                          disabled={opcion.value === "EFECTIVO" && efectivoBloqueado}
+                        >
+                          {opcion.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {efectivoBloqueado && (
+                  <p className="border-l-2 border-amber-500 pl-3 text-sm text-amber-800">
+                    El precio pactado ({formatoMoneda(estado.precioTotal)}) alcanza o supera el umbral PLD de
+                    efectivo ({formatoMoneda(estado.umbralEfectivoPld)}). Conforme al artículo 32 fracción II de la
+                    LFPIORPI, este C-02 solo se libera con un medio trazable: SPEI, transferencia, tarjeta, cheque o
+                    financiamiento.
+                  </p>
+                )}
+
+                <p className="border-l-2 border-primary/60 pl-3 text-sm text-muted-foreground">{configuracion.regla}</p>
+
+                {medio === "OTRO" ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor="detalle-pago">Descripción y referencia auditables</Label>
+                    <Textarea
+                      id="detalle-pago"
+                      value={detalle}
+                      onChange={(event) => setDetalle(event.target.value)}
+                      placeholder="Describe el medio, emisor y la referencia que aparece en el comprobante"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Label htmlFor="referencia-pago">{configuracion.referenciaLabel}</Label>
+                    <Input
+                      id="referencia-pago"
+                      value={referencia}
+                      onChange={(event) => setReferencia(event.target.value)}
+                      placeholder={configuracion.referenciaPlaceholder}
+                    />
+                  </div>
+                )}
+
+                <div className="grid gap-2">
+                  <Label htmlFor="comprobante-pago">Comprobante resguardado</Label>
+                  <Select value={comprobanteVersion} onValueChange={setComprobanteVersion}>
+                    <SelectTrigger id="comprobante-pago"><SelectValue placeholder="Selecciona la versión exacta" /></SelectTrigger>
+                    <SelectContent>
+                      {estado.comprobantes.map((comprobante) => (
+                        <SelectItem key={comprobante.version} value={String(comprobante.version)}>
+                          Comprobante de pago · versión {comprobante.version}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {estado.comprobantes.length === 0 && (
+                    <p className="text-sm text-amber-700">
+                      Primero resguarda el comprobante en Anexos.
+                      <Button variant="link" className="ml-1 h-auto px-0 align-baseline" onClick={irAComprobantes}>
+                        Ir a Anexos
+                      </Button>
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex justify-end border-t pt-4">
+                  <Button onClick={registrar} disabled={!pagoValido || enviando !== null}>
+                    {enviando === "registro" ? "Registrando…" : "Registrar medio"}
+                  </Button>
+                </div>
+              </section>
+            )}
+
+            {estado.pagos.length > 0 && (
+              <section className="border-t pt-4" aria-label="Medios de pago registrados">
+                <h3 className="text-sm font-medium">Medios registrados</h3>
+                <div className="mt-2 divide-y">
+                  {estado.pagos.map((pago) => (
+                    <div key={pago.id} className="grid gap-1 py-3 text-sm sm:grid-cols-[1fr_auto] sm:gap-x-4">
+                      <div>
+                        <p className="font-medium">{MEDIOS_PAGO_C02.find((opcion) => opcion.value === pago.medio)?.label ?? pago.medio}</p>
+                        <p className="text-muted-foreground">{pago.referencia ?? pago.detalle} · comprobante versión {pago.comprobanteVersion}</p>
+                      </div>
+                      <p className="font-medium tabular-nums sm:text-right">{formatoMoneda(pago.monto)}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {!estado.pagoVerificado && (
+              <section className="border-t pt-4" aria-label="Certificar pago conciliado">
+                <p className="text-sm text-muted-foreground">
+                  La certificación es definitiva. Requiere C-02 completo, firmado y escaneado, al menos un comprobante y suma exacta de los medios registrados.
+                </p>
+                <div className="mt-3 flex justify-end">
+                  <Button onClick={certificar} disabled={!puedeCertificar || enviando !== null}>
+                    {enviando === "certificacion" ? "Certificando…" : "Certificar pago conciliado"}
+                  </Button>
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <p role="alert" className="border-l-2 border-destructive pl-3 text-sm text-destructive">{error}</p>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={enviando !== null}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

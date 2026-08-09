@@ -1,0 +1,476 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { uploadPresigned } from "@vercel/blob/client";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CircleDashedIcon,
+  EyeIcon,
+  ShieldIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import {
+  anexosDeOrigen,
+  EVENTO_ENFOCAR_ANEXO,
+  ETIQUETA_EXIGENCIA,
+  type FichaAnexo,
+} from "@/lib/anexos";
+import { mensajeErrorSinRespuesta, postJson, sha256Hex } from "@/lib/cliente-api";
+import { cn } from "@/lib/utils";
+import { IconoSilk } from "@/components/iconos/silk";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+const TIPOS_ACEPTADOS = "application/pdf,image/jpeg,image/png";
+
+export type AnexoCargado = {
+  clave: string;
+  version_maxima: number;
+  subido_por_nombre: string;
+};
+
+export function AnexosExpediente({
+  expedienteId,
+  origen,
+  anexos,
+}: {
+  expedienteId: number;
+  origen: "PROPIA" | "CONSIGNADA";
+  anexos: AnexoCargado[];
+}) {
+  const [subiendo, setSubiendo] = useState<FichaAnexo | null>(null);
+  const [viendo, setViendo] = useState<FichaAnexo | null>(null);
+  const [anexoEnfocado, setAnexoEnfocado] = useState<string | null>(null);
+  const focoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const porClave = new Map(anexos.map((a) => [a.clave, a]));
+  const fichas = anexosDeOrigen(origen);
+  const obligatorios = fichas.filter((f) => f.exigencia[origen] === "OBLIGATORIO");
+  const cargadosObligatorios = obligatorios.filter((f) => porClave.has(f.clave)).length;
+  const pendientes = obligatorios.length - cargadosObligatorios;
+
+  useEffect(() => {
+    function enfocar(evento: Event) {
+      const clave = (evento as CustomEvent<{ clave?: string }>).detail?.clave;
+      if (!clave) return;
+      if (focoTimer.current) clearTimeout(focoTimer.current);
+      setAnexoEnfocado(clave);
+      focoTimer.current = setTimeout(() => setAnexoEnfocado(null), 3200);
+    }
+
+    window.addEventListener(EVENTO_ENFOCAR_ANEXO, enfocar);
+    return () => {
+      window.removeEventListener(EVENTO_ENFOCAR_ANEXO, enfocar);
+      if (focoTimer.current) clearTimeout(focoTimer.current);
+    };
+  }, []);
+
+  return (
+    <div className="space-y-3">
+      <div id="anexos-expediente" className="flex scroll-mt-6 flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-sm font-medium">
+          <IconoSilk nombre="adjuntar" className="shrink-0" />
+          Anexos del expediente
+        </h2>
+        <span
+          className={cn(
+            "rounded-full border px-2.5 py-1 text-xs tabular-nums",
+            pendientes === 0
+              ? "font-medium text-emerald-600"
+              : "animate-pulse border-amber-300 bg-amber-50 font-medium text-amber-800",
+          )}
+        >
+          {pendientes === 0
+            ? `${cargadosObligatorios} de ${obligatorios.length} obligatorios`
+            : `Anexos pendientes · ${pendientes}`}
+        </span>
+      </div>
+      <div className="rounded-lg border bg-background shadow-xs">
+        <ul className="divide-y">
+          {fichas.map((ficha) => {
+            const cargado = porClave.get(ficha.clave);
+            const exigencia = ficha.exigencia[origen]!;
+            return (
+              <li
+                key={ficha.clave}
+                id={`anexo-${ficha.clave}`}
+                className={cn(
+                  "flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-[background-color,box-shadow,transform] duration-300",
+                  anexoEnfocado === ficha.clave && "relative z-10 rounded-lg bg-primary/5 shadow-[0_0_0_4px_hsl(var(--primary)/0.14)]",
+                )}
+              >
+                {cargado ? (
+                  <IconoSilk nombre="hojaOk" className="shrink-0" />
+                ) : (
+                  <CircleDashedIcon
+                    className={cn(
+                      "size-4 shrink-0",
+                      exigencia === "OBLIGATORIO"
+                        ? "text-amber-500"
+                        : "text-muted-foreground/60",
+                    )}
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">
+                    {ficha.nombre}
+                    <span
+                      className={cn(
+                        "ml-2 rounded-full border px-2 py-px text-[10px] font-medium",
+                        exigencia === "OBLIGATORIO"
+                          ? "border-amber-300 bg-amber-50 text-amber-800"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {ETIQUETA_EXIGENCIA[exigencia]}
+                    </span>
+                    {ficha.sensible && (
+                      <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                        <ShieldIcon className="size-3" />
+                        consulta con marca de agua
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{ficha.descripcion}</p>
+                  {ficha.custodia && (
+                    <div className="mt-1.5 space-y-0.5 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] leading-relaxed">
+                      <p>
+                        <span className="font-semibold text-foreground">Original:</span>{" "}
+                        <span className="text-muted-foreground">{ficha.custodia.original}</span>
+                      </p>
+                      {ficha.custodia.copia && (
+                        <p>
+                          <span className="font-semibold text-foreground">Copia:</span>{" "}
+                          <span className="text-muted-foreground">{ficha.custodia.copia}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {cargado && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setViendo(ficha)}
+                  >
+                    <EyeIcon className="size-3.5" />
+                    Ver{cargado.version_maxima > 1 ? ` (${cargado.version_maxima})` : ""}
+                  </Button>
+                )}
+                <Button
+                  variant={cargado ? "ghost" : "outline"}
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setSubiendo(ficha)}
+                >
+                  <IconoSilk nombre="adjuntar" className="size-3.5" />
+                  {cargado ? "Agregar documento" : "Subir escaneo"}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {subiendo && (
+        <DialogSubirAnexo
+          expedienteId={expedienteId}
+          ficha={subiendo}
+          onClose={() => setSubiendo(null)}
+        />
+      )}
+      {viendo && (
+        <DialogGaleriaAnexo
+          expedienteId={expedienteId}
+          ficha={viendo}
+          onClose={() => setViendo(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+type VersionAnexo = {
+  version: number;
+  contentType: string;
+  tamanoBytes: number;
+  subidoEn: string;
+  subidoPorNombre: string;
+};
+
+function DialogGaleriaAnexo({
+  expedienteId,
+  ficha,
+  onClose,
+}: {
+  expedienteId: number;
+  ficha: FichaAnexo;
+  onClose: () => void;
+}) {
+  const [versiones, setVersiones] = useState<VersionAnexo[] | null>(null);
+  const [indice, setIndice] = useState(0);
+
+  useEffect(() => {
+    let cancelado = false;
+    fetch(`/api/expedientes/${expedienteId}/anexos/${ficha.clave}`)
+      .then((res) => res.json())
+      .then((data: VersionAnexo[]) => {
+        if (!cancelado) setVersiones(data);
+      })
+      .catch(() => {
+        if (!cancelado) setVersiones([]);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [expedienteId, ficha.clave]);
+
+  const actual = versiones?.[indice];
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{ficha.nombre}</DialogTitle>
+          <DialogDescription>{ficha.descripcion}</DialogDescription>
+        </DialogHeader>
+
+        {versiones === null ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">Cargando…</p>
+        ) : versiones.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Sin archivos cargados todavía.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {versiones.length > 1 && (
+              <div className="flex items-center justify-center gap-1.5">
+                {versiones.map((v, i) => (
+                  <button
+                    key={v.version}
+                    type="button"
+                    onClick={() => setIndice(i)}
+                    aria-label={`Documento ${i + 1} de ${versiones.length}`}
+                    className={cn(
+                      "size-2 rounded-full transition-colors",
+                      i === indice ? "bg-primary" : "bg-muted hover:bg-muted-foreground/30",
+                    )}
+                  />
+                ))}
+              </div>
+            )}
+            {actual && (
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <p className="text-sm font-medium">
+                  Documento {indice + 1} de {versiones.length}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    v{actual.version}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {actual.subidoPorNombre} ·{" "}
+                  {format(new Date(actual.subidoEn), "d MMM yyyy", { locale: es })} ·{" "}
+                  {(actual.tamanoBytes / 1024 / 1024).toFixed(2)} MB
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() =>
+                    window.open(
+                      `/api/expedientes/${expedienteId}/anexos/${ficha.clave}/${actual.version}`,
+                      "_blank",
+                    )
+                  }
+                >
+                  <EyeIcon className="size-3.5" />
+                  Abrir
+                </Button>
+              </div>
+            )}
+            {versiones.length > 1 && (
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={indice === 0}
+                  onClick={() => setIndice((i) => i - 1)}
+                >
+                  <ChevronLeftIcon className="size-3.5" />
+                  Anterior
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={indice === versiones.length - 1}
+                  onClick={() => setIndice((i) => i + 1)}
+                >
+                  Siguiente
+                  <ChevronRightIcon className="size-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DialogSubirAnexo({
+  expedienteId,
+  ficha,
+  onClose,
+}: {
+  expedienteId: number;
+  ficha: FichaAnexo;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [arrastrando, setArrastrando] = useState(false);
+  const [subiendo, setSubiendo] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function subir() {
+    if (!archivo) return;
+    setSubiendo(true);
+    try {
+      const buffer = await archivo.arrayBuffer();
+      const sha256 = await sha256Hex(buffer);
+
+      const presign = await postJson<{ rutaObjeto: string; contentType: string }>(
+        `/api/expedientes/${expedienteId}/anexos/presign`,
+        {
+          clave: ficha.clave,
+          nombreArchivo: archivo.name,
+          tamanoBytes: archivo.size,
+          contentType: archivo.type,
+        },
+      );
+      if (!presign) return;
+
+      try {
+        await uploadPresigned(presign.rutaObjeto, archivo, {
+          access: "private",
+          contentType: presign.contentType,
+          handleUploadUrl: `/api/expedientes/${expedienteId}/anexos/presign`,
+          clientPayload: JSON.stringify({
+            clave: ficha.clave,
+            nombreArchivo: archivo.name,
+            tamanoBytes: archivo.size,
+            contentType: archivo.type,
+          }),
+        });
+      } catch {
+        toast.error("No se pudo subir el anexo", { description: mensajeErrorSinRespuesta() });
+        return;
+      }
+
+      const confirmado = await postJson<{ version: number }>(
+        `/api/expedientes/${expedienteId}/anexos`,
+        {
+          clave: ficha.clave,
+          sha256,
+          rutaObjeto: presign.rutaObjeto,
+          contentType: presign.contentType,
+          tamanoBytes: archivo.size,
+        },
+      );
+      if (!confirmado) return;
+
+      toast.success(`${ficha.nombre} v${confirmado.version} en resguardo`);
+      onClose();
+      router.refresh();
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Subir anexo · {ficha.nombre}</DialogTitle>
+          <DialogDescription>
+            {ficha.descripcion} Cada archivo se agrega a la colección; los
+            anteriores se conservan y no se reemplazan.
+            {ficha.sensible &&
+              " Documento delicado: la consulta lleva marca de agua, el archivo se resguarda íntegro."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setArrastrando(true);
+          }}
+          onDragLeave={() => setArrastrando(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setArrastrando(false);
+            const f = e.dataTransfer.files[0];
+            if (f) setArchivo(f);
+          }}
+          className={cn(
+            "flex h-32 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-sm text-muted-foreground transition-colors",
+            arrastrando && "border-foreground bg-muted",
+          )}
+        >
+          {archivo ? (
+            <>
+              <IconoSilk nombre="hojaOk" tamano={28} className="mb-1" />
+              <span className="font-medium text-foreground">{archivo.name}</span>
+              <span className="text-xs">
+                {(archivo.size / 1024 / 1024).toFixed(2)} MB
+              </span>
+            </>
+          ) : (
+            <>
+              <IconoSilk nombre="adjuntar" tamano={28} className="mb-1" />
+              <span>Arrastra el PDF o imagen aquí</span>
+              <span className="text-xs">o haz clic para elegir (PDF/JPG/PNG, máx. 25 MB)</span>
+            </>
+          )}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={TIPOS_ACEPTADOS}
+          className="hidden"
+          onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+        />
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={subiendo}>
+            Cancelar
+          </Button>
+          <Button onClick={subir} disabled={!archivo || subiendo}>
+            {!subiendo && <IconoSilk nombre="adjuntar" className="size-4" />}
+            {subiendo ? "Subiendo…" : "Subir y resguardar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

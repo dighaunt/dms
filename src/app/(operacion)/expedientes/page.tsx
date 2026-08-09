@@ -1,0 +1,41 @@
+import Link from "next/link";
+
+import { listarExpedientes } from "@/lib/db/consultas";
+import { BlurFade } from "@/components/ui/blur-fade";
+import { Button } from "@/components/ui/button";
+import { IconoSilk } from "@/components/iconos/silk";
+import { TablaExpedientes } from "./tabla-expedientes";
+
+export const dynamic = "force-dynamic";
+
+export default async function ExpedientesPage() {
+  const expedientes = await listarExpedientes();
+
+  return (
+    <div className="space-y-6">
+      <BlurFade delay={0.05}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+              <IconoSilk nombre="expedientes" tamano={22} className="shrink-0" />
+              Expedientes
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Un expediente = un VIN = un folio.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/expedientes/nuevo">
+              <IconoSilk nombre="agregar" className="size-4" />
+              Abrir expediente
+            </Link>
+          </Button>
+        </div>
+      </BlurFade>
+
+      <BlurFade delay={0.12}>
+        <TablaExpedientes expedientes={expedientes} />
+      </BlurFade>
+    </div>
+  );
+}

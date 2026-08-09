@@ -1,0 +1,132 @@
+import Link from "next/link";
+
+import { IconoSilk } from "@/components/iconos/silk";
+import { BlurFade } from "@/components/ui/blur-fade";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formasPago, listarSucursales } from "@/lib/finanzas/catalogos";
+import { datosPrecargadosDeExpediente } from "@/lib/finanzas/consignacion";
+
+import { CapturaIngreso } from "./captura-ingreso";
+
+export const dynamic = "force-dynamic";
+
+export default async function NuevoIngresoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ expediente?: string | string[] }>;
+}) {
+  const crudo = (await searchParams).expediente;
+  const texto = Array.isArray(crudo) ? crudo[0] : crudo;
+  const numero = Number(texto);
+  const expedienteId =
+    texto !== undefined && Number.isSafeInteger(numero) && numero > 0 ? numero : null;
+
+  if (expedienteId === null) {
+    return (
+      <Aviso titulo="Abre el ingreso desde el expediente de la unidad">
+        Este formato describe una unidad concreta, así que se captura sobre un expediente ya
+        abierto: de ahí salen el VIN, la marca, el modelo y el año, sin volver a teclearlos.
+      </Aviso>
+    );
+  }
+
+  const ficha = await datosPrecargadosDeExpediente(expedienteId);
+  if (!ficha) {
+    return (
+      <Aviso titulo="Ese expediente no existe">
+        No hay ningún expediente con ese número, o todavía no tiene unidad asociada.
+      </Aviso>
+    );
+  }
+
+  
+  
+  if (ficha.yaTieneIngreso) {
+    return (
+      <Aviso titulo={`El expediente ${ficha.numeroExpediente} ya tiene su ingreso a inventario`}>
+        La unidad {ficha.marca} {ficha.modelo} {ficha.anio} ya entró al piso con un CACM-RCI-02. Si
+        hay algo que corregir, se hace sobre aquel folio: un segundo ingreso registraría dos veces
+        la misma entrada.
+      </Aviso>
+    );
+  }
+
+  const [sucursales, formas] = await Promise.all([
+    listarSucursales({ soloActivas: true }),
+    formasPago({ soloActivos: true }),
+  ]);
+
+  if (sucursales.length === 0) {
+    return (
+      <Aviso titulo="Falta dar de alta la primera sucursal">
+        El folio es consecutivo por sucursal y por tipo, así que ningún documento puede emitirse
+        hasta que exista al menos una. La da de alta un administrador del sistema.
+      </Aviso>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <BlurFade delay={0.05}>
+        <div>
+          <p className="font-mono text-sm text-muted-foreground">
+            Expediente {ficha.numeroExpediente}
+          </p>
+          {}
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <IconoSilk nombre="caja3d" tamano={20} className="shrink-0" />
+            Ingreso de Vehículo a Inventario · CACM-RCI-02
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Control de entrada de unidades. El folio se emite al guardar; las firmas van después.
+          </p>
+        </div>
+      </BlurFade>
+
+      <BlurFade delay={0.1}>
+        <CapturaIngreso
+          ficha={{
+            expedienteId: ficha.expedienteId,
+            numeroExpediente: ficha.numeroExpediente,
+            origen: ficha.origen,
+            tipoOperacion: ficha.tipoOperacionSugerido,
+            vin: ficha.vin,
+            marca: ficha.marca,
+            modelo: ficha.modelo,
+            anio: ficha.anio,
+            color: ficha.color,
+            numMotor: ficha.numMotor,
+            kilometrajeIngreso: ficha.kilometrajeIngreso,
+          }}
+          sucursales={sucursales.map((s) => ({ id: s.id, clave: s.clave, nombre: s.nombre }))}
+          formasPago={formas.map((f) => ({ codigo: f.codigo, etiqueta: f.etiqueta }))}
+        />
+      </BlurFade>
+    </div>
+  );
+}
+
+function Aviso({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-6">
+      <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+        <IconoSilk nombre="caja3d" tamano={20} className="shrink-0" />
+        Ingreso de Vehículo a Inventario · CACM-RCI-02
+      </h1>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <IconoSilk nombre="aviso" className="shrink-0" />
+            {titulo}
+          </CardTitle>
+          <CardDescription>{children}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/finanzas" className="text-sm underline">
+            Volver a Finanzas
+          </Link>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
