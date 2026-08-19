@@ -30,6 +30,30 @@ export type ImporteEnCasillas = {
   letra: string;
 };
 
+/** Lo que se escribe cuando el importe queda fuera del rango que sabe deletrearse. */
+export const IMPORTE_SIN_LETRA = "(IMPORTE FUERA DEL RANGO QUE PUEDE ESCRIBIRSE CON LETRA)";
+
+/**
+ * La letra del importe sin poder tumbar la pantalla que lo muestra.
+ *
+ * `monedaEnLetras` es la autoridad y sigue rechazando lo que no sabe escribir,
+ * pero esto es presentación: se llama al pintar cada renglón de importe de cada
+ * pantalla, y una excepción aquí no corrige el dato, sólo deja a quien opera
+ * ante un error de servidor en vez de ante su cifra. Lo que no se hace es
+ * inventar una letra: una equivocada es peor que ninguna.
+ */
+function letraDelImporte(canonico: string): string {
+  try {
+    return monedaEnLetras(canonico);
+  } catch {
+    return IMPORTE_SIN_LETRA;
+  }
+}
+
+/**
+ * Un importe negativo se presenta, no se rechaza: el saldo de un corte, una
+ * diferencia de caja y la utilidad de una consigna con pérdida pueden serlo.
+ */
 export function importeEnCasillas(monto: string | number): ImporteEnCasillas {
   const canonico = typeof monto === "number" ? monto.toFixed(2) : monto.trim().replace(/,/g, "");
   const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(canonico);
@@ -45,8 +69,9 @@ export function importeEnCasillas(monto: string | number): ImporteEnCasillas {
   return {
     pesos: `${signo}${pesos}`,
     centavos,
-    texto: `$${signo}${pesos}.${centavos}`,
-    letra: monedaEnLetras(`${signo}${entero}.${centavos}`),
+    // El signo va antes del peso —"-$500.00"—, como en la forma impresa.
+    texto: `${signo}$${pesos}.${centavos}`,
+    letra: letraDelImporte(`${signo}${entero}.${centavos}`),
   };
 }
 

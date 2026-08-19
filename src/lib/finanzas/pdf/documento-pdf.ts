@@ -74,9 +74,13 @@ function montoImpreso(monto: string | null | undefined): string {
   return `${signo}$${separarMiles(entero)}.${(decimales ?? "").padEnd(2, "0")}`;
 }
 
+// `.texto` ya escribe el signo cuando hace falta —la utilidad neta de una
+// consigna vendida con pérdida es negativa y esa hoja tiene que imprimirse
+// igual—. Antes ese caso se desviaba a `montoImpreso` porque la letra que
+// `importeEnCasillas` calcula reventaba ante un negativo; ya no lo hace.
 function importeImpreso(monto: string | null | undefined): string {
   if (monto === null || monto === undefined || monto.trim() === "") return "";
-  return monto.trim().startsWith("-") ? montoImpreso(monto) : importeEnCasillas(monto).texto;
+  return importeEnCasillas(monto).texto;
 }
 
 function identificacionImpresa(

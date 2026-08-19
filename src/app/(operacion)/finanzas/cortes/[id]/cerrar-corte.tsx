@@ -14,7 +14,7 @@ import { InputMoneda } from "@/components/ui/input-moneda";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { MINIMO_EXPLICACION_DIFERENCIA } from "@/lib/finanzas/calculos";
+import { MINIMO_EXPLICACION_DIFERENCIA, aCentavos } from "@/lib/finanzas/calculos";
 import type { PrevisualizacionArqueo } from "@/lib/finanzas/corte";
 import { importeEnCasillas } from "@/lib/finanzas/formato";
 
@@ -36,6 +36,21 @@ type Props = {
 };
 
 const sinSigno = (importe: string): string => importe.replace(/^-/, "");
+
+/**
+ * Un importe que el servidor va a aceptar: completo y mayor que cero.
+ *
+ * `aCentavos` devuelve null ante "1234." —el punto decimal solo, que
+ * `InputMoneda` deja pasar porque es un estado normal de a medio teclear— y
+ * ante el cero devuelve 0n. Ambos revientan contra `esquemaImporteMonetario`,
+ * y sin este filtro el botón se habilita con la cifra a medias: el POST vuelve
+ * con un 400 que culpa a quien capturó de un formato que la pantalla misma le
+ * dejó escribir.
+ */
+function esImportePositivo(valor: string): boolean {
+  const centavos = aCentavos(valor);
+  return centavos !== null && centavos > 0n;
+}
 
 export function CerrarCorte({
   corteId,
@@ -124,11 +139,12 @@ export function CerrarCorte({
   const depositoCompleto =
     deposito.institucion.trim().length >= 2 &&
     deposito.cuenta.trim().length >= 4 &&
-    deposito.monto.trim() !== "" &&
+    esImportePositivo(deposito.monto) &&
     deposito.fechaDeposito !== "" &&
     deposito.comprobanteRef.trim().length >= 3;
 
-  const resguardoCompleto = resguardo.monto.trim() !== "" && resguardo.detalle.trim().length >= 5;
+  const resguardoCompleto =
+    esImportePositivo(resguardo.monto) && resguardo.detalle.trim().length >= 5;
 
   
   const bloqueadoPorFolios = bloqueantes.length > 0 || (previa?.bloqueadoPorFoliosSinFirmar ?? false);

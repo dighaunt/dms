@@ -90,17 +90,30 @@ function enteroEnLetras(numero: number): string {
   return partes.join(" ");
 }
 
+/**
+ * UN IMPORTE NEGATIVO SE ESCRIBE, NO SE RECHAZA. El saldo de un corte, la
+ * diferencia de un arqueo con faltante y la utilidad de una consigna vendida
+ * con pérdida son negativos de verdad. Como toda pantalla que muestra un
+ * importe pide también su letra, el throw anterior no protegía nada: tumbaba
+ * la página que sólo quería enseñar la cifra.
+ *
+ * El tope de mil millones sí sigue siendo un error: `enteroEnLetras` no sabe
+ * decir "MIL MILLONES" y devolvería una letra falsa. La letra es lo que cierra
+ * la alteración del importe, así que vale más no escribirla que escribirla mal.
+ */
 export function monedaEnLetras(valor: string | number): string {
   const normalizado = typeof valor === "number"
     ? valor
     : Number(valor.replace(/[^0-9.-]/g, ""));
-  if (!Number.isFinite(normalizado) || normalizado < 0 || normalizado > 999_999_999.99) {
-    throw new Error("El monto debe estar entre 0 y 999,999,999.99");
+  if (!Number.isFinite(normalizado) || Math.abs(normalizado) > 999_999_999.99) {
+    throw new Error("El monto debe estar entre -999,999,999.99 y 999,999,999.99");
   }
-  const redondeado = Math.round(normalizado * 100);
+  const redondeado = Math.round(Math.abs(normalizado) * 100);
   const entero = Math.floor(redondeado / 100);
   const centavos = redondeado % 100;
-  return `${apocopar(enteroEnLetras(entero))} ${entero === 1 ? "PESO" : "PESOS"} ${String(centavos).padStart(2, "0")}/100 M.N.`;
+  // "MENOS CERO" no existe: lo que redondea a cero se escribe cero.
+  const menos = normalizado < 0 && redondeado > 0 ? "MENOS " : "";
+  return `${menos}${apocopar(enteroEnLetras(entero))} ${entero === 1 ? "PESO" : "PESOS"} ${String(centavos).padStart(2, "0")}/100 M.N.`;
 }
 
 export function cerrarConGuiones(valor: string, longitud = 60): string {
